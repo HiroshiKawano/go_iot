@@ -11,9 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/config"
+	"github.com/HiroshiKawano/go_iot/internal/handler"
 	infradb "github.com/HiroshiKawano/go_iot/internal/infra/db"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
+	"github.com/HiroshiKawano/go_iot/internal/server"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -39,15 +42,15 @@ func run() error {
 	}
 	defer pool.Close()
 
-	// sqlc 生成リポジトリの初期化。ハンドラ追加時に受け渡す。
 	q := repository.New(pool)
-	_ = q
 
 	e := echo.New()
 	e.HideBanner = true
+	e.Validator = server.NewValidator()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
+	// --- 公開エンドポイント ---
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "go_iot: 農業IoTシステムへようこそ")
 	})
@@ -65,6 +68,14 @@ func run() error {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	// --- デバイスAPI (Bearer トークン認証) ---
+	sensorAPI := &handler.SensorAPI{Repo: q}
+	deviceAuth := auth.DeviceAuth(auth.DeviceAuthConfig{Repo: q})
+
+	apiGroup := e.Group("/api", deviceAuth)
+	apiGroup.POST("/sensor-data", sensorAPI.Create)
+
+	// --- サーバ起動 / Graceful shutdown ---
 	serverErrCh := make(chan error, 1)
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.AppPort)

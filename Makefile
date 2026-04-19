@@ -53,6 +53,9 @@ migrate-create: ## 新規マイグレーション作成 (例: make migrate-creat
 seed: ## 開発用テストデータを投入 (既存のアプリデータは削除される)
 	go run ./cmd/seed
 
+gen-token: ## デバイスAPI用トークン発行 (例: make gen-token user=1 name=ハウスA温湿度計)
+	go run ./cmd/gen-token -user=$(user) -name="$(name)"
+
 ## --- コード生成 ---
 sqlc: ## sqlc でリポジトリコード生成
 	go tool sqlc generate
