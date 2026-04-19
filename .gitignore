@@ -1,0 +1,35 @@
+# ビルド成果物
+/tmp/
+/bin/
+*.exe
+*.out
+
+# Go 関連
+/vendor/
+*.test
+coverage.out
+coverage.html
+
+# templ 生成コード (再生成可能なため git 管理しない)
+*_templ.go
+*_templ.txt
+
+# 環境変数ファイル (機密情報を含むため絶対にコミットしない)
+.env
+.env.local
+.env.*.local
+
+# IDE / エディタ
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# air のログ
+build-errors.log
+
+# Docker
+postgres-data/
