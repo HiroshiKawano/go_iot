@@ -56,6 +56,10 @@ seed: ## 開発用テストデータを投入 (既存のアプリデータは削
 gen-token: ## デバイスAPI用トークン発行 (例: make gen-token user=1 name=ハウスA温湿度計)
 	go run ./cmd/gen-token -user=$(user) -name="$(name)"
 
+mocks-preview: ## モックHTMLをローカルサーバでプレビュー (http://localhost:8000)
+	@echo "モックサーバ起動: http://localhost:8000/login.html"
+	@cd mocks/html && python3 -m http.server 8000
+
 ## --- コード生成 ---
 sqlc: ## sqlc でリポジトリコード生成
 	go tool sqlc generate

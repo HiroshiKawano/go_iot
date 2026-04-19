@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ユーザー登録 - 農業IoTシステム</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <div class="guest-layout">
+    <div class="guest-card">
+      <h1>農業IoTシステム</h1>
+      <form action="/register" method="post">
+        <div class="form-group">
+          <label>ユーザー名</label>
+          <input type="text" name="name" maxlength="255" required>
+          <span class="error-message"></span>
+        </div>
+        <div class="form-group">
+          <label>メールアドレス</label>
+          <input type="email" name="email" required>
+          <span class="error-message"></span>
+        </div>
+        <div class="form-group">
+          <label>パスワード</label>
+          <input type="password" name="password" minlength="8" required>
+          <span class="form-help">8文字以上</span>
+          <span class="error-message"></span>
+        </div>
+        <div class="form-group">
+          <label>パスワード（確認）</label>
+          <input type="password" name="password_confirmation" required>
+          <span class="error-message"></span>
+        </div>
+        <div class="form-actions full-width">
+          <button type="submit" class="btn btn-primary">登録</button>
+        </div>
+      </form>
+      <div class="form-footer">
+        既にアカウントをお持ちの方は <a href="/login">ログイン</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

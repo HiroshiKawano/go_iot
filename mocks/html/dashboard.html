@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ダッシュボード - 農業IoTシステム</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="user-menu">
+      <span class="user-name">テストユーザー</span>
+      <form action="/logout" method="post" class="logout-form">
+        <button type="submit" class="btn btn-small btn-secondary">ログアウト</button>
+      </form>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <nav>
+      <ul>
+        <li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
+        <li><a href="/alerts/rules">🔔 アラートルール</a></li>
+        <li><a href="/alerts/history">🕐 アラート履歴</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <div class="main-inner">
+      <div class="page-header">
+        <h1>ダッシュボード</h1>
+        <a href="/devices/create" class="btn btn-primary">+ デバイス登録</a>
+      </div>
+
+      <!-- 未通知アラート (R03: ラッパー要素) -->
+      <div class="alert-banner-wrapper">
+        <section class="alert-banner">
+          <h2>⚠ 未対応アラート</h2>
+          <ul>
+            <li>ハウスA温湿度計: 温度が35℃を超えました (38.50℃)</li>
+            <li>ハウスB温湿度計: 湿度が30%を下回りました (25.00%)</li>
+          </ul>
+        </section>
+        <p class="empty-message" style="display:none;">未対応のアラートはありません。</p>
+      </div>
+
+      <h2 style="margin-bottom: 1rem;">デバイス一覧</h2>
+
+      <!-- デバイス一覧 (R03: ラッパー, R11: 2件以上, R12: 空メッセージ) -->
+      <div class="device-grid-wrapper">
+        <div class="device-grid">
+          <article class="device-card">
+            <h3>ハウスA温湿度計</h3>
+            <div class="meta">場所: ビニールハウスA</div>
+            <div class="meta">状態: <span class="status-active">● 稼働中</span></div>
+            <div class="readings-row">
+              <div class="reading-value">
+                <div class="label">温度</div>
+                <div class="value">28.50℃</div>
+              </div>
+              <div class="reading-value">
+                <div class="label">湿度</div>
+                <div class="value">65.30%</div>
+              </div>
+            </div>
+            <div class="meta">最終通信: 2分前</div>
+            <a href="/devices/1" class="btn btn-secondary btn-small">詳細を見る</a>
+          </article>
+
+          <article class="device-card">
+            <h3>ハウスB温湿度計</h3>
+            <div class="meta">場所: ビニールハウスB</div>
+            <div class="meta">状態: <span class="status-active">● 稼働中</span></div>
+            <div class="readings-row">
+              <div class="reading-value">
+                <div class="label">温度</div>
+                <div class="value">32.10℃</div>
+              </div>
+              <div class="reading-value">
+                <div class="label">湿度</div>
+                <div class="value">45.80%</div>
+              </div>
+            </div>
+            <div class="meta">最終通信: 5分前</div>
+            <a href="/devices/2" class="btn btn-secondary btn-small">詳細を見る</a>
+          </article>
+        </div>
+        <p class="empty-message" style="display:none;">登録されたデバイスはありません。上の「デバイス登録」ボタンから追加してください。</p>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デバイス詳細 - 農業IoTシステム</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body x-data="{ deleteModalOpen: false }">
+  <header class="site-header">
+    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="user-menu">
+      <span class="user-name">テストユーザー</span>
+      <form action="/logout" method="post" class="logout-form">
+        <button type="submit" class="btn btn-small btn-secondary">ログアウト</button>
+      </form>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <nav>
+      <ul>
+        <li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
+        <li><a href="/alerts/rules">🔔 アラートルール</a></li>
+        <li><a href="/alerts/history">🕐 アラート履歴</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <div class="main-inner">
+      <div class="page-header">
+        <h1>デバイス詳細: ハウスA温湿度計</h1>
+      </div>
+
+      <section class="card device-info">
+        <h2>デバイス情報</h2>
+        <dl>
+          <dt>名前</dt><dd>ハウスA温湿度計</dd>
+          <dt>MAC</dt><dd>AA:BB:CC:DD:EE:01</dd>
+          <dt>場所</dt><dd>ビニールハウスA</dd>
+          <dt>状態</dt><dd><span class="status-active">● 稼働中</span></dd>
+          <dt>最終通信</dt><dd>2026-04-20 14:30:00</dd>
+        </dl>
+        <div class="form-actions">
+          <a href="/devices/1/edit" class="btn btn-secondary">編集</a>
+          <button type="button" class="btn btn-danger" @click="deleteModalOpen = true">削除</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>期間選択</h2>
+        <div class="period-selector">
+          <button type="button" class="period-btn active">24時間</button>
+          <button type="button" class="period-btn">7日間</button>
+          <button type="button" class="period-btn">30日間</button>
+        </div>
+
+        <h2 style="margin-top: 1.5rem;">温度グラフ</h2>
+        <div class="chart-wrapper">
+          <div class="chart-placeholder">SVGグラフ (温度 / 横軸:時間, 縦軸:℃)</div>
+        </div>
+
+        <h2 style="margin-top: 1.5rem;">湿度グラフ</h2>
+        <div class="chart-wrapper">
+          <div class="chart-placeholder">SVGグラフ (湿度 / 横軸:時間, 縦軸:%)</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>最新計測データ</h2>
+        <!-- R03: table はラッパー内, R04: thead/tbody 分離, R11: 2件以上, R12: 空メッセージ -->
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>計測日時</th>
+                <th>温度(℃)</th>
+                <th>湿度(%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>2026-04-20 14:30</td><td>28.50</td><td>65.30</td></tr>
+              <tr><td>2026-04-20 14:25</td><td>28.30</td><td>65.50</td></tr>
+              <tr><td>2026-04-20 14:20</td><td>28.10</td><td>65.80</td></tr>
+            </tbody>
+          </table>
+          <p class="empty-message" style="display:none;">計測データはまだありません。</p>
+        </div>
+        <div style="text-align: right; margin-top: 0.5rem;">
+          <a href="/devices/1/readings">もっと見る →</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- R14: モーダル群を body 末尾に配置 -->
+  <div class="modal-overlay" x-show="deleteModalOpen" x-cloak style="display:none;">
+    <div class="modal-content">
+      <h2>デバイスを削除しますか？</h2>
+      <p style="margin: 1rem 0;">この操作は元に戻せません。</p>
+      <form action="/devices/1" method="post">
+        <input type="hidden" name="_method" value="delete">
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" @click="deleteModalOpen = false">キャンセル</button>
+          <button type="submit" class="btn btn-danger">削除する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

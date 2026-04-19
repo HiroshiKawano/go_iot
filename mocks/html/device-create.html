@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デバイス登録 - 農業IoTシステム</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="user-menu">
+      <span class="user-name">テストユーザー</span>
+      <form action="/logout" method="post" class="logout-form">
+        <button type="submit" class="btn btn-small btn-secondary">ログアウト</button>
+      </form>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <nav>
+      <ul>
+        <li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
+        <li><a href="/alerts/rules">🔔 アラートルール</a></li>
+        <li><a href="/alerts/history">🕐 アラート履歴</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <div class="main-inner">
+      <div class="page-header">
+        <h1>デバイス登録</h1>
+      </div>
+
+      <section class="card" style="max-width: 600px;">
+        <form action="/devices" method="post">
+          <div class="form-group">
+            <label>デバイス名 <span class="required-mark">*</span></label>
+            <input type="text" name="name" maxlength="255" required>
+            <span class="error-message"></span>
+          </div>
+
+          <div class="form-group">
+            <label>MACアドレス <span class="required-mark">*</span></label>
+            <input type="text" name="mac_address" placeholder="AA:BB:CC:DD:EE:FF" pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$" required>
+            <span class="form-help">形式: XX:XX:XX:XX:XX:XX</span>
+            <span class="error-message"></span>
+          </div>
+
+          <div class="form-group">
+            <label>設置場所</label>
+            <input type="text" name="location" maxlength="255">
+            <span class="error-message"></span>
+          </div>
+
+          <div class="form-group">
+            <label>ステータス</label>
+            <div class="radio-group">
+              <label><input type="radio" name="is_active" value="1" checked> 稼働中</label>
+              <label><input type="radio" name="is_active" value="0"> 停止中</label>
+            </div>
+            <span class="error-message"></span>
+          </div>
+
+          <div class="form-actions">
+            <a href="/dashboard" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">登録</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>センサーデータ履歴 - 農業IoTシステム</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="user-menu">
+      <span class="user-name">テストユーザー</span>
+      <form action="/logout" method="post" class="logout-form">
+        <button type="submit" class="btn btn-small btn-secondary">ログアウト</button>
+      </form>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <nav>
+      <ul>
+        <li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
+        <li><a href="/alerts/rules">🔔 アラートルール</a></li>
+        <li><a href="/alerts/history">🕐 アラート履歴</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <div class="main-inner">
+      <div class="page-header">
+        <h1>センサーデータ履歴: ハウスA温湿度計</h1>
+      </div>
+
+      <section class="card">
+        <h2>フィルター</h2>
+        <form action="/devices/1/readings" method="get" class="filter-form">
+          <div class="form-group">
+            <label>開始日</label>
+            <input type="date" name="from" value="2026-04-13">
+            <span class="error-message"></span>
+          </div>
+          <div class="form-group">
+            <label>終了日</label>
+            <input type="date" name="to" value="2026-04-20">
+            <span class="error-message"></span>
+          </div>
+          <button type="submit" class="btn btn-primary">検索</button>
+        </form>
+      </section>
+
+      <h2 style="margin-bottom: 0.75rem;">集計情報</h2>
+      <div class="summary-grid">
+        <div class="summary-box">
+          <div class="label">平均温度</div>
+          <div class="value">28.30℃</div>
+        </div>
+        <div class="summary-box">
+          <div class="label">最高温度</div>
+          <div class="value">35.20℃</div>
+        </div>
+        <div class="summary-box">
+          <div class="label">最低温度</div>
+          <div class="value">18.50℃</div>
+        </div>
+        <div class="summary-box">
+          <div class="label">平均湿度</div>
+          <div class="value">62.50%</div>
+        </div>
+        <div class="summary-box">
+          <div class="label">最高湿度</div>
+          <div class="value">85.00%</div>
+        </div>
+        <div class="summary-box">
+          <div class="label">最低湿度</div>
+          <div class="value">30.20%</div>
+        </div>
+      </div>
+
+      <h2 style="margin-bottom: 0.75rem;">データ一覧</h2>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>計測日時</th>
+              <th>温度(℃)</th>
+              <th>湿度(%)</th>
+              <th>通信遅延</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>2026-04-20 14:30</td><td>28.50</td><td>65.30</td><td>2秒</td></tr>
+            <tr><td>2026-04-20 14:25</td><td>28.30</td><td>65.50</td><td>1秒</td></tr>
+            <tr><td>2026-04-20 14:20</td><td>28.10</td><td>65.80</td><td>3秒</td></tr>
+          </tbody>
+        </table>
+        <p class="empty-message" style="display:none;">指定期間の計測データはありません。</p>
+      </div>
+
+      <nav class="pagination">
+        <span class="disabled">&larr; 前へ</span>
+        <span class="current">1</span>
+        <a href="?page=2">2</a>
+        <a href="?page=3">3</a>
+        <span>...</span>
+        <a href="?page=10">10</a>
+        <a href="?page=2">次へ &rarr;</a>
+      </nav>
+    </div>
+  </main>
+</body>
+</html>

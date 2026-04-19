@@ -1,0 +1,214 @@
+openapi: 3.0.3
+
+info:
+  title: 農業IoTシステム デバイスAPI
+  description: |
+    ESP8266 / ESP32 等のデバイスから呼び出される REST API。
+
+    システム構成図.md に従い、本 API は**デバイス用エンドポイントのみ**を公開する。
+    Web UI 用のエンドポイント (HTMX から叩かれる Blade/templ 返却系) は別途 `/` 配下で提供されるが、
+    本ドキュメントには含めない。
+
+    ### 認証
+    すべてのエンドポイントは `Authorization: Bearer <token>` ヘッダによる認証が必要。
+    トークンは `make gen-token user=<id> name=<名前>` で発行する (発行時の一度だけ平文表示)。
+
+    ### タイムゾーン
+    `recorded_at` などの日時は RFC 3339 形式で送信する。タイムゾーン指定 (例: `+09:00`) 必須。
+  version: 1.0.0
+  contact:
+    name: go_iot project
+    url: https://github.com/HiroshiKawano/go_iot
+
+servers:
+  - url: http://localhost:8080
+    description: ローカル開発環境
+  - url: https://iot.example.com
+    description: 本番環境 (AWS Lightsail, TBD)
+
+tags:
+  - name: Sensor
+    description: センサーデータ送受信
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        device_tokens テーブルに登録された Bearer トークン。
+        サーバ側は受信したトークンを SHA-256 ハッシュ化して
+        `device_tokens.token_hash` と照合する。
+
+  schemas:
+    CreateSensorReadingRequest:
+      type: object
+      required: [device_id, temperature, humidity, recorded_at]
+      properties:
+        device_id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+          description: 送信元デバイスID (devices テーブルの主キー)
+        temperature:
+          type: number
+          format: double
+          minimum: -40
+          maximum: 125
+          example: 28.50
+          description: 温度 (℃)。SHT31 の仕様上限に揃えている。
+        humidity:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          example: 65.30
+          description: 相対湿度 (%)
+        recorded_at:
+          type: string
+          format: date-time
+          example: "2026-04-20T14:30:00+09:00"
+          description: デバイス側での計測時刻 (RFC 3339)
+
+    SensorReadingResponse:
+      type: object
+      required: [id, device_id, temperature, humidity, recorded_at, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 577
+        device_id:
+          type: integer
+          format: int64
+          example: 1
+        temperature:
+          type: number
+          format: double
+          example: 28.50
+        humidity:
+          type: number
+          format: double
+          example: 65.30
+        recorded_at:
+          type: string
+          format: date-time
+          example: "2026-04-20T14:30:00+09:00"
+          description: デバイス側計測時刻 (リクエスト値をそのまま返す)
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-20T14:30:02.735Z"
+          description: サーバ受信時刻 (通信遅延計算に使える)
+
+    ErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: "device not found or deleted"
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/sensor-data:
+    post:
+      summary: センサー計測データを送信する
+      description: |
+        デバイスが定期的 (例: 5分間隔) に呼び出すメインエンドポイント。
+
+        **サーバ側の処理:**
+        1. Bearer トークンの検証 (token_hash 照合)
+        2. リクエスト JSON のバリデーション (温度 -40〜125, 湿度 0〜100)
+        3. device_id の存在確認 + トークン保有ユーザーとの所有者照合
+        4. sensor_readings にレコード追加
+        5. devices.last_communicated_at を NOW() に更新
+
+        **注意:** アラート判定はフェーズ7 (Step 18) で同期追加予定。
+        この時点ではデータ保存のみ。
+      tags: [Sensor]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSensorReadingRequest'
+            examples:
+              normal:
+                summary: 通常の計測データ
+                value:
+                  device_id: 1
+                  temperature: 28.50
+                  humidity: 65.30
+                  recorded_at: "2026-04-20T14:30:00+09:00"
+              high_temp:
+                summary: 閾値超え (アラート対象想定)
+                value:
+                  device_id: 1
+                  temperature: 38.20
+                  humidity: 55.00
+                  recorded_at: "2026-04-20T14:35:00+09:00"
+      responses:
+        '201':
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SensorReadingResponse'
+        '400':
+          description: JSON 形式エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                message: "invalid JSON body: ..."
+        '401':
+          description: 認証失敗 (Bearer 欠如/不一致/期限切れ)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing:
+                  summary: ヘッダ欠如
+                  value:
+                    message: "missing Authorization header"
+                invalid:
+                  summary: トークン不一致
+                  value:
+                    message: "invalid or expired token"
+        '403':
+          description: 他ユーザー所有のデバイスへ書き込み試行
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                message: "device belongs to a different user"
+        '422':
+          description: バリデーションエラー / 存在しない device_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validation:
+                  summary: 湿度範囲外
+                  value:
+                    message: "Key: 'CreateSensorReadingRequest.Humidity' Error:Field validation for 'Humidity' failed on the 'lte' tag"
+                not_found:
+                  summary: 存在しない device_id
+                  value:
+                    message: "device not found or deleted"
+        '500':
+          description: サーバ内部エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

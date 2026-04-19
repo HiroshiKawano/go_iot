@@ -1,0 +1,424 @@
+/* ========================================================================
+   農業IoTシステム 共通スタイルシート
+   モックHTML全画面で共有。HTML作成ルール.md R02 に従い ID セレクタ不使用。
+   ======================================================================== */
+
+/* --- リセット & ベース --- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --color-primary: #28a745;
+  --color-primary-dark: #218838;
+  --color-danger: #dc3545;
+  --color-warning: #ffc107;
+  --color-info: #17a2b8;
+  --color-muted: #6c757d;
+  --color-bg: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-border: #dee2e6;
+  --color-text: #212529;
+  --color-text-muted: #6c757d;
+  --radius: 6px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --sidebar-width: 220px;
+  --header-height: 56px;
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
+               "Yu Gothic UI", "Meiryo", sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.5;
+}
+
+a { color: var(--color-primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* --- 共通レイアウト (ヘッダ + サイドバー) --- */
+.site-header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--header-height);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  z-index: 10;
+}
+.site-header .logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+.user-menu { display: flex; align-items: center; gap: 1rem; }
+.user-name { color: var(--color-text-muted); }
+.logout-form { display: inline; }
+
+.sidebar {
+  position: fixed;
+  top: var(--header-height); left: 0; bottom: 0;
+  width: var(--sidebar-width);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  padding-top: 1rem;
+  overflow-y: auto;
+}
+.sidebar ul { list-style: none; }
+.sidebar li a {
+  display: block;
+  padding: 0.75rem 1.25rem;
+  color: var(--color-text);
+  border-left: 3px solid transparent;
+}
+.sidebar li a:hover { background: var(--color-bg); text-decoration: none; }
+.sidebar li a.active {
+  background: var(--color-bg);
+  border-left-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.main-content {
+  margin-left: var(--sidebar-width);
+  padding-top: var(--header-height);
+  min-height: 100%;
+}
+.main-inner { padding: 1.5rem; max-width: 1200px; }
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.page-header h1 { font-size: 1.5rem; font-weight: 600; }
+
+/* --- ゲスト (login / register) 用レイアウト --- */
+.guest-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+.guest-card {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 2rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow-md);
+}
+.guest-card h1 {
+  text-align: center;
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  color: var(--color-primary);
+}
+.guest-card .form-footer {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+
+/* --- フォーム共通 --- */
+.form-group { margin-bottom: 1rem; }
+.form-group > label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+.required-mark { color: var(--color-danger); }
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group input[type="number"],
+.form-group input[type="date"],
+.form-group input[type="datetime-local"],
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 1rem;
+  background: var(--color-surface);
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+}
+.form-help {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+.error-message {
+  display: block;
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  min-height: 1em;
+}
+.radio-group { display: flex; gap: 1rem; }
+.radio-group label { font-weight: normal; }
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+.form-actions.full-width .btn { width: 100%; }
+
+/* --- ボタン --- */
+.btn {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+.btn-primary { background: var(--color-primary); color: #fff; }
+.btn-primary:hover { background: var(--color-primary-dark); text-decoration: none; }
+.btn-secondary { background: var(--color-muted); color: #fff; }
+.btn-secondary:hover { background: #5a6268; text-decoration: none; }
+.btn-danger { background: var(--color-danger); color: #fff; }
+.btn-danger:hover { background: #c82333; text-decoration: none; }
+.btn-small { padding: 0.25rem 0.75rem; font-size: 0.875rem; }
+
+/* --- カード --- */
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1rem;
+}
+.card h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.card-subtle { color: var(--color-text-muted); font-size: 0.875rem; }
+
+/* --- テーブル --- */
+.table-wrapper {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead { background: var(--color-bg); }
+.data-table th,
+.data-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+.data-table th { font-weight: 600; color: var(--color-text-muted); font-size: 0.875rem; }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover { background: var(--color-bg); }
+.empty-message {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+/* --- ページネーション --- */
+.pagination {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+.pagination a,
+.pagination span {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.pagination .current {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+/* --- アラート通知バナー --- */
+.alert-banner {
+  background: #fff3cd;
+  border-left: 4px solid var(--color-warning);
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+}
+.alert-banner h2 {
+  font-size: 1rem;
+  color: #856404;
+  margin-bottom: 0.5rem;
+}
+.alert-banner ul { list-style: none; }
+.alert-banner li {
+  padding: 0.25rem 0;
+  color: #856404;
+}
+
+/* --- ダッシュボード: デバイスカード --- */
+.device-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.device-card {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.device-card h3 { font-size: 1.1rem; }
+.device-card .meta { color: var(--color-text-muted); font-size: 0.875rem; }
+.status-active { color: var(--color-primary); }
+.status-inactive { color: var(--color-muted); }
+.readings-row {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  margin: 0.5rem 0;
+}
+.reading-value {
+  flex: 1;
+  text-align: center;
+}
+.reading-value .label { font-size: 0.875rem; color: var(--color-text-muted); }
+.reading-value .value { font-size: 1.5rem; font-weight: 600; }
+
+/* --- デバイス詳細: 情報 --- */
+.device-info dl {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 0.5rem;
+}
+.device-info dt { font-weight: 600; color: var(--color-text-muted); }
+.device-info dd { color: var(--color-text); }
+
+/* --- デバイス詳細: 期間セレクタ --- */
+.period-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.period-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+.period-btn.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+/* --- SVGグラフプレースホルダー --- */
+.chart-placeholder {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      #eef2f5,
+      #eef2f5 10px,
+      #e4e9ed 10px,
+      #e4e9ed 20px
+    );
+  height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+  border-radius: var(--radius);
+  font-style: italic;
+}
+
+/* --- センサーデータ履歴: フィルタとサマリ --- */
+.filter-form {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.filter-form .form-group { margin: 0; flex: 1; min-width: 150px; }
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.summary-box {
+  background: var(--color-surface);
+  padding: 1rem;
+  text-align: center;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.summary-box .label { font-size: 0.875rem; color: var(--color-text-muted); }
+.summary-box .value { font-size: 1.25rem; font-weight: 600; margin-top: 0.25rem; }
+
+/* --- アラートルール管理 --- */
+.rule-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.rule-form .form-group { margin: 0; flex: 1; min-width: 120px; }
+.rule-list-actions { display: flex; gap: 0.5rem; }
+
+/* --- モーダル (R14) --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal-content {
+  background: var(--color-surface);
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  max-width: 500px;
+  width: 90%;
+}
+
+/* --- レスポンシブ --- */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .main-content { margin-left: 0; }
+  .summary-grid { grid-template-columns: 1fr; }
+  .form-actions { flex-direction: column-reverse; }
+  .form-actions .btn { width: 100%; }
+}

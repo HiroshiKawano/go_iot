@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>アラートルール管理 - 農業IoTシステム</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="user-menu">
+      <span class="user-name">テストユーザー</span>
+      <form action="/logout" method="post" class="logout-form">
+        <button type="submit" class="btn btn-small btn-secondary">ログアウト</button>
+      </form>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <nav>
+      <ul>
+        <li><a href="/dashboard">🏠 ダッシュボード</a></li>
+        <li><a href="/alerts/rules" class="active">🔔 アラートルール</a></li>
+        <li><a href="/alerts/history">🕐 アラート履歴</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <div class="main-inner">
+      <div class="page-header">
+        <h1>アラートルール管理</h1>
+      </div>
+
+      <section class="card">
+        <h2>デバイス選択</h2>
+        <form action="/alerts/rules" method="get">
+          <div class="form-group">
+            <label>デバイス</label>
+            <select name="device_id">
+              <option value="1" selected>ハウスA温湿度計</option>
+              <option value="2">ハウスB温湿度計</option>
+            </select>
+            <span class="error-message"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>ルール追加</h2>
+        <form action="/alerts/rules" method="post" class="rule-form">
+          <input type="hidden" name="device_id" value="1">
+          <div class="form-group">
+            <label>指標</label>
+            <select name="metric">
+              <option value="">選択してください</option>
+              <option value="temperature" selected>温度</option>
+              <option value="humidity">湿度</option>
+            </select>
+            <span class="error-message"></span>
+          </div>
+          <div class="form-group">
+            <label>条件</label>
+            <select name="operator">
+              <option value="">選択してください</option>
+              <option value="gt" selected>より大きい</option>
+              <option value="lt">より小さい</option>
+              <option value="gte">以上</option>
+              <option value="lte">以下</option>
+            </select>
+            <span class="error-message"></span>
+          </div>
+          <div class="form-group">
+            <label>閾値</label>
+            <input type="number" name="threshold" step="0.01" value="35.00" required>
+            <span class="error-message"></span>
+          </div>
+          <button type="submit" class="btn btn-primary">ルールを追加</button>
+        </form>
+      </section>
+
+      <h2 style="margin-bottom: 0.75rem;">ルール一覧</h2>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>有効</th>
+              <th>指標</th>
+              <th>条件</th>
+              <th>閾値</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <form action="/alerts/rules/1/toggle" method="post" style="display:inline;">
+                  <input type="hidden" name="_method" value="patch">
+                  <input type="checkbox" name="is_enabled" value="1" checked>
+                </form>
+              </td>
+              <td>温度</td>
+              <td>より大きい</td>
+              <td>35.00℃</td>
+              <td class="rule-list-actions">
+                <a href="/alerts/rules/1/edit" class="btn btn-small btn-secondary">編集</a>
+                <form action="/alerts/rules/1" method="post" style="display:inline;">
+                  <input type="hidden" name="_method" value="delete">
+                  <button type="submit" class="btn btn-small btn-danger">削除</button>
+                </form>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <form action="/alerts/rules/2/toggle" method="post" style="display:inline;">
+                  <input type="hidden" name="_method" value="patch">
+                  <input type="checkbox" name="is_enabled" value="1" checked>
+                </form>
+              </td>
+              <td>湿度</td>
+              <td>より小さい</td>
+              <td>30.00%</td>
+              <td class="rule-list-actions">
+                <a href="/alerts/rules/2/edit" class="btn btn-small btn-secondary">編集</a>
+                <form action="/alerts/rules/2" method="post" style="display:inline;">
+                  <input type="hidden" name="_method" value="delete">
+                  <button type="submit" class="btn btn-small btn-danger">削除</button>
+                </form>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <form action="/alerts/rules/3/toggle" method="post" style="display:inline;">
+                  <input type="hidden" name="_method" value="patch">
+                  <input type="checkbox" name="is_enabled" value="1">
+                </form>
+              </td>
+              <td>温度</td>
+              <td>より小さい</td>
+              <td>5.00℃</td>
+              <td class="rule-list-actions">
+                <a href="/alerts/rules/3/edit" class="btn btn-small btn-secondary">編集</a>
+                <form action="/alerts/rules/3" method="post" style="display:inline;">
+                  <input type="hidden" name="_method" value="delete">
+                  <button type="submit" class="btn btn-small btn-danger">削除</button>
+                </form>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="empty-message" style="display:none;">このデバイスにはアラートルールが設定されていません。上のフォームから追加してください。</p>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

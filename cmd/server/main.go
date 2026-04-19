@@ -13,6 +13,7 @@ import (
 
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/config"
+	"github.com/HiroshiKawano/go_iot/internal/docs"
 	"github.com/HiroshiKawano/go_iot/internal/handler"
 	infradb "github.com/HiroshiKawano/go_iot/internal/infra/db"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
@@ -66,6 +67,14 @@ func run() error {
 			})
 		}
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	// --- デバイスAPI ドキュメント (Scalar UI / OpenAPI 3.0) ---
+	e.GET("/docs", func(c echo.Context) error {
+		return c.HTMLBlob(http.StatusOK, docs.IndexHTML)
+	})
+	e.GET("/docs/openapi.yaml", func(c echo.Context) error {
+		return c.Blob(http.StatusOK, "application/yaml; charset=utf-8", docs.OpenAPIYAML)
 	})
 
 	// --- デバイスAPI (Bearer トークン認証) ---
