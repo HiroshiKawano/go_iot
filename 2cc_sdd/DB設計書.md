@@ -1,35 +1,37 @@
 
+---
+
 ## cc-sdd参照ガイド
 
 本設計書をcc-sdd（詳細設計書）から参照する際に価値の高いセクションと用途を示す。
 
 | 優先度 | セクション | cc-sddでの用途 |
 |:------:|-----------|---------------|
-| ★★★ | [Enum定義](#enum定義) | ビジネスロジック実装の核。`label()` / `unit()` / `evaluate()` のシグネチャ確認 |
-| ★★★ | [テーブル定義](#テーブル定義) | Eloquent Model・FormRequestバリデーション・Migrationの仕様根拠 |
-| ★★★ | [主要クエリパターン](#主要クエリパターン) | Repository / Service層の実装仕様。グラフ・アラート判定ロジックの参照元 |
-| ★★★ | [Eloquentリレーション定義](#eloquentリレーション定義) | Model間のリレーションメソッド名の定義。Controller・Serviceでの `with()` / `load()` 実装根拠 |
-| ★★ | [設計方針](#設計方針) | 「外部キー非設定」「SoftDeletes適用範囲」「集計テーブルなし」など実装判断の根拠 |
-| ★★ | [Modelでのキャスト設定](#modelでのキャスト設定) | `AlertRule` / `AlertHistory` の `casts()` 実装仕様 |
-| ★★ | [アラート判定の実行タイミング](#アラート判定の実行タイミング) | Controller内で同期実行する方針の根拠。Queue不使用の理由 |
-| ★ | [バリデーションルール定義](#バリデーションルール定義) | `Rule::enum()` 使用方針とセンサー値の範囲バリデーション定義 |
+| ★★★ | [Enum定義](#enum定義) | ビジネスロジック実装の核。`Label()` / `Unit()` / `Evaluate()` のシグネチャ確認 |
+| ★★★ | [テーブル定義](#テーブル定義) | sqlc 生成構造体・validator バリデーションタグ・goose マイグレーションの仕様根拠 |
+| ★★★ | [主要クエリパターン](#主要クエリパターン) | sqlc クエリ / Service 層の実装仕様。グラフ・アラート判定ロジックの参照元 |
+| ★★★ | [sqlc リレーション方針](#sqlc-リレーション方針) | JOIN / 先行取得クエリの命名方針。Handler・Service での呼び出し根拠 |
+| ★★ | [設計方針](#設計方針) | 「外部キー非設定」「論理削除適用範囲」「集計テーブルなし」など実装判断の根拠 |
+| ★★ | [Go 構造体でのフィールド型](#go-構造体でのフィールド型) | `pgtype.Numeric` / `pgtype.Timestamptz` の扱い、`pgconv` ヘルパーの使用根拠 |
+| ★★ | [アラート判定の実行タイミング](#アラート判定の実行タイミング) | Handler 内で同期実行する方針の根拠。Queue 不使用の理由 |
+| ★ | [バリデーションルール定義](#バリデーションルール定義) | `go-playground/validator` タグの定義とセンサー値の範囲バリデーション定義 |
 | ★ | [データフロー対応表](#データフロー対応表) | ユースケース別の処理フロー設計の参照元 |
 | ★ | [テーブル定義 > インデックス](#テーブル定義) | 各テーブルの「インデックス:」欄。複合インデックスとクエリの対応関係 |
 
-> ※ cc-sddのModel定義・バリデーション・サービス層を記述する際は、まず本書のEnum定義・テーブル定義・Eloquentリレーション定義を確認すること。
+> ※ cc-sddの sqlc クエリ / Service 層 / バリデーションを記述する際は、まず本書の Enum 定義・テーブル定義・sqlc リレーション方針を確認すること。
 
 ### 次回プロジェクトでの記載チェックリスト
 
 DB設計書を新規作成する際に以下が揃っているか確認する：
 
-- [ ] 全テーブルのカラム定義（型・制約・インデックス）を記載
-- [ ] マスターデータとして使用するEnumの `value` · `label()` · 追加メソッド（`unit()` · `evaluate()` 等）を定義
-- [ ] Enumカラムを持つModelの `casts()` 設定（Enum · boolean · decimal）を記載
-- [ ] 全Model間のEloquentリレーションメソッド名と種類を一覧化（`latestOfMany()` 等の特殊パターンも含む）
-- [ ] バリデーションルール（`Rule::enum()` · 数値範囲 `between:` · `decimal:0,2` 等）を記載（実行方式は実装設計側で定義）
-- [ ] 主要クエリパターン（グラフ表示 · 期間集計 · アラート判定等）をSQL / Eloquentで記載
-- [ ] 設計方針（外部キー非設定 · SoftDeletes適用範囲 · 集計テーブルの有無）を明記
-- [ ] 非同期 / 同期処理方針（Queue使用の有無 · 実行タイミング）を明記
+- [ ] 全テーブルのカラム定義（PostgreSQL 型・制約・インデックス）を記載
+- [ ] マスターデータとして使用する Enum の値・`Label()`・追加メソッド（`Unit()` / `Evaluate()` 等）を Go 用に定義
+- [ ] Enum カラムを持つテーブルの `CHECK` 制約（PostgreSQL 標準）を記載
+- [ ] テーブル間の JOIN / 先行取得クエリの sqlc 関数名を一覧化
+- [ ] バリデーションルール（`validate:"required,oneof=temperature humidity"` / `gte=-40,lte=125` 等）を記載（実行方式は実装設計側で定義）
+- [ ] 主要クエリパターン（グラフ表示 / 期間集計 / アラート判定等）を SQL / sqlc で記載
+- [ ] 設計方針（外部キー非設定 / 論理削除適用範囲 / 集計テーブルの有無）を明記
+- [ ] 非同期 / 同期処理方針（Queue 使用の有無 / 実行タイミング）を明記
 - [ ] データフロー対応表（ユースケース別の関連テーブル）を記載
 
 ---
@@ -38,39 +40,33 @@ DB設計書を新規作成する際に以下が揃っているか確認する：
 
 ## DB接続設定
 
-- **RDBMS**: MariaDB 10.11+
-- **Dockerコンテナ**: `db_kdcs`（docker-compose.yml で定義）
+- **RDBMS**: PostgreSQL 16+
+- **Docker コンテナ**: `go_iot_db`（`docker-compose.yml` で定義）
 - **接続設定（`.env`）**:
   ```
-  DB_CONNECTION=mariadb
-  DB_HOST=db_kdcs
-  DB_PORT=3306
-  DB_DATABASE=laravel_local
-  DB_USERNAME=phper
-  DB_PASSWORD=secret
+  DATABASE_URL=postgres://go_iot:go_iot_dev@localhost:5432/go_iot?sslmode=disable
   ```
-- **テスト用DB**: `phpunit.xml` に `DB_DATABASE=laravel_testing` を設定し、本番DBと分離する
-  ```xml
-  <env name="DB_DATABASE" value="laravel_testing"/>
-  ```
+- **マイグレーション適用**: `make migrate-up` (goose)
+- **sqlc コード生成**: `make sqlc`（`db/queries/*.sql` → `internal/repository/*.go`）
 
 ---
 
 ## 設計方針
 
-- **リレーション**: 外部キー制約はDB上に設定しない。参照整合性はアプリケーション層（Eloquent）で管理する
-- **削除戦略**: 主要テーブルに論理削除（SoftDeletes）を採用。`deleted_at` カラムで管理する（適用範囲は下記「論理削除の適用範囲」を参照）
-- **マスターデータ**: DBテーブルではなくPHP Backed Enumで管理する。DBカラムにはVARCHARとしてEnumの `value` を格納する
-- **認証**: ESP8266はSanctum APIトークン、ブラウザはSession（Laravel Breeze標準）
-- **集計テーブル**: 持たない。24時間グラフは `sensor_readings` の生データ取得、7日/30日グラフは日次集計クエリ（`GROUP BY DATE(recorded_at)`）で実装する
+- **リレーション**: 外部キー制約はDB上に設定しない。参照整合性はアプリケーション層（sqlc クエリ + Service）で管理する
+- **削除戦略**: 主要テーブルに論理削除を採用。`deleted_at` カラムで管理する（適用範囲は下記「論理削除の適用範囲」を参照）。sqlc クエリでは常に `WHERE deleted_at IS NULL` を付与する
+- **マスターデータ**: DB テーブルではなく Go の型付き定数（`type X string` + const）で管理する。DB カラムには `VARCHAR` として値を格納し、CHECK 制約で範囲を保証する
+- **認証**: ESP32 は自作 Bearer トークンミドルウェア + `device_tokens` テーブル、ブラウザは Session（`alexedwards/scs` + PostgreSQL セッションストア）
+- **集計テーブル**: 持たない。24 時間グラフは `sensor_readings` の生データ取得、7 日/30 日グラフは日次集計クエリ（`GROUP BY DATE(recorded_at)`）で実装する
+- **UNIQUE 制約と論理削除**: soft-deleted 行との衝突を避けるため、UNIQUE は部分インデックス `WHERE deleted_at IS NULL` で定義する
 
 ### 論理削除の適用範囲
 
-| テーブル | SoftDeletes | 理由 |
-|---------|:-----------:|------|
-| users | - | Breeze標準テーブルのため対象外 |
+| テーブル | 論理削除 | 理由 |
+|---------|:-------:|------|
+| users | - | 物理削除で運用 |
 | devices | 適用 | デバイス履歴の保全 |
-| personal_access_tokens | - | Sanctum標準テーブルのため対象外 |
+| device_tokens | - | 物理削除で運用 (失効は expires_at で管理) |
 | sensor_readings | 適用 | 計測データの保全 |
 | alert_rules | 適用 | ルール変更履歴の追跡 |
 | alert_histories | 適用 | 通知履歴の保全 |
@@ -82,121 +78,137 @@ DB設計書を新規作成する際に以下が揃っているか確認する：
 ```mermaid
 erDiagram
     users ||--o{ devices : "所有"
-    users ||--o{ personal_access_tokens : "発行"
+    users ||--o{ device_tokens : "発行"
     devices ||--o{ sensor_readings : "計測"
     devices ||--o{ alert_rules : "設定"
     alert_rules ||--o{ alert_histories : "発火"
 
     users {
-        bigint id PK
-        string name
-        string email UK
-        timestamp email_verified_at
-        string password
-        string remember_token
-        timestamps created_at
-        timestamps updated_at
+        bigserial id PK
+        varchar name
+        varchar email UK
+        varchar password_hash
+        timestamptz email_verified_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     devices {
-        bigint id PK
+        bigserial id PK
         bigint user_id
-        string name
-        string mac_address UK
-        string location
+        varchar name
+        varchar mac_address "部分UNIQUE (deleted_at IS NULL)"
+        varchar location
         boolean is_active
-        timestamp last_communicated_at
-        timestamps created_at
-        timestamps updated_at
-        timestamp deleted_at
+        timestamptz last_communicated_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
     }
 
-    personal_access_tokens {
-        bigint id PK
-        string tokenable_type
-        bigint tokenable_id
-        string name
-        string token UK
-        text abilities
-        timestamp last_used_at
-        timestamp expires_at
-        timestamps created_at
-        timestamps updated_at
+    device_tokens {
+        bigserial id PK
+        bigint user_id
+        varchar name
+        varchar token_hash UK "SHA-256 hex(64)"
+        jsonb abilities
+        timestamptz last_used_at
+        timestamptz expires_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     sensor_readings {
-        bigint id PK
+        bigserial id PK
         bigint device_id
-        decimal temperature
-        decimal humidity
-        timestamp recorded_at
-        timestamps created_at
-        timestamps updated_at
-        timestamp deleted_at
+        numeric temperature "-40..125"
+        numeric humidity "0..100"
+        timestamptz recorded_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
     }
 
     alert_rules {
-        bigint id PK
+        bigserial id PK
         bigint device_id
-        varchar metric "Metric Enum値"
-        varchar operator "ComparisonOperator Enum値"
-        decimal threshold
+        varchar metric "CHECK: temperature/humidity"
+        varchar operator "CHECK: > < >= <="
+        numeric threshold
         boolean is_enabled
-        timestamps created_at
-        timestamps updated_at
-        timestamp deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
     }
 
     alert_histories {
-        bigint id PK
+        bigserial id PK
         bigint alert_rule_id
-        varchar metric "Metric Enum値"
-        varchar operator "ComparisonOperator Enum値"
-        decimal threshold
-        decimal actual_value
+        varchar metric
+        varchar operator
+        numeric threshold
+        numeric actual_value
         boolean is_notified
-        timestamp triggered_at
-        timestamps created_at
-        timestamps updated_at
-        timestamp deleted_at
+        timestamptz triggered_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
     }
 ```
 
-> ※ ER図のリレーション線はEloquentでの論理関係を示す。DB上の外部キー制約は設定しない。
+> ※ ER 図のリレーション線は sqlc JOIN クエリでの論理関係を示す。DB 上の外部キー制約は設定しない。
 
 ---
 
 ## Enum定義
 
-マスターデータはDBテーブルではなくPHP Backed Enumで管理する。
-DBカラムにはEnumの `value`（string）が格納される。
+マスターデータは DB テーブルではなく Go の型付き文字列定数で管理する。
+DB カラムには `VARCHAR` として値を格納し、CHECK 制約で許容値を制限する。
 
 ### Metric（計測指標）
 
-`App\Enums\Metric`
+`internal/domain/metric.go`
 
-```php
-enum Metric: string
-{
-    case Temperature = 'temperature';
-    case Humidity = 'humidity';
+```go
+package domain
 
-    public function label(): string
-    {
-        return match ($this) {
-            self::Temperature => '温度',
-            self::Humidity => '湿度',
-        };
+type Metric string
+
+const (
+    MetricTemperature Metric = "temperature"
+    MetricHumidity    Metric = "humidity"
+)
+
+func (m Metric) Label() string {
+    switch m {
+    case MetricTemperature:
+        return "温度"
+    case MetricHumidity:
+        return "湿度"
     }
-
-    public function unit(): string
-    {
-        return match ($this) {
-            self::Temperature => '℃',
-            self::Humidity => '%',
-        };
-    }
+    return string(m)
 }
+
+func (m Metric) Unit() string {
+    switch m {
+    case MetricTemperature:
+        return "℃"
+    case MetricHumidity:
+        return "%"
+    }
+    return ""
+}
+
+func (m Metric) Valid() bool {
+    switch m {
+    case MetricTemperature, MetricHumidity:
+        return true
+    }
+    return false
+}
+
+func ParseMetric(s string) (Metric, error) { /* ... */ }
+func AllMetrics() []Metric                  { /* ... */ }
 ```
 
 | 値 | ラベル | 単位 |
@@ -208,35 +220,48 @@ enum Metric: string
 
 ### ComparisonOperator（比較演算子）
 
-`App\Enums\ComparisonOperator`
+`internal/domain/comparison_operator.go`
 
-```php
-enum ComparisonOperator: string
-{
-    case GreaterThan = '>';
-    case LessThan = '<';
-    case GreaterThanOrEqual = '>=';
-    case LessThanOrEqual = '<=';
+```go
+package domain
 
-    public function label(): string
-    {
-        return match ($this) {
-            self::GreaterThan => 'より大きい',
-            self::LessThan => 'より小さい',
-            self::GreaterThanOrEqual => '以上',
-            self::LessThanOrEqual => '以下',
-        };
+type ComparisonOperator string
+
+const (
+    OpGreaterThan        ComparisonOperator = ">"
+    OpLessThan           ComparisonOperator = "<"
+    OpGreaterThanOrEqual ComparisonOperator = ">="
+    OpLessThanOrEqual    ComparisonOperator = "<="
+)
+
+func (op ComparisonOperator) Label() string {
+    switch op {
+    case OpGreaterThan:
+        return "より大きい"
+    case OpLessThan:
+        return "より小さい"
+    case OpGreaterThanOrEqual:
+        return "以上"
+    case OpLessThanOrEqual:
+        return "以下"
     }
+    return string(op)
+}
 
-    public function evaluate(float $actual, float $threshold): bool
-    {
-        return match ($this) {
-            self::GreaterThan => $actual > $threshold,
-            self::LessThan => $actual < $threshold,
-            self::GreaterThanOrEqual => $actual >= $threshold,
-            self::LessThanOrEqual => $actual <= $threshold,
-        };
+// Evaluate は actual を threshold と比較し、演算子の条件が成立するかを返す。
+// アラート判定ロジックの中核。
+func (op ComparisonOperator) Evaluate(actual, threshold float64) bool {
+    switch op {
+    case OpGreaterThan:
+        return actual > threshold
+    case OpLessThan:
+        return actual < threshold
+    case OpGreaterThanOrEqual:
+        return actual >= threshold
+    case OpLessThanOrEqual:
+        return actual <= threshold
     }
+    return false
 }
 ```
 
@@ -249,44 +274,35 @@ enum ComparisonOperator: string
 
 ---
 
-### Modelでのキャスト設定
+### Go 構造体でのフィールド型
 
-```php
-// App\Models\AlertRule
-class AlertRule extends Model
-{
-    use SoftDeletes;
+sqlc は `NUMERIC` を `pgtype.Numeric`、`TIMESTAMPTZ` を `pgtype.Timestamptz` として生成する。
+Service / Handler 層で float64 / time.Time として扱う際は `internal/infra/pgconv` のヘルパーを使う。
 
-    protected function casts(): array
-    {
-        return [
-            'metric' => Metric::class,
-            'operator' => ComparisonOperator::class,
-            'threshold' => 'decimal:2',
-            'is_enabled' => 'boolean',
-        ];
-    }
+```go
+// internal/repository/models.go (sqlc 生成)
+type AlertRule struct {
+    ID        int64
+    DeviceID  int64
+    Metric    string             // domain.Metric にキャストして使用
+    Operator  string             // domain.ComparisonOperator にキャストして使用
+    Threshold pgtype.Numeric     // pgconv.NumericToFloat() で float64 へ
+    IsEnabled bool
+    CreatedAt pgtype.Timestamptz // pgconv.TimestamptzToTime() で time.Time へ
+    UpdatedAt pgtype.Timestamptz
+    DeletedAt pgtype.Timestamptz // NULL 可
 }
-```
 
-```php
-// App\Models\AlertHistory
-class AlertHistory extends Model
-{
-    use SoftDeletes;
+// Handler での使い方
+import "github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
+import "github.com/HiroshiKawano/go_iot/internal/domain"
 
-    protected function casts(): array
-    {
-        return [
-            'metric' => Metric::class,
-            'operator' => ComparisonOperator::class,
-            'threshold' => 'decimal:2',
-            'actual_value' => 'decimal:2',
-            'is_notified' => 'boolean',
-            'triggered_at' => 'datetime',
-        ];
-    }
-}
+m := domain.Metric(rule.Metric)
+op := domain.ComparisonOperator(rule.Operator)
+threshold := pgconv.NumericToFloat(rule.Threshold)
+
+fired := op.Evaluate(actual, threshold)
+label := m.Label() + op.Label() + fmt.Sprintf("%.2f", threshold) + m.Unit()
 ```
 
 ---
@@ -294,33 +310,33 @@ class AlertHistory extends Model
 ## バリデーションルール定義
 
 > **cc-sdd への価値:**
-> Enum値を含むカラムのバリデーションには `Rule::enum()` が必要。テーブル定義の型情報だけでは導出しにくい。センサー値の物理的な範囲（温湿度の上下限）もここで定義する。
+> Enum 値を含むカラムのバリデーションには `validate:"oneof=..."` タグが必要。テーブル定義の型情報だけでは導出しにくい。センサー値の物理的な範囲（温湿度の上下限）もここで定義する。
 
-> **注意:** 本セクションはバリデーション**ルール**（何を検証するか）を定義する。バリデーションの**実行方式**（FormRequest / `Validator::make()` の選択）はHTMX実装ガイド(動的).mdの「バリデーションエラー表示」を参照。
+> **注意:** 本セクションはバリデーション**ルール**（何を検証するか）を定義する。バリデーションの**実行方式**（`go-playground/validator` + Echo の `e.Validator` 経由）は `2cc_sdd/HTMX実装ガイド(動的).md` の「バリデーションエラー表示」を参照。
 
-### AlertRule 用（Web UIフォーム）
+### AlertRule 用（Web UI フォーム）
 
-```php
-// バリデーションルール定義
-// ※ 実行方式（FormRequest or Validator::make）はHTMX実装ガイド(動的).mdを参照
-[
-    'device_id'  => ['required', 'integer', 'exists:devices,id'],
-    'metric'     => ['required', Rule::enum(Metric::class)],
-    'operator'   => ['required', Rule::enum(ComparisonOperator::class)],
-    'threshold'  => ['required', 'numeric', 'decimal:0,2'],
-    'is_enabled' => ['boolean'],
-]
+```go
+// internal/handler/alert_rule.go
+type CreateAlertRuleRequest struct {
+    DeviceID  int64   `form:"device_id" validate:"required,min=1"`
+    Metric    string  `form:"metric"    validate:"required,oneof=temperature humidity"`
+    Operator  string  `form:"operator"  validate:"required,oneof=> < >= <="`
+    Threshold float64 `form:"threshold" validate:"required"`
+    IsEnabled bool    `form:"is_enabled"`
+}
 ```
 
-### SensorReading 用（ESP8266からのAPI受信）
+### SensorReading 用（ESP32 からの API 受信）
 
-```php
-// バリデーションルール定義（FormRequestで実装）
-[
-    'temperature' => ['required', 'numeric', 'between:-40,125'],
-    'humidity'    => ['required', 'numeric', 'between:0,100'],
-    'recorded_at' => ['required', 'date'],
-]
+```go
+// internal/handler/sensor_api.go
+type CreateSensorReadingRequest struct {
+    DeviceID    int64     `json:"device_id"    validate:"required,min=1"`
+    Temperature float64   `json:"temperature"  validate:"gte=-40,lte=125"`
+    Humidity    float64   `json:"humidity"     validate:"gte=0,lte=100"`
+    RecordedAt  time.Time `json:"recorded_at"  validate:"required"`
+}
 ```
 
 ---
@@ -329,104 +345,105 @@ class AlertHistory extends Model
 
 ### 1. users（ユーザー）
 
-Laravel Breeze標準のユーザーテーブル。Web UIのSession認証に使用。
+Web UI の Session 認証対象。パスワードは bcrypt でハッシュ化して保存する。
 
 | カラム | 型 | 制約 | 説明 |
 |--------|-----|------|------|
-| id | BIGINT UNSIGNED | PK, AUTO_INCREMENT | |
+| id | BIGSERIAL | PK | 自動採番 |
 | name | VARCHAR(255) | NOT NULL | ユーザー名 |
 | email | VARCHAR(255) | NOT NULL, UNIQUE | メールアドレス |
-| email_verified_at | TIMESTAMP | NULLABLE | メール確認日時 |
-| password | VARCHAR(255) | NOT NULL | ハッシュ化パスワード |
-| remember_token | VARCHAR(100) | NULLABLE | ログイン維持トークン |
-| created_at | TIMESTAMP | NULLABLE | |
-| updated_at | TIMESTAMP | NULLABLE | |
+| password_hash | VARCHAR(255) | NOT NULL | bcrypt ハッシュ |
+| email_verified_at | TIMESTAMPTZ | NULLABLE | メール確認日時 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
 
-> ※ Breeze標準のため論理削除は適用しない。
+> ※ 物理削除で運用（論理削除は適用しない）。
 
 ---
 
 ### 2. devices（デバイス）
 
-ESP8266デバイスの管理テーブル。
+ESP32 デバイスの管理テーブル。
 
 | カラム | 型 | 制約 | 説明 |
 |--------|-----|------|------|
-| id | BIGINT UNSIGNED | PK, AUTO_INCREMENT | |
-| user_id | BIGINT UNSIGNED | NOT NULL | 所有ユーザー（users.id） |
+| id | BIGSERIAL | PK | |
+| user_id | BIGINT | NOT NULL | 所有ユーザー（users.id） |
 | name | VARCHAR(255) | NOT NULL | デバイス名（例: ハウスA温湿度計） |
-| mac_address | VARCHAR(17) | NOT NULL, UNIQUE | MACアドレス（例: AA:BB:CC:DD:EE:FF） |
+| mac_address | VARCHAR(17) | NOT NULL + 部分 UNIQUE | MACアドレス。CHECK 制約で形式検証 |
 | location | VARCHAR(255) | NULLABLE | 設置場所（例: ビニールハウスA） |
-| is_active | BOOLEAN | NOT NULL, DEFAULT true | 有効/無効フラグ |
-| last_communicated_at | TIMESTAMP | NULLABLE | 最終通信日時 |
-| created_at | TIMESTAMP | NULLABLE | |
-| updated_at | TIMESTAMP | NULLABLE | |
-| deleted_at | TIMESTAMP | NULLABLE | 論理削除日時 |
+| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効/無効フラグ |
+| last_communicated_at | TIMESTAMPTZ | NULLABLE | 最終通信日時 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| deleted_at | TIMESTAMPTZ | NULLABLE | 論理削除日時 |
+
+**CHECK 制約:**
+- `devices_mac_address_format` — `mac_address ~ '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'`
 
 **インデックス:**
-- `devices_user_id_index` → user_id
-- `devices_mac_address_unique` → mac_address (UNIQUE)
-- `devices_is_active_index` → is_active
+- `devices_mac_address_unique_active` (UNIQUE, partial) → `mac_address WHERE deleted_at IS NULL`
+- `devices_user_id_idx` → `user_id WHERE deleted_at IS NULL`
+- `devices_is_active_idx` → `is_active WHERE deleted_at IS NULL`
 
 ---
 
-### 3. personal_access_tokens（APIトークン）
+### 3. device_tokens（API トークン）
 
-Laravel Sanctum標準テーブル。ESP8266のAPI認証に使用。
+デバイス API 用 Bearer トークン（Laravel Sanctum 相当を自作）。
+**平文トークンは DB に保存しない。SHA-256 ハッシュのみ保存。**
 
 | カラム | 型 | 制約 | 説明 |
 |--------|-----|------|------|
-| id | BIGINT UNSIGNED | PK, AUTO_INCREMENT | |
-| tokenable_type | VARCHAR(255) | NOT NULL | ポリモーフィック型（App\Models\User） |
-| tokenable_id | BIGINT UNSIGNED | NOT NULL | ポリモーフィックID |
+| id | BIGSERIAL | PK | |
+| user_id | BIGINT | NOT NULL | トークン保有者（users.id） |
 | name | VARCHAR(255) | NOT NULL | トークン名 ※デバイス名と合わせる |
-| token | VARCHAR(64) | NOT NULL, UNIQUE | SHA-256ハッシュ化トークン |
-| abilities | TEXT | NULLABLE | 権限（例: ["sensor:write"]） |
-| last_used_at | TIMESTAMP | NULLABLE | 最終使用日時 |
-| expires_at | TIMESTAMP | NULLABLE | 有効期限 |
-| created_at | TIMESTAMP | NULLABLE | |
-| updated_at | TIMESTAMP | NULLABLE | |
-
-> ※ このテーブルは `php artisan migrate` で自動生成される。Sanctum標準のため論理削除は適用しない。
+| token_hash | VARCHAR(64) | NOT NULL, UNIQUE | SHA-256 ハッシュ（hex 64 文字） |
+| abilities | JSONB | NOT NULL, DEFAULT '[]' | 権限（例: `["sensor:write"]`） |
+| last_used_at | TIMESTAMPTZ | NULLABLE | 最終使用日時 |
+| expires_at | TIMESTAMPTZ | NULLABLE | 有効期限 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
 
 **デバイスとトークンの紐づけ運用ルール:**
 
-トークン作成時、`name` カラムにデバイス名を設定して運用的に紐づける。
+トークン作成時、`name` カラムにデバイス名を設定して運用的に紐づける。`make gen-token` CLI で発行。
 
-```php
-// トークン発行例
-$token = $user->createToken(
-    name: 'ハウスA温湿度計',       // devices.name と一致させる
-    abilities: ['sensor:write']
-);
+```bash
+make gen-token user=1 name="ハウスA温湿度計"
+# → 平文トークンが標準出力に一度だけ表示される
 ```
 
 ---
 
 ### 4. sensor_readings（センサー計測データ）
 
-SHT31から取得した生データの蓄積テーブル。システムの中核データ。
+SHT31 から取得した生データの蓄積テーブル。システムの中核データ。
 
 | カラム | 型 | 制約 | 説明 |
 |--------|-----|------|------|
-| id | BIGINT UNSIGNED | PK, AUTO_INCREMENT | |
-| device_id | BIGINT UNSIGNED | NOT NULL | 計測デバイス（devices.id） |
-| temperature | DECIMAL(5,2) | NOT NULL | 温度（℃）。範囲: -40.00〜125.00 |
-| humidity | DECIMAL(5,2) | NOT NULL | 相対湿度（%）。範囲: 0.00〜100.00 |
-| recorded_at | TIMESTAMP | NOT NULL | センサーの計測日時 |
-| created_at | TIMESTAMP | NULLABLE | サーバー受信日時 |
-| updated_at | TIMESTAMP | NULLABLE | |
-| deleted_at | TIMESTAMP | NULLABLE | 論理削除日時 |
+| id | BIGSERIAL | PK | |
+| device_id | BIGINT | NOT NULL | 計測デバイス（devices.id） |
+| temperature | NUMERIC(5, 2) | NOT NULL | 温度（℃） |
+| humidity | NUMERIC(5, 2) | NOT NULL | 相対湿度（%） |
+| recorded_at | TIMESTAMPTZ | NOT NULL | センサーの計測日時 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | サーバー受信日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| deleted_at | TIMESTAMPTZ | NULLABLE | 論理削除日時 |
 
-**インデックス:**
-- `sensor_readings_device_id_recorded_at_index` → (device_id, recorded_at) — グラフ表示クエリの高速化
-- `sensor_readings_recorded_at_index` → recorded_at — 期間指定検索用
+**CHECK 制約:**
+- `sensor_readings_temperature_range` — `temperature BETWEEN -40 AND 125`
+- `sensor_readings_humidity_range` — `humidity BETWEEN 0 AND 100`
+
+**インデックス（いずれも `deleted_at IS NULL` の部分インデックス）:**
+- `sensor_readings_device_id_recorded_at_idx` → `(device_id, recorded_at DESC)` — グラフ表示クエリの高速化
+- `sensor_readings_recorded_at_idx` → `recorded_at DESC` — 期間指定検索用
 
 **設計メモ:**
 - `recorded_at` はデバイス側の計測時刻、`created_at` はサーバー受信時刻
 - 両者の差分から通信遅延を分析可能
-- グラフ生成（goat1000/svggraph）では `recorded_at` を時間軸に使用
-- データ量が増大した場合は月次パーティショニングを検討
+- グラフ生成（サーバサイド SVG）では `recorded_at` を時間軸に使用
+- データ量が増大した場合は PostgreSQL パーティショニング（RANGE / LIST）を検討
 
 ---
 
@@ -436,25 +453,29 @@ SHT31から取得した生データの蓄積テーブル。システムの中核
 
 | カラム | 型 | 制約 | 説明 |
 |--------|-----|------|------|
-| id | BIGINT UNSIGNED | PK, AUTO_INCREMENT | |
-| device_id | BIGINT UNSIGNED | NOT NULL | 対象デバイス（devices.id） |
-| metric | VARCHAR(20) | NOT NULL | 計測指標 → Metric Enum。DB格納値: temperature / humidity |
-| operator | VARCHAR(5) | NOT NULL | 比較演算子 → ComparisonOperator Enum。DB格納値: >, <, >=, <= |
-| threshold | DECIMAL(5,2) | NOT NULL | 閾値 |
-| is_enabled | BOOLEAN | NOT NULL, DEFAULT true | 有効/無効 |
-| created_at | TIMESTAMP | NULLABLE | |
-| updated_at | TIMESTAMP | NULLABLE | |
-| deleted_at | TIMESTAMP | NULLABLE | 論理削除日時 |
+| id | BIGSERIAL | PK | |
+| device_id | BIGINT | NOT NULL | 対象デバイス（devices.id） |
+| metric | VARCHAR(20) | NOT NULL | 計測指標 → domain.Metric。DB 格納値: `temperature` / `humidity` |
+| operator | VARCHAR(5) | NOT NULL | 比較演算子 → domain.ComparisonOperator。DB 格納値: `>`, `<`, `>=`, `<=` |
+| threshold | NUMERIC(5, 2) | NOT NULL | 閾値 |
+| is_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効/無効 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| deleted_at | TIMESTAMPTZ | NULLABLE | 論理削除日時 |
+
+**CHECK 制約:**
+- `alert_rules_metric_valid` — `metric IN ('temperature', 'humidity')`
+- `alert_rules_operator_valid` — `operator IN ('>', '<', '>=', '<=')`
 
 **インデックス:**
-- `alert_rules_device_id_is_enabled_index` → (device_id, is_enabled)
+- `alert_rules_device_id_is_enabled_idx` → `(device_id, is_enabled) WHERE deleted_at IS NULL`
 
 **設定例:**
 
 | device_id | metric | operator | threshold | 意味 |
 |-----------|--------|----------|-----------|------|
-| 1 | temperature | > | 35.00 | 温度が35℃を超えたら警告 |
-| 1 | humidity | < | 30.00 | 湿度が30%を下回ったら警告 |
+| 1 | temperature | > | 35.00 | 温度が 35℃ を超えたら警告 |
+| 1 | humidity | < | 30.00 | 湿度が 30% を下回ったら警告 |
 
 ---
 
@@ -464,140 +485,151 @@ SHT31から取得した生データの蓄積テーブル。システムの中核
 
 | カラム | 型 | 制約 | 説明 |
 |--------|-----|------|------|
-| id | BIGINT UNSIGNED | PK, AUTO_INCREMENT | |
-| alert_rule_id | BIGINT UNSIGNED | NOT NULL | 発火したルール（alert_rules.id） |
-| metric | VARCHAR(20) | NOT NULL | 計測指標 → Metric Enum。発火時点の値を非正規化して保持 |
-| operator | VARCHAR(5) | NOT NULL | 比較演算子 → ComparisonOperator Enum。発火時点の値を非正規化して保持 |
-| threshold | DECIMAL(5,2) | NOT NULL | 閾値。発火時点の値を非正規化して保持 |
-| actual_value | DECIMAL(5,2) | NOT NULL | 検知時の実測値 |
-| is_notified | BOOLEAN | NOT NULL, DEFAULT false | 通知済みフラグ |
-| triggered_at | TIMESTAMP | NOT NULL | アラート発火日時 |
-| created_at | TIMESTAMP | NULLABLE | |
-| updated_at | TIMESTAMP | NULLABLE | |
-| deleted_at | TIMESTAMP | NULLABLE | 論理削除日時 |
+| id | BIGSERIAL | PK | |
+| alert_rule_id | BIGINT | NOT NULL | 発火したルール（alert_rules.id） |
+| metric | VARCHAR(20) | NOT NULL | 計測指標。発火時点の値を**非正規化**して保持 |
+| operator | VARCHAR(5) | NOT NULL | 比較演算子。発火時点の値を**非正規化**して保持 |
+| threshold | NUMERIC(5, 2) | NOT NULL | 閾値。発火時点の値を**非正規化**して保持 |
+| actual_value | NUMERIC(5, 2) | NOT NULL | 検知時の実測値 |
+| is_notified | BOOLEAN | NOT NULL, DEFAULT FALSE | 通知済みフラグ |
+| triggered_at | TIMESTAMPTZ | NOT NULL | アラート発火日時 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+| deleted_at | TIMESTAMPTZ | NULLABLE | 論理削除日時 |
 
-**インデックス:**
-- `alert_histories_alert_rule_id_index` → alert_rule_id
-- `alert_histories_triggered_at_index` → triggered_at
+**CHECK 制約:**
+- `alert_histories_metric_valid` — `metric IN ('temperature', 'humidity')`
+- `alert_histories_operator_valid` — `operator IN ('>', '<', '>=', '<=')`
+
+**インデックス（いずれも `deleted_at IS NULL` の部分インデックス）:**
+- `alert_histories_alert_rule_id_idx` → `alert_rule_id`
+- `alert_histories_triggered_at_idx` → `triggered_at DESC`
+- `alert_histories_unnotified_idx` → `triggered_at DESC WHERE is_notified = FALSE AND deleted_at IS NULL` — ダッシュボード未通知バナー用
 
 **設計メモ:**
-- `metric`, `operator`, `threshold` は alert_rules から非正規化して保持。ルールが変更・削除されても履歴の意味が失われない
+- `metric`, `operator`, `threshold` は alert_rules から**非正規化**して保持。ルールが変更・削除されても履歴の意味が失われない
 
 ---
 
-## Eloquentリレーション定義
+## sqlc リレーション方針
 
 > **cc-sdd への価値:**
-> Controller・Service実装で `with()` / `load()` を使う際にメソッド名が必要。ER図には構造は示されているが、Eloquentのメソッド名はプロジェクト固有の命名決定。不統一なまま実装すると N+1問題や命名の揺れが生じる。
+> Handler / Service 実装で他テーブルデータを取得する際の sqlc 関数名が必要。ER 図には構造は示されているが、実装では JOIN クエリをあらかじめ名前で用意しておく。これにより N+1 問題を構造的に防ぐ。
 
-| Modelクラス | メソッド名 | 種類 | 対象Modelクラス |
-|------------|----------|------|--------------|
-| `User` | `devices()` | `hasMany` | `Device` |
-| `Device` | `user()` | `belongsTo` | `User` |
-| `Device` | `readings()` | `hasMany` | `SensorReading` |
-| `Device` | `latestReading()` | `hasOne`（latestOfMany） | `SensorReading` |
-| `Device` | `alertRules()` | `hasMany` | `AlertRule` |
-| `AlertRule` | `device()` | `belongsTo` | `Device` |
-| `AlertRule` | `histories()` | `hasMany` | `AlertHistory` |
-| `AlertHistory` | `alertRule()` | `belongsTo` | `AlertRule` |
+| 取得パターン | sqlc 関数名 | 主なクエリ |
+|------------|------------|----------|
+| デバイスの最新センサー 1 件 | `GetLatestSensorReading` | `SELECT * FROM sensor_readings WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT 1` |
+| ユーザーの全デバイス | `ListDevicesByUser` | `SELECT * FROM devices WHERE user_id = $1 AND deleted_at IS NULL` |
+| デバイスの有効なアラートルール | `ListEnabledAlertRulesByDevice` | アラート判定の中核 |
+| 未通知アラート + デバイス名 | `ListUnnotifiedAlertHistoriesWithDevice` | alert_histories × alert_rules × devices の JOIN |
+| アラート履歴 + デバイス名（ページング） | `ListAlertHistoriesPaginated` | 同上 + フィルタ + LIMIT/OFFSET |
 
-**`latestReading()` の実装例:**
-
-```php
-// App\Models\Device
-public function latestReading(): HasOne
-{
-    return $this->hasOne(SensorReading::class)->latestOfMany('recorded_at');
-}
-```
-
-> Sanctum の `personal_access_tokens` は `User` モデルに `HasApiTokens` トレイトを追加することで管理される。Eloquentリレーションの定義は不要。
+> Laravel Eloquent の「`with()` / `load()` による Eager Loading」の代わりに、**必要な JOIN を最初から sqlc クエリで書く** のが Go 流のアプローチ。
 
 ---
 
 ## 主要クエリパターン
 
-### グラフ表示用（svggraph向け）
+### グラフ表示用（24h 向け生データ）
 
 ```sql
--- 指定デバイスの直近24時間の計測データを取得
-SELECT recorded_at, temperature, humidity
-FROM sensor_readings
-WHERE device_id = ?
-  AND recorded_at >= NOW() - INTERVAL 24 HOUR
-  AND deleted_at IS NULL
-ORDER BY recorded_at ASC;
+-- name: ListRecentSensorReadings :many
+SELECT * FROM sensor_readings
+ WHERE device_id   = $1
+   AND recorded_at >= $2
+   AND deleted_at IS NULL
+ ORDER BY recorded_at ASC;
 ```
 
 ### デバイス詳細グラフ用（日次集計 — 7日/30日表示）
 
 ```sql
--- 指定デバイスの日別平均・最大・最小を集計（7日/30日グラフ向け）
+-- name: ListDailySensorAggregates :many
 SELECT
-    DATE(recorded_at) AS date,
-    AVG(temperature) AS avg_temperature,
-    MAX(temperature) AS max_temperature,
-    MIN(temperature) AS min_temperature,
-    AVG(humidity) AS avg_humidity,
-    MAX(humidity) AS max_humidity,
-    MIN(humidity) AS min_humidity
-FROM sensor_readings
-WHERE device_id = ?
-  AND recorded_at >= NOW() - INTERVAL 30 DAY
-  AND deleted_at IS NULL
-GROUP BY DATE(recorded_at)
-ORDER BY date ASC;
+    DATE(recorded_at)               AS reading_date,
+    AVG(temperature)::NUMERIC(5, 2) AS avg_temperature,
+    MAX(temperature)                AS max_temperature,
+    MIN(temperature)                AS min_temperature,
+    AVG(humidity)::NUMERIC(5, 2)    AS avg_humidity,
+    MAX(humidity)                   AS max_humidity,
+    MIN(humidity)                   AS min_humidity,
+    COUNT(*)::BIGINT                AS sample_count
+  FROM sensor_readings
+ WHERE device_id   = $1
+   AND recorded_at >= $2
+   AND deleted_at IS NULL
+ GROUP BY DATE(recorded_at)
+ ORDER BY DATE(recorded_at) ASC;
 ```
 
 ### センサーデータ履歴用（期間集計）
 
 ```sql
--- 指定デバイスの指定期間内の集計値を取得（センサーデータ履歴画面向け）
+-- name: GetSensorReadingsSummary :one
 SELECT
-    AVG(temperature) AS avg_temperature,
-    MAX(temperature) AS max_temperature,
-    MIN(temperature) AS min_temperature,
-    AVG(humidity) AS avg_humidity,
-    MAX(humidity) AS max_humidity,
-    MIN(humidity) AS min_humidity
-FROM sensor_readings
-WHERE device_id = ?
-  AND recorded_at BETWEEN ? AND ?
-  AND deleted_at IS NULL;
+    AVG(temperature)::NUMERIC(5, 2) AS avg_temperature,
+    MAX(temperature)                AS max_temperature,
+    MIN(temperature)                AS min_temperature,
+    AVG(humidity)::NUMERIC(5, 2)    AS avg_humidity,
+    MAX(humidity)                   AS max_humidity,
+    MIN(humidity)                   AS min_humidity,
+    COUNT(*)::BIGINT                AS sample_count
+  FROM sensor_readings
+ WHERE device_id   = $1
+   AND recorded_at BETWEEN $2 AND $3
+   AND deleted_at IS NULL;
 ```
 
 ### アラート判定用
 
 ```sql
--- 有効なアラートルールと最新の計測値を突合
--- metric に応じた actual_value の取り出しはアプリケーション層で行う（下記Eloquent例を参照）
-SELECT ar.*, sr.temperature, sr.humidity, sr.recorded_at
-FROM alert_rules ar
-JOIN sensor_readings sr ON sr.device_id = ar.device_id
-WHERE ar.is_enabled = true
-  AND ar.deleted_at IS NULL
-  AND sr.deleted_at IS NULL
-  AND sr.recorded_at = (
-      SELECT MAX(s.recorded_at)
-      FROM sensor_readings s
-      WHERE s.device_id = ar.device_id
-        AND s.deleted_at IS NULL
-  );
+-- name: ListEnabledAlertRulesByDevice :many
+SELECT * FROM alert_rules
+ WHERE device_id  = $1
+   AND is_enabled = TRUE
+   AND deleted_at IS NULL;
 ```
 
-**Eloquentでのアラート判定ロジック例:**
+**Go でのアラート判定ロジック例:**
 
-```php
-// metric に応じて比較対象の値を取り出し、Enumのevaluate()で判定
-foreach ($alertRules as $rule) {
-    $actual = match ($rule->metric) {
-        Metric::Temperature => $latestReading->temperature,
-        Metric::Humidity => $latestReading->humidity,
-    };
-
-    if ($rule->operator->evaluate($actual, $rule->threshold)) {
-        // アラート発火 → alert_histories に記録（metric, operator, threshold を非正規化して保存）
+```go
+// internal/service/alert_judgement.go
+func (s *AlertJudgement) Judge(ctx context.Context, reading repository.SensorReading) ([]repository.AlertHistory, error) {
+    rules, err := s.Repo.ListEnabledAlertRulesByDevice(ctx, reading.DeviceID)
+    if err != nil {
+        return nil, err
     }
+
+    var fired []repository.AlertHistory
+    temp := pgconv.NumericToFloat(reading.Temperature)
+    hum  := pgconv.NumericToFloat(reading.Humidity)
+
+    for _, rule := range rules {
+        metric := domain.Metric(rule.Metric)
+        op     := domain.ComparisonOperator(rule.Operator)
+        thr    := pgconv.NumericToFloat(rule.Threshold)
+
+        actual := temp
+        if metric == domain.MetricHumidity {
+            actual = hum
+        }
+
+        if op.Evaluate(actual, thr) {
+            hist, err := s.Repo.CreateAlertHistory(ctx, repository.CreateAlertHistoryParams{
+                AlertRuleID:  rule.ID,
+                Metric:       rule.Metric,
+                Operator:     rule.Operator,
+                Threshold:    rule.Threshold,
+                ActualValue:  pgconv.Numeric2(actual),
+                TriggeredAt:  pgconv.Timestamptz(time.Now()),
+            })
+            if err != nil {
+                return nil, err
+            }
+            fired = append(fired, hist)
+        }
+    }
+    return fired, nil
 }
 ```
 
@@ -607,32 +639,35 @@ foreach ($alertRules as $rule) {
 
 | フロー | 関連テーブル |
 |--------|-------------|
-| ESP8266 → API → DB保存 | sensor_readings, devices (last_communicated_at更新) |
-| DB → Controller → svggraph → Blade | sensor_readings (SELECT) |
-| Blade (hx-post) → Controller → DB | alert_rules (CRUD操作) |
-| 異常値検知 → Laravel Notifications | alert_rules, alert_histories, sensor_readings |
+| ESP32 → API → DB保存 | sensor_readings, devices (last_communicated_at 更新) |
+| DB → Handler → サーバサイド SVG → templ | sensor_readings (SELECT) |
+| templ (hx-post) → Handler → DB | alert_rules (CRUD 操作) |
+| 異常値検知 → Notifier サービス | alert_rules, alert_histories, sensor_readings |
 
 ---
 
 ## アラート判定の実行タイミング
 
 > **cc-sdd への価値:**
-> データフロー対応表には「異常値検知 → Laravel Notifications」とあるが、「いつ・誰が」判定を実行するかが未定義。Queue使用の有無はControllerの責務範囲・テスト構造に直接影響する。
+> データフロー対応表には「異常値検知 → Notifier サービス」とあるが、「いつ・誰が」判定を実行するかが未定義。Queue 使用の有無は Handler の責務範囲・テスト構造に直接影響する。
 
-**採用方針:** センサーデータ受信 Controller 内で**同期的**に実行する。Queue（非同期）は使用しない。
+**採用方針:** センサーデータ受信 Handler 内で**同期的**に実行する。非同期キュー（Redis/AMQP 等）は使用しない。
 
 ```
-ESP8266 → POST /api/readings → Controller（同期処理）
-    ├── 1. sensor_readings に INSERT
-    ├── 2. devices.last_communicated_at を UPDATE
-    └── 3. 有効な alert_rules を取得 → ComparisonOperator::evaluate() で判定
-           └── 条件一致 → alert_histories に INSERT
+ESP32 → POST /api/sensor-data → Handler（同期処理）
+    ├── 1. sensor_readings に INSERT (CreateSensorReading)
+    ├── 2. devices.last_communicated_at を UPDATE (UpdateDeviceLastCommunicated)
+    └── 3. 有効な alert_rules を取得 (ListEnabledAlertRulesByDevice)
+           → domain.ComparisonOperator.Evaluate() で判定
+           └── 条件一致 → alert_histories に INSERT (CreateAlertHistory)
+                       → Notifier.Send() で通知
 ```
 
 **設計根拠:**
 - センサー送信間隔が十分に長い（数分〜数十分）ため、同期処理でもリクエスト遅延は許容範囲
-- Queueインフラ（Redis等）を追加しないことでシステム構成をシンプルに保つ
+- Queue インフラ（Redis 等）を追加しないことでシステム構成をシンプルに保つ
+- Go の goroutine で軽量並列化は可能だが、初期リリースでは直列実行で十分
 
 ---
 
-更新日時: 2026-02-24
+更新日時: 2026-04-20

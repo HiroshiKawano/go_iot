@@ -8,126 +8,162 @@
 
 | 優先度 | セクション | cc-sddでの用途 |
 |:------:|-----------|---------------|
-| ★★★ | [Blade Fragmentアプローチ](#blade-fragmentアプローチ) | Controller の `->fragment()` / `->fragments()` 返却パターンの実装根拠。部分ビューファイル分離方式との違い。誤ったパターンを選ぶとBladeファイル数・Controller構造・テストがすべて変わる |
-| ★★★ | [Fragment命名規約](#fragment-命名規約) | Fragment名・`hx-target` id・Controller指定名を統一するルール。名前不一致による実装ミスを防ぐ唯一の根拠 |
-| ★★★ | [id属性一覧](#2-id-属性一覧) | Controller（Fragment指定）・Blade（Fragment定義）・HTMX属性（hx-target指定）の唯一の定義元。HTMLモックにはidが含まれないためこの一覧が必須 |
-| ★★★ | [画面別HTMX操作仕様](#3-画面別-htmx-操作仕様) | 各画面のトリガー・URL・ターゲットのプロジェクト固有仕様。ルーティング・Controller実装設計の根拠 |
-| ★★★ | [バリデーションエラー表示方針](#6-バリデーションエラー表示方針) | HTMXフォームは手動バリデーション+422+Fragment返却、通常フォームはリダイレクト+`$errors` の使い分け根拠。FormRequest不使用の理由。422のswap設定方式。誤ると全フォームのエラー表示が機能しない |
-| ★★★ | [CSRF対応方針](#7-csrf対応方針) | グローバルmeta tag + `htmx:configRequest` 方式（フォームごとの `@csrf` 不使用）の実装根拠。未設定だと全ミューテーションリクエストが403になる |
-| ★★ | [OOB同時更新エンドポイント一覧](#4-oob-同時更新エンドポイント一覧) | `->fragments([])` を使うエンドポイントの定義。単一Fragment設計にすると更新されない要素が生じる |
-| ★★ | [期間パラメータと集計ルール](#期間パラメータperiodと集計ルール) | 24h=生データ・7d/30d=日次集計の違い。DBクエリ・Controller実装・テスト内容に直接影響する |
-| ★★ | [HX-Redirect使用方針](#8-hx-redirect-使用方針) | デバイス削除後のページ遷移実装根拠。`redirect()` と `HX-Redirect` の使い分け。HTMXリクエストに通常の `redirect()` は効かない |
+| ★★★ | [templ コンポーネントアプローチ](#templ-コンポーネントアプローチ) | Handler の templ 関数呼び出しパターンの実装根拠。部分ビューファイル分離方式との違い。誤ったパターンを選ぶと templ ファイル数・Handler 構造・テストがすべて変わる |
+| ★★★ | [コンポーネント命名規約](#コンポーネント-命名規約) | コンポーネント関数名・`hx-target` id を統一するルール。名前不一致による実装ミスを防ぐ唯一の根拠 |
+| ★★★ | [id属性一覧](#2-id-属性一覧) | Handler（コンポーネント呼び出し）・templ（関数定義）・HTMX 属性（hx-target指定）の唯一の定義元。HTMLモックにはidが含まれないためこの一覧が必須 |
+| ★★★ | [画面別HTMX操作仕様](#3-画面別-htmx-操作仕様) | 各画面のトリガー・URL・ターゲットのプロジェクト固有仕様。ルーティング・Handler 実装設計の根拠 |
+| ★★★ | [バリデーションエラー表示方針](#6-バリデーションエラー表示方針) | HTMXフォームは 422+コンポーネント返却、通常フォームはリダイレクト+flash の使い分け根拠。422のswap設定方式 |
+| ★★★ | [CSRF対応方針](#7-csrf対応方針) | グローバル meta tag + `htmx:configRequest` 方式（フォームごとの hidden トークン不使用）の実装根拠。未設定だと全ミューテーションリクエストが 403 になる |
+| ★★ | [OOB同時更新エンドポイント一覧](#4-oob-同時更新エンドポイント一覧) | 複数コンポーネントを連続 `.Render()` するエンドポイントの定義。単一コンポーネント設計にすると更新されない要素が生じる |
+| ★★ | [期間パラメータと集計ルール](#期間パラメータperiodと集計ルール) | 24h=生データ・7d/30d=日次集計の違い。DBクエリ・Handler 実装・テスト内容に直接影響する |
+| ★★ | [HX-Redirect使用方針](#8-hx-redirect-使用方針) | デバイス削除後のページ遷移実装根拠。`c.Redirect()` と `HX-Redirect` の使い分け。HTMX リクエストに通常の `Redirect()` は効かない |
 | ★ | [自動更新（ポーリング）](#5-自動更新ポーリング) | 60秒ポーリング間隔の根拠。非機能要件・パフォーマンステスト設計に影響 |
-| ★ | [ページネーションのHTMX統合方針](#9-ページネーションの-htmx-統合方針) | `hx-boost` + `hx-target` によるページネーション部分更新の実装パターン。カスタムPaginationビュー不使用の根拠 |
-| ★ | [削除確認方針](#10-削除確認方針) | `hx-confirm` 使用方針の統一根拠。Alpine.jsモーダル不使用の根拠 |
+| ★ | [ページネーションのHTMX統合方針](#9-ページネーションの-htmx-統合方針) | `hx-boost` + `hx-target` によるページネーション部分更新の実装パターン |
+| ★ | [削除確認方針](#10-削除確認方針) | `hx-confirm` 使用方針の統一根拠。Alpine.js モーダル不使用の根拠 |
 
-> ※ cc-sddのController実装・Blade設計・ルーティングを記述する際は、まず本書のid属性一覧・画面別操作仕様・バリデーションエラー方針・CSRF対応を確認すること。
+> ※ cc-sddのHandler 実装・templ 設計・ルーティングを記述する際は、まず本書の id 属性一覧・画面別操作仕様・バリデーションエラー方針・CSRF 対応を確認すること。
 
 ### 次回プロジェクトでの記載チェックリスト
 
 HTMX実装ガイド(動的)を新規作成する際に以下が揃っているか確認する：
 
-- [ ] 部分ビューファイルを分離するかBlade Fragmentを使うかを明記（Controller・Bladeファイル構成・テスト構造が変わる）
-- [ ] Fragment名とhx-target idの対応ルール（命名規約）を記載
-- [ ] 全画面のid属性一覧（Controller・Blade・HTMX属性の「共通語彙」）を記載。HTMLモックにはidが含まれないため必須
-- [ ] 画面ごとのHTMX操作仕様（メソッド・URL・ターゲット・トリガー）を網羅
-- [ ] 1リクエストで複数要素を更新するOOBエンドポイントを明記（`->fragments([])` 使用箇所）
+- [ ] 部分ビューファイルを分離するか templ コンポーネント関数を使うかを明記（Handler・templ ファイル構成・テスト構造が変わる）
+- [ ] コンポーネント関数名と hx-target id の対応ルール（命名規約）を記載
+- [ ] 全画面の id 属性一覧（Handler・templ・HTMX 属性の「共通語彙」）を記載。HTML モックには id が含まれないため必須
+- [ ] 画面ごとの HTMX 操作仕様（メソッド・URL・ターゲット・トリガー）を網羅
+- [ ] 1リクエストで複数要素を更新する OOB エンドポイントを明記（連続 `.Render()` の使用箇所）
 - [ ] 期間パラメータ等、データ取得方式が変わるクエリパラメータとその集計ルールを記載
-- [ ] HTMX未使用の画面・操作を明記（誤ってHTMXを適用させないため）
+- [ ] HTMX 未使用の画面・操作を明記（誤って HTMX を適用させないため）
 - [ ] 自動更新（ポーリング）の間隔と対象エンドポイントを記載
-- [ ] HTMXフォームのバリデーションエラー返却方式（422+Fragment vs リダイレクト）を明記
-- [ ] 422レスポンスのswap設定方式（`responseHandling` / `htmx:responseError`）を明記
-- [ ] HTMXフォームのバリデーション方式（手動バリデーション vs FormRequest）を明記
-- [ ] CSRF対応方式（グローバルmeta tag方式 vs フォームごと `@csrf` 方式）を明記
+- [ ] HTMX フォームのバリデーションエラー返却方式（422+コンポーネント vs リダイレクト）を明記
+- [ ] 422 レスポンスの swap 設定方式（`responseHandling` / `htmx:responseError`）を明記
+- [ ] CSRF 対応方式（グローバル meta tag 方式 vs フォームごと hidden トークン方式）を明記
 - [ ] `HX-Redirect` を使う操作とリダイレクト先を記載
-- [ ] 削除操作の確認方法（`hx-confirm` / Alpine.jsモーダル等）を明記
+- [ ] 削除操作の確認方法（`hx-confirm` / Alpine.js モーダル等）を明記
 
 ---
 
 ## 1. HTMX 実装規約
 
 > **cc-sdd への価値:**
-> Blade には「部分ビューファイルを分離する」パターンと「フルページテンプレート内に Fragment を定義する」パターンの2種類がある。本プロジェクトは後者を採用しているが、どちらを選ぶかは設計上の判断であり、他のドキュメントに記述がない。誤ったパターンで設計すると、Controller の実装方式・Blade ファイル数・テストの構造がすべて変わるため、spec-design の段階で必ず参照する必要がある。
+> templ には「部分ビューファイルを分離する」パターンと「ページ用ファイル内にコンポーネント関数を定義する」パターンの2種類がある。本プロジェクトは後者を採用しているが、どちらを選ぶかは設計上の判断であり、他のドキュメントに記述がない。誤ったパターンで設計すると、Handler の実装方式・templ ファイル数・テストの構造がすべて変わるため、spec-design の段階で必ず参照する必要がある。
 
-### Blade Fragment アプローチ
+### templ コンポーネントアプローチ
 
-部分テンプレートファイルを分離せず、フルページテンプレート内に `@fragment` / `@endfragment` で部分更新領域を定義する。Controller は `->fragment()` で返却範囲を切り出す。
+部分テンプレートファイルを分離せず、ページ用 `.templ` ファイル内に細分化した `templ` 関数として部分更新領域を定義する。Handler は該当コンポーネント関数を `.Render(ctx, w)` で直接呼び出す。
 
-**Blade テンプレート側:**
+**templ テンプレート側 (`internal/view/page/Dashboard.templ`):**
 
-```blade
-{{-- dashboard.blade.php --}}
-<div id="device-cards">
-    @fragment('device-cards')
-    @foreach ($devices as $device)
-        <div class="card">{{ $device->name }}</div>
-    @endforeach
-    @endfragment
-</div>
-```
+```templ
+package page
 
-**Controller 側:**
-
-```php
-if ($request->header('HX-Request')) {
-    // @fragment('device-cards') の範囲のみ返す（レイアウト自動除外）
-    return view('dashboard', compact('devices', 'alerts'))
-        ->fragment('device-cards');
+// ページ全体
+templ Dashboard(devices []repository.Device, alerts []AlertView) {
+    @layout.App() {
+        <div id="alert-banner">
+            @AlertBanner(alerts)
+        </div>
+        <div id="device-cards">
+            @DeviceCards(devices)
+        </div>
+    }
 }
-// 通常リクエスト → フルページを返す
-return view('dashboard', compact('devices', 'alerts'));
+
+// 部分更新ターゲット（innerHTML swap）
+templ DeviceCards(devices []repository.Device) {
+    for _, d := range devices {
+        <article class="device-card">
+            <h3>{ d.Name }</h3>
+        </article>
+    }
+}
 ```
 
-**複数 Fragment の同時返却（OOB Swap 用）:**
+**Handler 側 (`internal/handler/dashboard.go`):**
 
-```php
-return view('readings.index', compact('readings', 'summary'))
-    ->fragments(['readings-table', 'readings-summary']);
+```go
+func (h *Dashboard) Devices(c echo.Context) error {
+    devices, err := h.Repo.ListDevicesByUser(c.Request().Context(), userID)
+    if err != nil {
+        return err
+    }
+    // HTMX リクエストの場合、コンポーネント単体のみを返す
+    return page.DeviceCards(devices).Render(c.Request().Context(), c.Response())
+}
+
+func (h *Dashboard) Index(c echo.Context) error {
+    // ... データ取得
+    return page.Dashboard(devices, alerts).Render(c.Request().Context(), c.Response())
+}
+```
+
+**複数コンポーネントの同時返却（OOB Swap 用）:**
+
+```go
+func (h *Readings) Index(c echo.Context) error {
+    // ...
+    if c.Request().Header.Get("HX-Request") != "" {
+        ctx := c.Request().Context()
+        w := c.Response()
+        if err := page.ReadingsTable(readings, pagination).Render(ctx, w); err != nil {
+            return err
+        }
+        return page.ReadingsSummaryOOB(summary).Render(ctx, w)
+    }
+    return page.Readings(device, readings, summary, pagination).Render(ctx, c.Response())
+}
 ```
 
 ---
 
-### Fragment 命名規約
+### コンポーネント 命名規約
 
 > **cc-sdd への価値:**
-> Fragment 名はターゲット id と同名にするプロジェクト規約がある。規約がないと cc-sdd が Controller・Blade・HTMX 属性でそれぞれ異なる名前を生成し、実装時に不整合が発生する。
+> コンポーネント関数名はターゲット id を PascalCase にしたものにするプロジェクト規約がある。規約がないと cc-sdd が Handler・templ・HTMX 属性でそれぞれ異なる名前を生成し、実装時に不整合が発生する。
 
-**規則:** Fragment 名はターゲット id と同一にする。
+**規則:** コンポーネント関数名はターゲット id を PascalCase に変換したものとする。OOB 用は `OOB` サフィックスを付ける。
 
-| 例 | HTMX 属性 | Fragment 名 |
+| 例 | HTMX 属性 | templ コンポーネント関数 |
 |---|----------|------------|
-| デバイスカード | `hx-target="#device-cards"` | `@fragment('device-cards')` |
-| アラートバナー | `hx-target="#alert-banner"` | `@fragment('alert-banner')` |
+| デバイスカード | `hx-target="#device-cards"` | `templ DeviceCards(...)` |
+| アラートバナー | `hx-target="#alert-banner"` | `templ AlertBanner(...)` |
+| 集計 OOB | `id="readings-summary" hx-swap-oob="true"` | `templ ReadingsSummaryOOB(...)` |
 
 ---
 
-### Fragment の2つの配置パターン
+### コンポーネントの 2 つの配置パターン
 
 > **cc-sdd への価値:**
-> メイン Fragment と OOB Fragment では Blade 内での配置ルールが逆になる。間違えると部分更新時の返却範囲が変わるか、フルページ表示時に OOB 属性が誤動作する。どちらのパターンを使うかは id 属性一覧と OOB エンドポイント一覧（セクション 4）で定義している。
+> メインコンポーネントと OOB コンポーネントでは templ 内での配置ルールが逆になる。間違えると部分更新時の返却範囲が変わるか、フルページ表示時に OOB 属性が誤動作する。どちらのパターンを使うかは id 属性一覧と OOB エンドポイント一覧（セクション 4）で定義している。
 
-**パターン 1: メイン Fragment（innerHTML swap 用）**
+**パターン 1: メインコンポーネント（innerHTML swap 用）**
 
-ターゲット要素の **内側** に配置。中身だけが HTMX レスポンスとして返される。
+ターゲット要素の **内側** に展開される中身のみを返す。
 
-```blade
+```templ
+// ページ側: id を持つラッパー要素の中でコンポーネントを呼ぶ
 <div id="device-cards">
-    @fragment('device-cards')
-    {{-- この範囲のみが HTMX レスポンスとして返される --}}
-    @endfragment
+    @DeviceCards(devices)
 </div>
+
+// コンポーネント本体: 中身だけを書く (id や wrapper は含めない)
+templ DeviceCards(devices []repository.Device) {
+    for _, d := range devices {
+        <article class="device-card">{ d.Name }</article>
+    }
+}
 ```
 
-**パターン 2: OOB Fragment（outerHTML swap 用）**
+**パターン 2: OOB コンポーネント（outerHTML swap 用）**
 
-`id` と `hx-swap-oob="true"` を持つ要素 **全体** を囲む。
+`id` と `hx-swap-oob="true"` を持つ要素 **全体** を返す。
 
-```blade
-@fragment('readings-summary')
-<div id="readings-summary" hx-swap-oob="true">
-    {{-- 要素全体が OOB で差し替えられる --}}
-</div>
-@endfragment
+```templ
+templ ReadingsSummaryOOB(s Summary) {
+    <div id="readings-summary" hx-swap-oob="true">
+        <p>平均温度: { fmt.Sprintf("%.2f", s.AvgTemp) }℃</p>
+    </div>
+}
 ```
 
 > ※ `hx-swap-oob` 属性はフルページ表示時にはブラウザに無視されるため、常に付与して問題ない。
@@ -145,7 +181,7 @@ return view('readings.index', compact('readings', 'summary'))
 ## 2. id 属性一覧
 
 > **cc-sdd への価値:**
-> id 属性は Controller（Fragment 指定）・Blade（Fragment 定義）・HTMX 属性（hx-target 指定）の3箇所で同じ名前を参照する「共通語彙」になる。この一覧なしに設計すると、画面ごとに命名が揺れて実装時の統一が崩れる。なお、デザイナーのHTMLモックには id 属性が含まれていないため、この一覧が唯一の定義元となる。
+> id 属性は Handler（コンポーネント呼び出し）・templ（コンポーネント関数定義）・HTMX 属性（hx-target 指定）の3箇所で同じ名前を参照する「共通語彙」になる。この一覧なしに設計すると、画面ごとに命名が揺れて実装時の統一が崩れる。なお、HTML モックには id 属性が含まれていないため、この一覧が唯一の定義元となる。
 
 | 画面 | id | 対象要素 |
 |------|-----|---------|
@@ -192,13 +228,13 @@ return view('readings.index', compact('readings', 'summary'))
 **期間パラメータ（period）と集計ルール:**
 
 > **cc-sdd への価値:**
-> 24時間と7日・30日でデータ取得方式が異なる（生データ vs 日次集計）。この違いはDBクエリ・Controller 実装・テスト内容に直接影響するが、DB設計書.md には記載がない。
+> 24時間と7日・30日でデータ取得方式が異なる（生データ vs 日次集計）。この違いは DB クエリ・Handler 実装・テスト内容に直接影響するが、DB設計書.md には記載がない。
 
-| 表示 | 値 | データ範囲 |
-|------|-----|----------|
-| 24時間 | 24h | 直近24時間の**生データ** |
-| 7日間 | 7d | 直近7日間の**日次集計** |
-| 30日間 | 30d | 直近30日間の**日次集計** |
+| 表示 | 値 | データ範囲 | 使用クエリ |
+|------|-----|----------|--------|
+| 24時間 | 24h | 直近24時間の**生データ** | `ListRecentSensorReadings` |
+| 7日間 | 7d | 直近7日間の**日次集計** | `ListDailySensorAggregates` |
+| 30日間 | 30d | 直近30日間の**日次集計** | `ListDailySensorAggregates` |
 
 ---
 
@@ -214,6 +250,8 @@ return view('readings.index', compact('readings', 'summary'))
 | 新規登録 | POST | /devices | /devices/{新規ID}（デバイス詳細） |
 | 更新 | PUT | /devices/{id} | /devices/{id}（デバイス詳細） |
 | キャンセル | - | - | 前の画面に戻る（ブラウザバック） |
+
+> HTTP の PUT/DELETE は HTML フォームが直接サポートしないため、`<input type="hidden" name="_method" value="put">` と method override ミドルウェアを併用する。
 
 ---
 
@@ -257,51 +295,61 @@ return view('readings.index', compact('readings', 'summary'))
 ## 4. OOB 同時更新エンドポイント一覧
 
 > **cc-sdd への価値:**
-> 1リクエストで複数要素を同時更新するエンドポイントでは、Controller で `->fragments([])` を使い、Blade に2種類の Fragment（メイン + OOB）を配置する必要がある。どのエンドポイントがこのパターンを使うかは設計上の判断であり、他のドキュメントから推測できない。誤ってシングル Fragment で設計すると、更新されない要素が生じてテストが通らなくなる。
+> 1リクエストで複数要素を同時更新するエンドポイントでは、Handler 内で複数の templ コンポーネントを連続 `.Render()` する必要がある。どのエンドポイントがこのパターンを使うかは設計上の判断であり、他のドキュメントから推測できない。誤ってシングルコンポーネントで設計すると、更新されない要素が生じてテストが通らなくなる。
 
-| エンドポイント | メイン Fragment | OOB Fragment |
+| エンドポイント | メインコンポーネント | OOB コンポーネント |
 |-------------|--------------|-------------|
-| `/devices/{id}/readings`（フィルター検索） | readings-table → #readings-table | readings-summary → #readings-summary |
-| `/alerts/rules?device_id={id}`（デバイス切替） | rules-list → #rules-list | rule-form → #rule-form |
-| `/alerts/rules` POST（ルール追加） | rules-list → #rules-list | rule-form → #rule-form |
-| `/alerts/rules/{id}` PUT（ルール更新） | rules-list → #rules-list | rule-form → #rule-form |
+| `/devices/{id}/readings`（フィルター検索） | `ReadingsTable` → #readings-table | `ReadingsSummaryOOB` → #readings-summary |
+| `/alerts/rules?device_id={id}`（デバイス切替） | `RulesList` → #rules-list | `RuleFormOOB` → #rule-form |
+| `/alerts/rules` POST（ルール追加） | `RulesList` → #rules-list | `RuleFormOOB` → #rule-form |
+| `/alerts/rules/{id}` PUT（ルール更新） | `RulesList` → #rules-list | `RuleFormOOB` → #rule-form |
 
-**Blade テンプレート構造の具体例（readings/index.blade.php）:**
+**templ テンプレート構造の具体例 (`internal/view/page/Readings.templ`):**
 
-```blade
-{{-- メイン Fragment: #readings-table の innerHTML として差し込まれる --}}
-<div id="readings-table">
-    @fragment('readings-table')
+```templ
+// メインコンポーネント: #readings-table の innerHTML として差し込まれる
+templ ReadingsTable(readings []repository.SensorReading, pagination Pagination) {
     <table>
-        @foreach ($readings as $reading)
-        <tr>
-            <td>{{ $reading->recorded_at->format('Y-m-d H:i') }}</td>
-            <td>{{ $reading->temperature }}</td>
-            <td>{{ $reading->humidity }}</td>
-        </tr>
-        @endforeach
+        <thead>
+            <tr><th>日時</th><th>温度</th><th>湿度</th></tr>
+        </thead>
+        <tbody>
+            for _, r := range readings {
+                <tr>
+                    <td>{ r.RecordedAt.Format("2006-01-02 15:04") }</td>
+                    <td>{ fmt.Sprintf("%.2f", r.Temperature) }</td>
+                    <td>{ fmt.Sprintf("%.2f", r.Humidity) }</td>
+                </tr>
+            }
+        </tbody>
     </table>
-    {{ $readings->links() }}
-    @endfragment
-</div>
+    @PaginationView(pagination)
+}
 
-{{-- OOB Fragment: #readings-summary を要素ごと差し替え --}}
-@fragment('readings-summary')
-<div id="readings-summary" hx-swap-oob="true">
-    <p>平均温度: {{ $summary->avg_temperature }}℃</p>
-    <p>最高温度: {{ $summary->max_temperature }}℃</p>
-</div>
-@endfragment
+// OOB コンポーネント: #readings-summary を要素ごと差し替え
+templ ReadingsSummaryOOB(s Summary) {
+    <div id="readings-summary" hx-swap-oob="true">
+        <p>平均温度: { fmt.Sprintf("%.2f", s.AvgTemp) }℃</p>
+        <p>最高温度: { fmt.Sprintf("%.2f", s.MaxTemp) }℃</p>
+    </div>
+}
 ```
 
-**Controller（ReadingController::index）:**
+**Handler (`internal/handler/reading.go` の `Index`):**
 
-```php
-if ($request->header('HX-Request')) {
-    return view('readings.index', compact('readings', 'summary'))
-        ->fragments(['readings-table', 'readings-summary']);
+```go
+func (h *Reading) Index(c echo.Context) error {
+    // ... データ取得
+    if c.Request().Header.Get("HX-Request") != "" {
+        ctx := c.Request().Context()
+        w := c.Response()
+        if err := page.ReadingsTable(readings, pagination).Render(ctx, w); err != nil {
+            return err
+        }
+        return page.ReadingsSummaryOOB(summary).Render(ctx, w)
+    }
+    return page.Readings(device, readings, summary, pagination).Render(ctx, c.Response())
 }
-return view('readings.index', compact('readings', 'summary', 'device'));
 ```
 
 ---
@@ -322,55 +370,60 @@ return view('readings.index', compact('readings', 'summary', 'device'));
 ## 6. バリデーションエラー表示方針
 
 > **cc-sdd への価値:**
-> HTMXフォームでバリデーションエラー（422）が発生した場合の返却形式はプロジェクト固有の設計決定。他のドキュメントに記載がなく、誤ると全フォームのエラー表示が機能しない。
+> HTMX フォームでバリデーションエラー（422）が発生した場合の返却形式はプロジェクト固有の設計決定。他のドキュメントに記載がなく、誤ると全フォームのエラー表示が機能しない。
 
 ### フォーム種別による方針の違い
 
 | フォーム種別 | エラー返却方式 |
 |------------|-------------|
-| **HTMXフォーム**（アラートルール追加・更新） | フォーム Fragment を **422ステータス** で返却 |
-| **通常フォーム**（デバイス登録・編集） | Laravel標準: リダイレクト + `$errors`（セクション3と同じ） |
+| **HTMX フォーム**（アラートルール追加・更新） | フォームコンポーネントを **422 ステータス** で返却 |
+| **通常フォーム**（デバイス登録・編集） | リダイレクト + flash メッセージ（scs のセッション flash を利用） |
 
-### HTMXフォームのエラー返却パターン
+### HTMX フォームのエラー返却パターン
 
-**採用方針:** Controller 内で手動バリデーション（`Validator` ファサード）を使用する。FormRequest は使用しない。
+**採用方針:** Handler 内で `go-playground/validator` + Echo の `c.Validate()` を使って検証し、エラー時は 422 でコンポーネントを返す。
 
-> FormRequest はバリデーション失敗時に Controller メソッドに到達する前に ValidationException を throw し、自動的にリダイレクトレスポンスを返す。HTMX リクエストに対して Fragment を返却するには、Controller 内でバリデーション結果を制御する必要がある。
+> Echo の `e.Validator = server.NewValidator()` で登録すれば、`c.Validate(&req)` がバリデーションを実行する。失敗時にエラーメッセージをコンポーネントにバインドしてそのまま再表示する。
 
-```php
-// Controller 内で手動バリデーション
-public function store(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'metric' => 'required|in:temperature,humidity',
-        'min_value' => 'nullable|numeric',
-        'max_value' => 'nullable|numeric',
-    ]);
+```go
+// internal/handler/alert_rule.go
+type CreateRuleRequest struct {
+    DeviceID  int64   `form:"device_id" validate:"required,min=1"`
+    Metric    string  `form:"metric"    validate:"required,oneof=temperature humidity"`
+    Operator  string  `form:"operator"  validate:"required,oneof=> < >= <="`
+    Threshold float64 `form:"threshold" validate:"required"`
+    IsEnabled bool    `form:"is_enabled"`
+}
 
-    if ($validator->fails()) {
-        if ($request->header('HX-Request')) {
-            return view('alerts.rules.index', [
-                'errors' => $validator->errors(),
-                'old' => $request->all(),
-                'device' => $device,
-                'rules' => $rules,
-            ])
-                ->fragment('rule-form')
-                ->withStatus(422);
+func (h *AlertRule) Store(c echo.Context) error {
+    var req CreateRuleRequest
+    if err := c.Bind(&req); err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+    }
+    if err := c.Validate(&req); err != nil {
+        if c.Request().Header.Get("HX-Request") != "" {
+            // HTMX: フォームコンポーネントを 422 で返す (エラー表示込み)
+            c.Response().Status = http.StatusUnprocessableEntity
+            return page.RuleFormOOB(req, validationErrors(err)).Render(
+                c.Request().Context(),
+                c.Response(),
+            )
         }
-        return back()->withErrors($validator)->withInput();
+        // 通常: リダイレクト + flash
+        sessionFlashError(c, err)
+        return c.Redirect(http.StatusFound, "/alerts/rules")
     }
 
     // バリデーション成功後の処理...
 }
 ```
 
-### 422レスポンスのswap設定
+### 422 レスポンスの swap 設定
 
-**採用方針:** レイアウト Blade で `htmx.config.responseHandling` を設定し、422をスワップ対象に含める。
+**採用方針:** 共通レイアウト (`App.templ`) の body 末尾で `htmx.config.responseHandling` を設定し、422 を swap 対象に含める。
 
 ```html
-<!-- layouts/app.blade.php の <body> 末尾（CSRF設定と同じ箇所） -->
+<!-- App.templ の body 末尾 -->
 <script>
     htmx.config.responseHandling = [
         {code: "204", swap: false},
@@ -383,52 +436,72 @@ public function store(Request $request)
 
 > `htmx:responseError` イベントフック方式は使用しない。`responseHandling` 設定の方が宣言的であり、個別のイベントリスナー管理が不要なため。
 
-> エラーメッセージは独立したid要素ではなく、**フォームFragment内にインラインで含める**（`#rule-form` の再返却でエラーを含んだフォームを差し替える）。
+> エラーメッセージは独立した id 要素ではなく、**フォームコンポーネント内にインラインで含める**（`RuleFormOOB` の再返却でエラーを含んだフォームを差し替える）。
 
 ---
 
 ## 7. CSRF対応方針
 
 > **cc-sdd への価値:**
-> Laravel の CSRF 保護は POST / PUT / DELETE / PATCH すべてに適用される。HTMX でこれらを使う際の設定方法はプロジェクト固有の選択であり、未記録だと全ミューテーションリクエストが403エラーになる。
+> CSRF 保護は POST / PUT / DELETE / PATCH すべてに適用される。HTMX でこれらを使う際の設定方法はプロジェクト固有の選択であり、未記録だと全ミューテーションリクエストが 403 エラーになる。
 
-**採用方針:** レイアウト Blade に `<meta name="csrf-token">` を配置し、`htmx:configRequest` イベントでグローバルにヘッダーをセットする。**フォームごとに `@csrf` を書く方式は使用しない。**
+**採用方針:** Echo の CSRF ミドルウェア (`echo/v4/middleware.CSRF`) を Web ルートに適用し、レイアウト templ に `<meta name="csrf-token">` を配置して `htmx:configRequest` イベントでグローバルにヘッダーをセットする。**フォームごとに hidden トークンを書く方式は使用しない。**
 
-```blade
-{{-- layouts/app.blade.php の <head> 内 --}}
-<meta name="csrf-token" content="{{ csrf_token() }}">
+```go
+// cmd/server/main.go (Web グループの設定)
+webGroup := e.Group("", middleware.CSRFWithConfig(middleware.CSRFConfig{
+    TokenLookup:  "header:X-CSRF-Token",
+    ContextKey:   "csrf_token",
+    CookieName:   "_csrf",
+    CookiePath:   "/",
+    CookieSecure: cfg.AppEnv == "production",
+    CookieHTTPOnly: false, // JSから読めるようにする (meta埋め込みのため)
+}))
 ```
 
-```html
-<!-- <body> 末尾 -->
+```templ
+<!-- App.templ の head 内 -->
+templ App() {
+    <head>
+        ...
+        <meta name="csrf-token" content={ csrfToken(ctx) }/>
+    </head>
+    ...
+}
+
+<!-- App.templ の body 末尾 -->
 <script>
     document.addEventListener('htmx:configRequest', function(event) {
-        event.detail.headers['X-CSRF-TOKEN'] =
+        event.detail.headers['X-CSRF-Token'] =
             document.querySelector('meta[name="csrf-token"]').content;
     });
 </script>
 ```
 
-> Laravel の `VerifyCsrfToken` Middleware は `X-CSRF-TOKEN` ヘッダーを認識する。グローバル設定によりフォームに `@csrf` を書く必要はない。
+> Echo CSRF ミドルウェアは `X-CSRF-Token` ヘッダを検証する。グローバル設定によりフォームに hidden トークンを書く必要はない。
+
+> `csrfToken(ctx)` は Echo context から CSRF トークンを取り出すヘルパー関数（Handler 側で `c.Get("csrf_token").(string)` で取得して templ に渡す）。
 
 ---
 
 ## 8. `HX-Redirect` 使用方針
 
 > **cc-sdd への価値:**
-> HTMX リクエストに対して通常の `redirect()` は効かない（HTMX は HTML を swap するため）。`HX-Redirect` レスポンスヘッダーを使う必要があるが、どの操作で使うかはプロジェクト固有の設計決定。
+> HTMX リクエストに対して通常の `c.Redirect()` は効かない（HTMX は HTML を swap するため）。`HX-Redirect` レスポンスヘッダーを使う必要があるが、どの操作で使うかはプロジェクト固有の設計決定。
 
-```php
-// Controller での HX-Redirect 返却例（デバイス削除後）
-public function destroy(Request $request, Device $device): Response
-{
-    $device->delete();
-
-    if ($request->header('HX-Request')) {
-        return response()->noContent()
-            ->withHeaders(['HX-Redirect' => route('dashboard')]);
+```go
+// Handler での HX-Redirect 返却例（デバイス削除後）
+func (h *Device) Destroy(c echo.Context) error {
+    deviceID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+    if err := h.Repo.SoftDeleteDevice(c.Request().Context(), deviceID); err != nil {
+        return err
     }
-    return redirect()->route('dashboard');
+
+    if c.Request().Header.Get("HX-Request") != "" {
+        c.Response().Header().Set("HX-Redirect", "/dashboard")
+        return c.NoContent(http.StatusNoContent)
+    }
+    return c.Redirect(http.StatusFound, "/dashboard")
 }
 ```
 
@@ -445,55 +518,79 @@ public function destroy(Request $request, Device $device): Response
 ## 9. ページネーションの HTMX 統合方針
 
 > **cc-sdd への価値:**
-> Laravel の `$paginator->links()` が生成するリンクはデフォルトでフルページ遷移になる。HTMX で部分更新するには追加の設定が必要。どの方式を採用するかはプロジェクト固有の設計決定。
+> sqlc クエリ + 自前のページング構造 (`LIMIT $4 OFFSET $5`) で実装するため、Laravel のような組み込みヘルパーはない。リンク生成とどう組み合わせるかはプロジェクト固有の設計決定。
 
-**採用方針:** ページネーションコンテナに `hx-boost` + `hx-target` + `hx-swap` を設定する。カスタム Pagination ビューは作成しない。
+**採用方針:** ページネーションコンテナに `hx-boost` + `hx-target` + `hx-swap` を設定する。自前の `PaginationView` コンポーネントでリンク群を生成する。
 
-```blade
-{{-- readings/index.blade.php 内 --}}
-<div id="readings-table">
-    @fragment('readings-table')
-    <table>...</table>
+```templ
+// internal/view/component/Pagination.templ
+type Pagination struct {
+    CurrentPage int
+    TotalPages  int
+    BaseURL     string
+}
 
-    <div hx-boost="true"
-         hx-target="#readings-table"
-         hx-swap="innerHTML">
-        {{ $readings->links() }}
+templ PaginationView(p Pagination) {
+    <div hx-boost="true" hx-target="closest .table-wrapper .inner" hx-swap="innerHTML">
+        if p.CurrentPage > 1 {
+            <a href={ templ.URL(fmt.Sprintf("%s?page=%d", p.BaseURL, p.CurrentPage-1)) }>前へ</a>
+        }
+        for page := 1; page <= p.TotalPages; page++ {
+            if page == p.CurrentPage {
+                <span class="current">{ fmt.Sprint(page) }</span>
+            } else {
+                <a href={ templ.URL(fmt.Sprintf("%s?page=%d", p.BaseURL, page)) }>{ fmt.Sprint(page) }</a>
+            }
+        }
     </div>
-    @endfragment
-</div>
+}
 ```
 
 > `hx-boost` はコンテナ内のリンクを自動的に HTMX リクエストに変換する。`hx-target` を明示しないと `<body>` 全体が対象になるため必ず指定する。
 
 **本プロジェクトでのページネーション使用箇所:**
 
-| 画面 | ページネーション対象 | ターゲット id |
-|------|-----------------|------------|
-| センサーデータ履歴 | `$readings` | `#readings-table` |
-| アラート履歴 | `$histories` | `#history-table` |
+| 画面 | ページネーション対象 | ターゲット id | 件数クエリ |
+|------|-----------------|------------|----------|
+| センサーデータ履歴 | `ListSensorReadingsPaginated` | `#readings-table` | `CountSensorReadingsInRange` |
+| アラート履歴 | `ListAlertHistoriesPaginated` | `#history-table` | `CountAlertHistoriesInRange` |
 
 ---
 
 ## 10. 削除確認方針
 
 > **cc-sdd への価値:**
-> 削除操作の確認方法はプロジェクト固有の設計決定。Alpine.jsモーダルか `hx-confirm` かで Blade テンプレートの構造と依存ライブラリが変わる。
+> 削除操作の確認方法はプロジェクト固有の設計決定。Alpine.js モーダルか `hx-confirm` かで templ テンプレートの構造と依存ライブラリが変わる。
 
-**採用方針:** `hx-confirm` 属性（HTMX組み込み）を使用する。Alpine.js カスタムモーダルは使用しない。
+**採用方針:** 簡易な確認には `hx-confirm` 属性（HTMX 組み込み）、見た目を整えたい削除（デバイス削除）には Alpine.js カスタムモーダルを使用する。
 
 ```html
+<!-- 簡易 (hx-confirm) - アラートルール削除等 -->
 <button
-  hx-delete="/devices/1"
-  hx-confirm="「ハウスA温湿度計」を削除しますか？">
+  hx-delete="/alerts/rules/1"
+  hx-confirm="このアラートルールを削除しますか？">
   削除
 </button>
+
+<!-- 見た目重視 (Alpine.js モーダル) - デバイス削除 -->
+<body x-data="{ deleteOpen: false }">
+    <button @click="deleteOpen = true" class="btn btn-danger">削除</button>
+
+    <div class="modal-overlay" x-show="deleteOpen" style="display:none;">
+        <div class="modal-content">
+            <p>「ハウスA温湿度計」を削除しますか？</p>
+            <button @click="deleteOpen = false">キャンセル</button>
+            <button hx-delete="/devices/1">削除する</button>
+        </div>
+    </div>
+</body>
 ```
 
 **ルール:**
 - 確認メッセージは日本語とし、削除対象の名前を含める
-- デバイス削除・アラートルール削除の両方に適用する
+- シンプルな行内削除（アラートルール削除）は `hx-confirm`
+- 見た目を整えたい削除（デバイス削除）は Alpine.js モーダル
 
 ---
 
-更新日時: 2026-02-25
+更新日時: 2026-04-20
