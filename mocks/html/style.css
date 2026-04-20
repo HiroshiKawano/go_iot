@@ -1,10 +1,20 @@
 /* ========================================================================
    農業IoTシステム 共通スタイルシート
    モックHTML全画面で共有。HTML作成ルール.md R02 に従い ID セレクタ不使用。
+
+   Lism CSS 共存方針:
+   - ファイル全体を @layer lism-custom でラップし、Lism のカスケードに組込む
+   - 優先度: lism-base/primitive/component < ★lism-custom (この中身) < lism-utility
+   - 既存のコンポーネント的スタイルは維持し、Lism のユーティリティクラス
+     (-p:20, -g:10, -my-e:20 等) で HTML 側から微調整する
+   - リセットと line-height は Lism-base に委譲。重複は削除済み
+   - 一部の CSS 変数は Lism 変数 (--divider, --sh--5, --sh--10) にエイリアス
    ======================================================================== */
 
-/* --- リセット & ベース --- */
-* { box-sizing: border-box; margin: 0; padding: 0; }
+@layer lism-custom {
+
+/* --- ベース (リセットは Lism が提供するため最小限) --- */
+html { height: 100%; }
 
 :root {
   --color-primary: #28a745;
@@ -15,24 +25,23 @@
   --color-muted: #6c757d;
   --color-bg: #f5f7fa;
   --color-surface: #ffffff;
-  --color-border: #dee2e6;
+  /* Lism の --divider に委譲 (#dedfe3, 既存 #dee2e6 とほぼ同値) */
+  --color-border: var(--divider);
   --color-text: #212529;
   --color-text-muted: #6c757d;
   --radius: 6px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  /* Lism のシャドウトークンに委譲 */
+  --shadow-sm: var(--sh--5);
+  --shadow-md: var(--sh--10);
   --sidebar-width: 220px;
   --header-height: 56px;
 }
-
-html, body { height: 100%; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
                "Yu Gothic UI", "Meiryo", sans-serif;
   color: var(--color-text);
   background: var(--color-bg);
-  line-height: 1.5;
 }
 
 a { color: var(--color-primary); text-decoration: none; }
@@ -69,7 +78,6 @@ a:hover { text-decoration: underline; }
   padding-top: 1rem;
   overflow-y: auto;
 }
-.sidebar ul { list-style: none; }
 .sidebar li a {
   display: block;
   padding: 0.75rem 1.25rem;
@@ -212,7 +220,6 @@ a:hover { text-decoration: underline; }
   margin-bottom: 1rem;
 }
 .card h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
-.card-subtle { color: var(--color-text-muted); font-size: 0.875rem; }
 
 /* --- テーブル --- */
 .table-wrapper {
@@ -259,6 +266,11 @@ a:hover { text-decoration: underline; }
   color: #fff;
   border-color: var(--color-primary);
 }
+.pagination .disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 
 /* --- アラート通知バナー --- */
 .alert-banner {
@@ -273,7 +285,6 @@ a:hover { text-decoration: underline; }
   color: #856404;
   margin-bottom: 0.5rem;
 }
-.alert-banner ul { list-style: none; }
 .alert-banner li {
   padding: 0.25rem 0;
   color: #856404;
@@ -297,7 +308,6 @@ a:hover { text-decoration: underline; }
 .device-card h3 { font-size: 1.1rem; }
 .device-card .meta { color: var(--color-text-muted); font-size: 0.875rem; }
 .status-active { color: var(--color-primary); }
-.status-inactive { color: var(--color-muted); }
 .readings-row {
   display: flex;
   gap: 1rem;
@@ -422,3 +432,5 @@ a:hover { text-decoration: underline; }
   .form-actions { flex-direction: column-reverse; }
   .form-actions .btn { width: 100%; }
 }
+
+} /* end @layer lism-custom */
