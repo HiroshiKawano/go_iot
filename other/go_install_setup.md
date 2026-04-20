@@ -380,7 +380,216 @@ make dev              # 開発サーバ起動 (air でホットリロード)
 
 ---
 
-## 7. トラブルシューティング
+## 7. cc-sdd（仕様駆動開発ツール）の導入
+
+### 7-1. cc-sdd とは
+
+[cc-sdd](https://github.com/gotalab/cc-sdd) は Kiro-inspired な **spec-driven development** を Claude Code 上で実現するツール。`/kiro-discovery`, `/kiro-spec-*`, `/kiro-impl` 等の Agent Skills を `.claude/skills/` に配置し、「要件 → 設計 → タスク → 自律実装」の 4 フェーズを規律化する。
+
+| 特徴 | 内容 |
+|---|---|
+| 配布形態 | npm パッケージ (`npx cc-sdd@latest`) |
+| 常駐プロセス | **なし**。導入時だけ `npx` を実行、以後は Claude Code が skills を読むだけ |
+| 言語依存 | なし（TypeScript 前提のテンプレは後述のように書き換え済み） |
+| 導入日 | 2026-04-20 (コミット `64f96cb`) |
+
+### 7-2. 採用動機
+
+- 単独開発でも「要件 → 設計 → タスク → 実装」を形式化して仕様ドリフトを防ぐ
+- Claude Code の subagent 機能と組み合わせ、タスクごとに独立レビューを通せる
+- `.kiro/settings/templates/` を編集して農業IoT固有の規約を仕様ドキュメントに反映できる
+
+### 7-3. インストール手順
+
+```bash
+cd /path/to/go_iot
+npx cc-sdd@latest --lang ja
+```
+
+所要時間: 30秒〜1分。`--lang ja` を付けないと英語版テンプレートになる。
+
+### 7-4. 配置されるファイル
+
+| パス | 用途 | ファイル数 |
+|---|---|---|
+| `.claude/skills/kiro-*/` | Claude Code から呼び出されるスキル定義 | 33 |
+| `.kiro/settings/templates/steering/` | product / tech / structure のプロジェクト規約テンプレ | 3 |
+| `.kiro/settings/templates/steering-custom/` | API / DB / auth / testing / security / error / deployment 各テンプレ | 7 |
+| `.kiro/settings/templates/specs/` | requirements / design / tasks / research の仕様書テンプレ | 6 |
+| `CLAUDE.md` | プロジェクト直下のメモリドキュメント | 1 |
+
+### 7-5. Go 向けテンプレート調整（本プロジェクト固有）
+
+cc-sdd のデフォルトテンプレは **TypeScript / Next.js / Jest 想定**。本プロジェクトでは以下を Go / Echo / templ / sqlc 向けに書き換え済み（`64f96cb` にコミット済み）:
+
+| ファイル | 変更内容 |
+|---|---|
+| `steering/tech.md` | Go 1.26 / Echo / templ / sqlc / goose / air スタック記述 |
+| `steering/structure.md` | `cmd/` + `internal/` レイアウト、Go 命名規則、`goimports` グループ |
+| `steering-custom/testing.md` | `testing` パッケージ + Table-driven、`*_test.go` |
+| `steering-custom/authentication.md` | Echo middleware + bcrypt/argon2、ESP32 デバイストークン |
+| `steering-custom/error-handling.md` | sentinel / 独自型 + `%w` wrap + `errors.Is/As`、`slog` / `zap` |
+| `steering-custom/security.md` | `go-playground/validator`、`govulncheck`、`gosec`、templ エスケープ |
+| `specs/design.md` | Go interface 例、`internal/` ツリー、`.go` 拡張子 |
+
+### 7-6. 主なスラッシュコマンド
+
+| コマンド | 用途 |
+|---|---|
+| `/kiro-steering` | 既存コードから規約 / パターンを `.kiro/steering/` に抽出 |
+| `/kiro-discovery <idea>` | 新規作業の起点。spec 化要否や分割要否を判定 |
+| `/kiro-spec-init <feature>` | 新仕様ディレクトリの骨組み作成 |
+| `/kiro-spec-requirements <feat>` | 要件ドキュメント生成 (EARS 形式) |
+| `/kiro-spec-design <feat>` | 設計ドキュメント生成 (File Structure Plan 含む) |
+| `/kiro-spec-tasks <feat>` | タスク分解 (Boundary / Depends 注釈付き) |
+| `/kiro-impl <feat>` | 自律実装 (TDD + reviewer + auto-debug、タスク単位の独立 subagent) |
+| `/kiro-spec-status <feat>` | 進捗確認 |
+
+### 7-7. 既存プロジェクトへの初回オンボード
+
+```bash
+# 既存コードから規約を抽出（product.md / tech.md / structure.md が生成される）
+/kiro-steering
+
+# 以後、新機能追加時は:
+/kiro-discovery "アラートルール編集画面を追加したい"
+```
+
+---
+
+## 8. Lism CSS（レイアウトフレームワーク）の導入
+
+### 8-1. Lism CSS とは
+
+[Lism CSS](https://github.com/lism-css/lism-css) は [Every Layout](https://every-layout.dev/) のレイアウトプリミティブ + Tailwind 的ユーティリティ + ITCSS のレイヤリングを融合した軽量 CSS フレームワーク。
+
+| 特徴 | 内容 |
+|---|---|
+| サイズ | 約 30KB（gzip 8KB）の minified CSS 1 ファイル |
+| ビルドステップ | **不要**（CDN か npm で配布される完成品を読むだけ） |
+| 主要機能 | レイアウトプリミティブ (`l--flex`, `l--stack`, `l--grid`, `l--sideMain`) + アトミックユーティリティ (`-p:20`, `-g:10`) |
+| 優先度管理 | `@layer lism-base → lism-primitive → lism-component → lism-custom → lism-utility` |
+| レスポンシブ | 既定で **コンテナクエリ** ベース (`-p_sm`, `-p_md` 等) |
+| 導入日 | 2026-04-20 (コミット `58e503e`) |
+
+### 8-2. 採用動機
+
+- 新規画面レイアウト組み立ての高速化（`l--sideMain`, `l--fluidCols` が管理UIで即戦力）
+- `@media` からコンテナクエリへの段階移行が可能
+- 既存 `.device-card` 等のセマンティッククラスと `@layer` で共存可能
+
+### 8-3. 配置方針
+
+**セルフホスト**で CDN 依存を避けプロジェクトローカルに閉じ込める（`go install` を使わない方針と同じ思想）。
+
+| パス | 役割 |
+|---|---|
+| `public/css/lism.css` | 本体 (minified, 27KB)。templ 実装では `/static/css/lism.css` として配信 |
+| `mocks/html/lism.css` | 上記へのシンボリックリンク。モックHTMLの相対パス `./lism.css` を維持 |
+
+### 8-4. インストール手順
+
+```bash
+cd /path/to/go_iot
+
+# 本体をダウンロード (v0 系最新)
+mkdir -p public/css
+curl -sL -o public/css/lism.css https://cdn.jsdelivr.net/npm/lism-css@0/dist/css/main.css
+
+# モック用シンボリックリンク（ブラウザ直接プレビューの相対パス対応）
+ln -sf ../../public/css/lism.css mocks/html/lism.css
+
+# 確認
+ls -la public/css/lism.css mocks/html/lism.css
+```
+
+### 8-5. 既存 style.css との共存（@layer）
+
+モック共通 CSS (`mocks/html/style.css`) 全体を `@layer lism-custom { ... }` でラップ済み。
+
+**カスケード優先度（弱 → 強）:**
+
+```
+lism-base  <  lism-primitive  <  lism-component  <  ★ lism-custom (既存 style.css)  <  lism-utility
+```
+
+- 既存コンポーネント（`.device-card`, `.btn`, `.site-header` 等）は Lism ベース / プリミティブより優先される
+- Lism ユーティリティ (`-p:20`, `-g:10` 等) で既存コンポーネントを微調整可能（ユーティリティ層が最強）
+
+### 8-6. HTML での読み込み
+
+**`lism.css` を先に読む**（`@layer` 宣言が最初に必要）:
+
+```html
+<head>
+  <link rel="stylesheet" href="./lism.css">
+  <link rel="stylesheet" href="./style.css">
+</head>
+```
+
+全 9 モック HTML で適用済み。
+
+### 8-7. templ 実装への移行時
+
+```go
+// cmd/server/main.go に静的ファイル配信を追加
+e.Static("/static", "public")
+```
+
+```go
+// templ レイアウトで
+templ Layout() {
+  <head>
+    <link rel="stylesheet" href="/static/css/lism.css"/>
+    <link rel="stylesheet" href="/static/css/app.css"/>   // 将来の独自CSS
+  </head>
+}
+```
+
+### 8-8. 代表的なクラス早見
+
+| 種別 | 例 |
+|---|---|
+| Layout Primitive | `l--flex`, `l--stack`, `l--grid`, `l--fluidCols`, `l--sideMain`, `l--cluster` |
+| スペーシング | `-p:20`, `-m:10`, `-g:20`, `-my-e:20`, `-py:30` |
+| 色 (トークン) | `-bgc:base`, `-bgc:base-2`, `-c:brand`, `-c:text-2` |
+| 影 | `-bxsh:10`, `-bxsh:20` |
+| 角丸 | `-bdrs:10`, `-bdrs:20`, `-bdrs:99` |
+| レスポンシブ | `-p_sm:30` (container ≥ 480px), `-p_md:40` (≥ 800px) |
+
+### 8-9. Alpine.js との干渉回避（重要）
+
+Alpine.js の `x-show` / `x-cloak` / `x-transition` は **要素の `style.*` を直接書き換える**。Lism ユーティリティで同じプロパティを指定すると競合する。
+
+| Alpine が操作するプロパティ | 扱い |
+|---|---|
+| `display` (`x-show`) | `class="-d:none"` は使わず、初期値は `style="display:none;"` で指定 |
+| `visibility` | 同上 (`-v:hidden` を使わない) |
+| `opacity` (`x-transition`) | 同上 (`-o:0` を使わない) |
+
+一方、**Alpine が触らないプロパティ**は Lism ユーティリティで自由に使ってよい:
+
+- スペーシング (`-p:*`, `-m:*`, `-g:*`)
+- 色 (`-bgc:*`, `-c:*`)
+- レイアウト (`l--flex`, `l--stack`, `l--grid`)
+- フォント (`-fz:*`, `-fw:*`)
+
+### 8-10. 更新手順（Lism バージョンアップ時）
+
+```bash
+# 最新版へ更新 (v0 系を追跡)
+curl -sL -o public/css/lism.css https://cdn.jsdelivr.net/npm/lism-css@0/dist/css/main.css
+
+# 差分確認
+git diff public/css/lism.css | head -50
+
+# メジャーバージョン (v1 等) に上げる場合は破壊的変更に注意
+# → 公式リリースノートを確認してから URL の @0 を @1 に変える
+```
+
+---
+
+## 9. トラブルシューティング
 
 ### 問題1: `go version` を実行しても 1.20.6 のまま
 
