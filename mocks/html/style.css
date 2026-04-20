@@ -8,7 +8,14 @@
    - 既存のコンポーネント的スタイルは維持し、Lism のユーティリティクラス
      (-p:20, -g:10, -my-e:20 等) で HTML 側から微調整する
    - リセットと line-height は Lism-base に委譲。重複は削除済み
-   - 一部の CSS 変数は Lism 変数 (--divider, --sh--5, --sh--10) にエイリアス
+
+   ハイブリッド方針 (B パターン: Lism トークン借用):
+   - スペース値 (0.25rem, 0.5rem, 0.75rem, 1rem, 1.5rem) は Lism の
+     --s5 / --s10 / --s15 / --s20 / --s30 を借用
+   - 影 (--shadow-sm/md) と border (--color-border) は Lism 委譲済み
+   - Lism の標準刻みに合わない値 (1.25rem, 2rem, 0.9rem 等) は独自維持
+   - フォントサイズは Lism の calc 式と合わないため独自維持
+   - 独自色トークン (--color-primary など) は見た目維持のため保持
    ======================================================================== */
 
 @layer lism-custom {
@@ -55,7 +62,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 1rem;
+  padding: 0 var(--s20);
   z-index: 10;
 }
 .site-header .logo {
@@ -63,7 +70,7 @@ a:hover { text-decoration: underline; }
   font-weight: 700;
   color: var(--color-primary);
 }
-.user-menu { display: flex; align-items: center; gap: 1rem; }
+.user-menu { display: flex; align-items: center; gap: var(--s20); }
 .user-name { color: var(--color-muted); }
 .logout-form { display: inline; }
 
@@ -73,12 +80,12 @@ a:hover { text-decoration: underline; }
   width: var(--sidebar-width);
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
-  padding-top: 1rem;
+  padding-top: var(--s20);
   overflow-y: auto;
 }
 .sidebar li a {
   display: block;
-  padding: 0.75rem 1.25rem;
+  padding: var(--s15) 1.25rem;
   color: var(--color-text);
   border-left: 3px solid transparent;
 }
@@ -94,14 +101,14 @@ a:hover { text-decoration: underline; }
   padding-top: var(--header-height);
   min-height: 100%;
 }
-.main-inner { padding: 1.5rem; max-width: 1200px; }
+.main-inner { padding: var(--s30); max-width: 1200px; }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: var(--s30);
+  padding-bottom: var(--s15);
   border-bottom: 1px solid var(--color-border);
 }
 .page-header h1 { font-size: 1.5rem; font-weight: 600; }
@@ -112,7 +119,7 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 1rem;
+  padding: var(--s20);
 }
 .guest-card {
   background: var(--color-surface);
@@ -125,21 +132,21 @@ a:hover { text-decoration: underline; }
 .guest-card h1 {
   text-align: center;
   font-size: 1.5rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--s30);
   color: var(--color-primary);
 }
 .guest-card .form-footer {
   text-align: center;
-  margin-top: 1rem;
+  margin-top: var(--s20);
   font-size: 0.9rem;
 }
 
 /* --- フォーム共通 --- */
-.form-group { margin-bottom: 1rem; }
+.form-group { margin-bottom: var(--s20); }
 .form-group > label {
   display: block;
   font-weight: 500;
-  margin-bottom: 0.25rem;
+  margin-bottom: var(--s5);
 }
 .required-mark { color: var(--color-danger); }
 
@@ -152,7 +159,7 @@ a:hover { text-decoration: underline; }
 .form-group select,
 .form-group textarea {
   width: 100%;
-  padding: 0.5rem 0.75rem;
+  padding: var(--s10) var(--s15);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   font-size: 1rem;
@@ -168,30 +175,30 @@ a:hover { text-decoration: underline; }
   display: block;
   color: var(--color-muted);
   font-size: 0.875rem;
-  margin-top: 0.25rem;
+  margin-top: var(--s5);
 }
 .error-message {
   display: block;
   color: var(--color-danger);
   font-size: 0.875rem;
-  margin-top: 0.25rem;
+  margin-top: var(--s5);
   min-height: 1em;
 }
-.radio-group { display: flex; gap: 1rem; }
+.radio-group { display: flex; gap: var(--s20); }
 .radio-group label { font-weight: normal; }
 
 .form-actions {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--s15);
   justify-content: flex-end;
-  margin-top: 1.5rem;
+  margin-top: var(--s30);
 }
 .form-actions.full-width .btn { width: 100%; }
 
 /* --- ボタン --- */
 .btn {
   display: inline-block;
-  padding: 0.5rem 1rem;
+  padding: var(--s10) var(--s20);
   border: none;
   border-radius: var(--radius);
   font-size: 1rem;
@@ -207,7 +214,7 @@ a:hover { text-decoration: underline; }
 .btn-secondary:hover { background: #5a6268; text-decoration: none; }
 .btn-danger { background: var(--color-danger); color: #fff; }
 .btn-danger:hover { background: #c82333; text-decoration: none; }
-.btn-small { padding: 0.25rem 0.75rem; font-size: 0.875rem; }
+.btn-small { padding: var(--s5) var(--s15); font-size: 0.875rem; }
 
 /* --- カード --- */
 .card {
@@ -215,9 +222,9 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius);
   padding: 1.25rem;
   box-shadow: var(--shadow-sm);
-  margin-bottom: 1rem;
+  margin-bottom: var(--s20);
 }
-.card h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.card h2 { font-size: 1.1rem; margin-bottom: var(--s15); }
 
 /* --- テーブル --- */
 .table-wrapper {
@@ -225,13 +232,13 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   overflow-x: auto;
-  margin-bottom: 1rem;
+  margin-bottom: var(--s20);
 }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table thead { background: var(--color-bg); }
 .data-table th,
 .data-table td {
-  padding: 0.75rem 1rem;
+  padding: var(--s15) var(--s20);
   text-align: left;
   border-bottom: 1px solid var(--color-border);
 }
@@ -247,13 +254,13 @@ a:hover { text-decoration: underline; }
 /* --- ページネーション --- */
 .pagination {
   display: flex;
-  gap: 0.25rem;
+  gap: var(--s5);
   justify-content: center;
-  margin-top: 1rem;
+  margin-top: var(--s20);
 }
 .pagination a,
 .pagination span {
-  padding: 0.5rem 0.75rem;
+  padding: var(--s10) var(--s15);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   color: var(--color-text);
@@ -276,17 +283,17 @@ a:hover { text-decoration: underline; }
 .alert-banner {
   background: #fff3cd;
   border-left: 4px solid var(--color-warning);
-  padding: 1rem 1.25rem;
+  padding: var(--s20) 1.25rem;
   border-radius: var(--radius);
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--s30);
 }
 .alert-banner h2 {
   font-size: 1rem;
   color: #856404;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--s10);
 }
 .alert-banner li {
-  padding: 0.25rem 0;
+  padding: var(--s5) 0;
   color: #856404;
 }
 
@@ -294,7 +301,7 @@ a:hover { text-decoration: underline; }
 .device-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
+  gap: var(--s20);
 }
 .device-card {
   background: var(--color-surface);
@@ -303,18 +310,18 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--s10);
 }
 .device-card h3 { font-size: 1.1rem; }
 .device-card .meta { color: var(--color-muted); font-size: 0.875rem; }
 .status-active { color: var(--color-primary); }
 .readings-row {
   display: flex;
-  gap: 1rem;
-  padding: 0.75rem 0;
+  gap: var(--s20);
+  padding: var(--s15) 0;
   border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
-  margin: 0.5rem 0;
+  margin: var(--s10) 0;
 }
 .reading-value {
   flex: 1;
@@ -327,7 +334,7 @@ a:hover { text-decoration: underline; }
 .device-info dl {
   display: grid;
   grid-template-columns: 100px 1fr;
-  gap: 0.5rem;
+  gap: var(--s10);
 }
 .device-info dt { font-weight: 600; color: var(--color-muted); }
 .device-info dd { color: var(--color-text); }
@@ -335,11 +342,11 @@ a:hover { text-decoration: underline; }
 /* --- デバイス詳細: 期間セレクタ --- */
 .period-selector {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: var(--s10);
+  margin-bottom: var(--s20);
 }
 .period-btn {
-  padding: 0.5rem 1rem;
+  padding: var(--s10) var(--s20);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   border-radius: var(--radius);
@@ -370,7 +377,7 @@ a:hover { text-decoration: underline; }
 /* --- センサーデータ履歴: フィルタとサマリ --- */
 .filter-form {
   display: flex;
-  gap: 1rem;
+  gap: var(--s20);
   align-items: flex-end;
   flex-wrap: wrap;
 }
@@ -379,28 +386,28 @@ a:hover { text-decoration: underline; }
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  gap: var(--s10);
+  margin-bottom: var(--s30);
 }
 .summary-box {
   background: var(--color-surface);
-  padding: 1rem;
+  padding: var(--s20);
   text-align: center;
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
 .summary-box .label { font-size: 0.875rem; color: var(--color-muted); }
-.summary-box .value { font-size: 1.25rem; font-weight: 600; margin-top: 0.25rem; }
+.summary-box .value { font-size: 1.25rem; font-weight: 600; margin-top: var(--s5); }
 
 /* --- アラートルール管理 --- */
 .rule-form {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--s15);
   align-items: flex-end;
   flex-wrap: wrap;
 }
 .rule-form .form-group { margin: 0; flex: 1; min-width: 120px; }
-.rule-list-actions { display: flex; gap: 0.5rem; }
+.rule-list-actions { display: flex; gap: var(--s10); }
 
 /* --- モーダル (R14) --- */
 .modal-overlay {
@@ -414,7 +421,7 @@ a:hover { text-decoration: underline; }
 }
 .modal-content {
   background: var(--color-surface);
-  padding: 1.5rem;
+  padding: var(--s30);
   border-radius: var(--radius);
   max-width: 500px;
   width: 90%;
