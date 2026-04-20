@@ -1,6 +1,6 @@
 // Package docs は Scalar API ドキュメントの埋め込みアセットを提供する。
 // OpenAPI 仕様 (openapi.yaml) と Scalar UI (index.html) をバイナリに同梱し、
-// main 側から Echo のレスポンスとして返却する。
+// main 側から Gin のレスポンスとして返却する。
 package docs
 
 import _ "embed"

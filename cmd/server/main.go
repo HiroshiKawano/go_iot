@@ -17,9 +17,7 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/handler"
 	infradb "github.com/HiroshiKawano/go_iot/internal/infra/db"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
-	"github.com/HiroshiKawano/go_iot/internal/server"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -45,51 +43,59 @@ func run() error {
 
 	q := repository.New(pool)
 
-	e := echo.New()
-	e.HideBanner = true
-	e.Validator = server.NewValidator()
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+	if cfg.AppEnv == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	r := gin.New()
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
 
 	// --- 公開エンドポイント ---
-	e.GET("/", func(c echo.Context) error {
-		return c.String(http.StatusOK, "go_iot: 農業IoTシステムへようこそ")
+	r.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "go_iot: 農業IoTシステムへようこそ")
 	})
 
 	// DB 疎通込みのヘルスチェック (Lightsail や ALB 等のヘルスチェック対象)
-	e.GET("/health", func(c echo.Context) error {
-		pingCtx, cancel := context.WithTimeout(c.Request().Context(), 2*time.Second)
+	r.GET("/health", func(c *gin.Context) {
+		pingCtx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 		if err := pool.Ping(pingCtx); err != nil {
-			return c.JSON(http.StatusServiceUnavailable, map[string]string{
+			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status": "db_unreachable",
 				"error":  err.Error(),
 			})
+			return
 		}
-		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// --- デバイスAPI ドキュメント (Scalar UI / OpenAPI 3.0) ---
-	e.GET("/docs", func(c echo.Context) error {
-		return c.HTMLBlob(http.StatusOK, docs.IndexHTML)
+	r.GET("/docs", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", docs.IndexHTML)
 	})
-	e.GET("/docs/openapi.yaml", func(c echo.Context) error {
-		return c.Blob(http.StatusOK, "application/yaml; charset=utf-8", docs.OpenAPIYAML)
+	r.GET("/docs/openapi.yaml", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/yaml; charset=utf-8", docs.OpenAPIYAML)
 	})
 
 	// --- デバイスAPI (Bearer トークン認証) ---
 	sensorAPI := &handler.SensorAPI{Repo: q}
 	deviceAuth := auth.DeviceAuth(auth.DeviceAuthConfig{Repo: q})
 
-	apiGroup := e.Group("/api", deviceAuth)
+	apiGroup := r.Group("/api", deviceAuth)
 	apiGroup.POST("/sensor-data", sensorAPI.Create)
 
 	// --- サーバ起動 / Graceful shutdown ---
+	addr := fmt.Sprintf(":%d", cfg.AppPort)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+
 	serverErrCh := make(chan error, 1)
 	go func() {
-		addr := fmt.Sprintf(":%d", cfg.AppPort)
 		log.Printf("listening on %s (env=%s)", addr, cfg.AppEnv)
-		if err := e.Start(addr); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErrCh <- err
 		}
 	}()
@@ -106,7 +112,7 @@ func run() error {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
-	if err := e.Shutdown(shutdownCtx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
 	log.Println("shutdown complete")

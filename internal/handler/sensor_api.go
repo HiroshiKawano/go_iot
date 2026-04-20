@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -8,8 +9,8 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	"github.com/labstack/echo/v4"
 )
 
 // SensorAPI は ESP8266 等のデバイスから呼ばれる REST API ハンドラ。
@@ -23,10 +24,10 @@ type SensorAPI struct {
 // バリデーションルールは DB設計書.md のバリデーションルール定義
 // (temperature: -40〜125, humidity: 0〜100) に準拠。
 type CreateSensorReadingRequest struct {
-	DeviceID    int64     `json:"device_id"    validate:"required,min=1"`
-	Temperature float64   `json:"temperature"  validate:"gte=-40,lte=125"`
-	Humidity    float64   `json:"humidity"     validate:"gte=0,lte=100"`
-	RecordedAt  time.Time `json:"recorded_at"  validate:"required"`
+	DeviceID    int64     `json:"device_id"    binding:"required,min=1"`
+	Temperature float64   `json:"temperature"  binding:"gte=-40,lte=125"`
+	Humidity    float64   `json:"humidity"     binding:"gte=0,lte=100"`
+	RecordedAt  time.Time `json:"recorded_at"  binding:"required"`
 }
 
 type CreateSensorReadingResponse struct {
@@ -54,27 +55,35 @@ type CreateSensorReadingResponse struct {
 //   - 500: DB エラー
 //
 // アラート判定は DB設計書.md の方針に従い Step 18 (フェーズ7) で同期追加予定。
-func (h *SensorAPI) Create(c echo.Context) error {
+func (h *SensorAPI) Create(c *gin.Context) {
 	var req CreateSensorReadingRequest
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid JSON body: "+err.Error())
-	}
-	if err := c.Validate(&req); err != nil {
-		return echo.NewHTTPError(http.StatusUnprocessableEntity, err.Error())
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// JSON 形式が不正な場合は 400、それ以外 (バリデーション) は 422 を返す。
+		var syntaxErr *json.SyntaxError
+		var unmarshalErr *json.UnmarshalTypeError
+		if errors.As(err, &syntaxErr) || errors.As(err, &unmarshalErr) {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid JSON body: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+		return
 	}
 
-	ctx := c.Request().Context()
+	ctx := c.Request.Context()
 	userID := auth.UserID(c)
 
 	device, err := h.Repo.GetDevice(ctx, req.DeviceID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusUnprocessableEntity, "device not found or deleted")
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": "device not found or deleted"})
+			return
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "device lookup failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "device lookup failed"})
+		return
 	}
 	if device.UserID != userID {
-		return echo.NewHTTPError(http.StatusForbidden, "device belongs to a different user")
+		c.JSON(http.StatusForbidden, gin.H{"message": "device belongs to a different user"})
+		return
 	}
 
 	reading, err := h.Repo.CreateSensorReading(ctx, repository.CreateSensorReadingParams{
@@ -84,12 +93,13 @@ func (h *SensorAPI) Create(c echo.Context) error {
 		RecordedAt:  pgconv.Timestamptz(req.RecordedAt),
 	})
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to save reading: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed to save reading: " + err.Error()})
+		return
 	}
 
 	_ = h.Repo.UpdateDeviceLastCommunicated(ctx, device.ID)
 
-	return c.JSON(http.StatusCreated, CreateSensorReadingResponse{
+	c.JSON(http.StatusCreated, CreateSensorReadingResponse{
 		ID:          reading.ID,
 		DeviceID:    reading.DeviceID,
 		Temperature: pgconv.NumericToFloat(reading.Temperature),
