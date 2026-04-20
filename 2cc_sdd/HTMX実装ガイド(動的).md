@@ -82,35 +82,48 @@ templ DeviceCards(devices []repository.Device) {
 **Handler 側 (`internal/handler/dashboard.go`):**
 
 ```go
-func (h *Dashboard) Devices(c echo.Context) error {
-    devices, err := h.Repo.ListDevicesByUser(c.Request().Context(), userID)
+func (h *Dashboard) Devices(c *gin.Context) {
+    ctx := c.Request.Context()
+    devices, err := h.Repo.ListDevicesByUser(ctx, userID)
     if err != nil {
-        return err
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+        return
     }
     // HTMX リクエストの場合、コンポーネント単体のみを返す
-    return page.DeviceCards(devices).Render(c.Request().Context(), c.Response())
+    if err := page.DeviceCards(devices).Render(ctx, c.Writer); err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+    }
 }
 
-func (h *Dashboard) Index(c echo.Context) error {
+func (h *Dashboard) Index(c *gin.Context) {
+    ctx := c.Request.Context()
     // ... データ取得
-    return page.Dashboard(devices, alerts).Render(c.Request().Context(), c.Response())
+    if err := page.Dashboard(devices, alerts).Render(ctx, c.Writer); err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+    }
 }
 ```
 
 **複数コンポーネントの同時返却（OOB Swap 用）:**
 
 ```go
-func (h *Readings) Index(c echo.Context) error {
+func (h *Readings) Index(c *gin.Context) {
+    ctx := c.Request.Context()
     // ...
-    if c.Request().Header.Get("HX-Request") != "" {
-        ctx := c.Request().Context()
-        w := c.Response()
+    if c.GetHeader("HX-Request") != "" {
+        w := c.Writer
         if err := page.ReadingsTable(readings, pagination).Render(ctx, w); err != nil {
-            return err
+            c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+            return
         }
-        return page.ReadingsSummaryOOB(summary).Render(ctx, w)
+        if err := page.ReadingsSummaryOOB(summary).Render(ctx, w); err != nil {
+            c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+        }
+        return
     }
-    return page.Readings(device, readings, summary, pagination).Render(ctx, c.Response())
+    if err := page.Readings(device, readings, summary, pagination).Render(ctx, c.Writer); err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+    }
 }
 ```
 
@@ -338,17 +351,23 @@ templ ReadingsSummaryOOB(s Summary) {
 **Handler (`internal/handler/reading.go` の `Index`):**
 
 ```go
-func (h *Reading) Index(c echo.Context) error {
+func (h *Reading) Index(c *gin.Context) {
+    ctx := c.Request.Context()
     // ... データ取得
-    if c.Request().Header.Get("HX-Request") != "" {
-        ctx := c.Request().Context()
-        w := c.Response()
+    if c.GetHeader("HX-Request") != "" {
+        w := c.Writer
         if err := page.ReadingsTable(readings, pagination).Render(ctx, w); err != nil {
-            return err
+            c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+            return
         }
-        return page.ReadingsSummaryOOB(summary).Render(ctx, w)
+        if err := page.ReadingsSummaryOOB(summary).Render(ctx, w); err != nil {
+            c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+        }
+        return
     }
-    return page.Readings(device, readings, summary, pagination).Render(ctx, c.Response())
+    if err := page.Readings(device, readings, summary, pagination).Render(ctx, c.Writer); err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+    }
 }
 ```
 
@@ -381,37 +400,38 @@ func (h *Reading) Index(c echo.Context) error {
 
 ### HTMX フォームのエラー返却パターン
 
-**採用方針:** Handler 内で `go-playground/validator` + Echo の `c.Validate()` を使って検証し、エラー時は 422 でコンポーネントを返す。
+**採用方針:** Handler 内で Gin の `ShouldBind` 系 API に `binding` タグを付与した構造体を渡し、組込の `go-playground/validator` に検証させる。エラー時は 422 でコンポーネントを返す。
 
-> Echo の `e.Validator = server.NewValidator()` で登録すれば、`c.Validate(&req)` がバリデーションを実行する。失敗時にエラーメッセージをコンポーネントにバインドしてそのまま再表示する。
+> Gin は `ShouldBind` / `ShouldBindJSON` / `ShouldBindQuery` 等が内部で `binding` タグを解釈し、バリデーションを自動実行する。失敗時にエラーメッセージをコンポーネントにバインドしてそのまま再表示する。
 
 ```go
 // internal/handler/alert_rule.go
 type CreateRuleRequest struct {
-    DeviceID  int64   `form:"device_id" validate:"required,min=1"`
-    Metric    string  `form:"metric"    validate:"required,oneof=temperature humidity"`
-    Operator  string  `form:"operator"  validate:"required,oneof=> < >= <="`
-    Threshold float64 `form:"threshold" validate:"required"`
+    DeviceID  int64   `form:"device_id" binding:"required,min=1"`
+    Metric    string  `form:"metric"    binding:"required,oneof=temperature humidity"`
+    Operator  string  `form:"operator"  binding:"required,oneof=> < >= <="`
+    Threshold float64 `form:"threshold" binding:"required"`
     IsEnabled bool    `form:"is_enabled"`
 }
 
-func (h *AlertRule) Store(c echo.Context) error {
+func (h *AlertRule) Store(c *gin.Context) {
     var req CreateRuleRequest
-    if err := c.Bind(&req); err != nil {
-        return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-    }
-    if err := c.Validate(&req); err != nil {
-        if c.Request().Header.Get("HX-Request") != "" {
+    if err := c.ShouldBind(&req); err != nil {
+        if c.GetHeader("HX-Request") != "" {
             // HTMX: フォームコンポーネントを 422 で返す (エラー表示込み)
-            c.Response().Status = http.StatusUnprocessableEntity
-            return page.RuleFormOOB(req, validationErrors(err)).Render(
-                c.Request().Context(),
-                c.Response(),
-            )
+            c.Status(http.StatusUnprocessableEntity)
+            if renderErr := page.RuleFormOOB(req, validationErrors(err)).Render(
+                c.Request.Context(),
+                c.Writer,
+            ); renderErr != nil {
+                c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": renderErr.Error()})
+            }
+            return
         }
         // 通常: リダイレクト + flash
         sessionFlashError(c, err)
-        return c.Redirect(http.StatusFound, "/alerts/rules")
+        c.Redirect(http.StatusFound, "/alerts/rules")
+        return
     }
 
     // バリデーション成功後の処理...
@@ -445,17 +465,27 @@ func (h *AlertRule) Store(c echo.Context) error {
 > **cc-sdd への価値:**
 > CSRF 保護は POST / PUT / DELETE / PATCH すべてに適用される。HTMX でこれらを使う際の設定方法はプロジェクト固有の選択であり、未記録だと全ミューテーションリクエストが 403 エラーになる。
 
-**採用方針:** Echo の CSRF ミドルウェア (`echo/v4/middleware.CSRF`) を Web ルートに適用し、レイアウト templ に `<meta name="csrf-token">` を配置して `htmx:configRequest` イベントでグローバルにヘッダーをセットする。**フォームごとに hidden トークンを書く方式は使用しない。**
+**採用方針:** Gin 用の CSRF ミドルウェア (`github.com/utrack/gin-csrf` などの外部ライブラリ) を Web ルートグループに適用し、レイアウト templ に `<meta name="csrf-token">` を配置して `htmx:configRequest` イベントでグローバルにヘッダーをセットする。**フォームごとに hidden トークンを書く方式は使用しない。**
 
 ```go
 // cmd/server/main.go (Web グループの設定)
-webGroup := e.Group("", middleware.CSRFWithConfig(middleware.CSRFConfig{
-    TokenLookup:  "header:X-CSRF-Token",
-    ContextKey:   "csrf_token",
-    CookieName:   "_csrf",
-    CookiePath:   "/",
-    CookieSecure: cfg.AppEnv == "production",
-    CookieHTTPOnly: false, // JSから読めるようにする (meta埋め込みのため)
+import (
+    csrf "github.com/utrack/gin-csrf"
+    "github.com/gin-contrib/sessions"
+)
+
+webGroup := r.Group("", csrf.Middleware(csrf.Options{
+    Secret: cfg.CSRFSecret,
+    ErrorFunc: func(c *gin.Context) {
+        c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "CSRF token mismatch"})
+    },
+    TokenGetter: func(c *gin.Context) string {
+        // X-CSRF-Token ヘッダ優先 (HTMX 用)。フォーム送信時は _csrf フィールドをフォールバック
+        if t := c.GetHeader("X-CSRF-Token"); t != "" {
+            return t
+        }
+        return c.PostForm("_csrf")
+    },
 }))
 ```
 
@@ -478,9 +508,9 @@ templ App() {
 </script>
 ```
 
-> Echo CSRF ミドルウェアは `X-CSRF-Token` ヘッダを検証する。グローバル設定によりフォームに hidden トークンを書く必要はない。
+> `gin-csrf` ミドルウェアは `X-CSRF-Token` ヘッダを検証する。グローバル設定によりフォームに hidden トークンを書く必要はない。
 
-> `csrfToken(ctx)` は Echo context から CSRF トークンを取り出すヘルパー関数（Handler 側で `c.Get("csrf_token").(string)` で取得して templ に渡す）。
+> `csrfToken(ctx)` は Gin context から CSRF トークンを取り出すヘルパー関数（Handler 側で `csrf.GetToken(c)` で取得して templ に渡す）。
 
 ---
 
@@ -491,17 +521,19 @@ templ App() {
 
 ```go
 // Handler での HX-Redirect 返却例（デバイス削除後）
-func (h *Device) Destroy(c echo.Context) error {
+func (h *Device) Destroy(c *gin.Context) {
     deviceID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-    if err := h.Repo.SoftDeleteDevice(c.Request().Context(), deviceID); err != nil {
-        return err
+    if err := h.Repo.SoftDeleteDevice(c.Request.Context(), deviceID); err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+        return
     }
 
-    if c.Request().Header.Get("HX-Request") != "" {
-        c.Response().Header().Set("HX-Redirect", "/dashboard")
-        return c.NoContent(http.StatusNoContent)
+    if c.GetHeader("HX-Request") != "" {
+        c.Header("HX-Redirect", "/dashboard")
+        c.Status(http.StatusNoContent)
+        return
     }
-    return c.Redirect(http.StatusFound, "/dashboard")
+    c.Redirect(http.StatusFound, "/dashboard")
 }
 ```
 

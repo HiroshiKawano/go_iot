@@ -40,14 +40,14 @@
 - ロール/属性は中央で定義し、コード各所にハードコードしない
 
 ### チェックの場所
-- **ミドルウェア (Echo)**: 粗粒度のゲート（認証済みか、ロールを持つか）
+- **ミドルウェア (Gin)**: 粗粒度のゲート（認証済みか、ロールを持つか）
 - **サービス層**: 細粒度判断（この資源をこのユーザーが操作できるか）
 - **UI/テンプレート**: 条件付き描画のみ。セキュリティを UI に依存させない
 
-Go + Echo のパターン例:
+Go + Gin のパターン例:
 ```go
 // ルートレベル: ミドルウェアで粗粒度チェック
-e.GET("/api/devices", handler.ListDevices, auth.RequirePermission("device:read"))
+r.GET("/api/devices", auth.RequirePermission("device:read"), handler.ListDevices)
 
 // サービス層: 細粒度チェック
 func (s *DeviceService) Update(ctx context.Context, user User, deviceID uuid.UUID, in UpdateInput) error {

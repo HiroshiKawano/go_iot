@@ -2,12 +2,12 @@
 
 ## アーキテクチャ
 
-[高レベルのシステム設計アプローチ。例: Echo によるレイヤード構成 (handler → service → repository)、server-rendered HTMX + templ]
+[高レベルのシステム設計アプローチ。例: Gin によるレイヤード構成 (handler → service → repository)、server-rendered HTMX + templ]
 
 ## コア技術
 
 - **言語**: Go 1.26+ （ESP32 ファームウェアとの言語統一が導入動機）
-- **Web フレームワーク**: [例: labstack/echo v4]
+- **Web フレームワーク**: [例: gin-gonic/gin v1]
 - **テンプレート**: [例: a-h/templ + HTMX]
 - **データベース**: [例: PostgreSQL + pgx v5]
 - **ビルドツール**: Go モジュール + `go tool` ディレクティブ（プロジェクトローカル化）

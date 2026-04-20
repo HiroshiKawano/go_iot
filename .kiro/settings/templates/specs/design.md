@@ -104,7 +104,7 @@ Map the directory structure and file responsibilities for this feature. This sec
 ```
 internal/
 ├── domain_a/              # Domain A responsibility
-│   ├── handler.go         # Echo ハンドラ（HTTP 境界）
+│   ├── handler.go         # Gin ハンドラ（HTTP 境界）
 │   ├── service.go         # ビジネスロジック
 │   ├── repository.go      # 永続化境界（sqlc 呼び出し）
 │   └── types.go           # ドメイン型

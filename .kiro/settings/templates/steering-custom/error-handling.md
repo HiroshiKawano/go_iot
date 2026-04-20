@@ -32,7 +32,7 @@
 - **データ/外部層**: プロバイダのエラーを安全な code でラップ（`fmt.Errorf("...: %w", err)`）
 - **未知エラー**: グローバルハンドラへ委譲 → 500 + 汎用メッセージ
 
-Go + Echo のパターン:
+Go + Gin のパターン:
 ```go
 // ドメイン層: sentinel エラーと独自型
 var ErrDeviceNotFound = errors.New("device not found")
@@ -44,25 +44,26 @@ type ValidationError struct {
 func (e *ValidationError) Error() string { return e.Field + ": " + e.Message }
 
 // handler: エラーを HTTP レスポンスにマッピング
-func (h *Handler) GetDevice(c echo.Context) error {
-    d, err := h.svc.FindByID(c.Request().Context(), id)
+func (h *Handler) GetDevice(c *gin.Context) {
+    d, err := h.svc.FindByID(c.Request.Context(), id)
     if err != nil {
         switch {
         case errors.Is(err, ErrDeviceNotFound):
-            return c.JSON(http.StatusNotFound, apiError("DEVICE_NOT_FOUND", err.Error(), c))
+            c.JSON(http.StatusNotFound, apiError("DEVICE_NOT_FOUND", err.Error(), c))
         case errors.As(err, &validationErr):
-            return c.JSON(http.StatusBadRequest, apiError("VALIDATION", err.Error(), c))
+            c.JSON(http.StatusBadRequest, apiError("VALIDATION", err.Error(), c))
         default:
             h.log.Error("unexpected", "err", err, "requestId", requestID(c))
-            return c.JSON(http.StatusInternalServerError, apiError("INTERNAL", "internal error", c))
+            c.JSON(http.StatusInternalServerError, apiError("INTERNAL", "internal error", c))
         }
+        return
     }
-    return c.JSON(http.StatusOK, d)
+    c.JSON(http.StatusOK, d)
 }
 ```
 
 - エラーラップは `%w` を使い、呼出側で `errors.Is` / `errors.As` で判定できる形を保つ
-- パニックはグローバルリカバリミドルウェア (`middleware.Recover()`) で 500 に変換
+- パニックはグローバルリカバリミドルウェア (`gin.Recovery()`) で 500 に変換
 
 ## ログ（ノイズより文脈）
 記録する: 操作名、user_id（あれば）、code、message、スタック、requestId、最小限のコンテキスト。

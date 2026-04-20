@@ -8,7 +8,7 @@
 
 macOS に Go 1.26 を導入する手順を記録する。
 
-本プロジェクト（go_iot）では Echo / templ / sqlc / goose といった周辺ツールが Go 1.21 以降を要求するため、最新安定版（Go 1.26）を採用する。
+本プロジェクト（go_iot）では Gin / templ / sqlc / goose といった周辺ツールが Go 1.21 以降を要求するため、最新安定版（Go 1.26）を採用する。
 
 本書では **2種類のインストール方法** を解説する:
 
@@ -420,14 +420,14 @@ npx cc-sdd@latest --lang ja
 
 ### 7-5. Go 向けテンプレート調整（本プロジェクト固有）
 
-cc-sdd のデフォルトテンプレは **TypeScript / Next.js / Jest 想定**。本プロジェクトでは以下を Go / Echo / templ / sqlc 向けに書き換え済み（`64f96cb` にコミット済み）:
+cc-sdd のデフォルトテンプレは **TypeScript / Next.js / Jest 想定**。本プロジェクトでは以下を Go / Gin / templ / sqlc 向けに書き換え済み（`64f96cb` にコミット済み）:
 
 | ファイル | 変更内容 |
 |---|---|
-| `steering/tech.md` | Go 1.26 / Echo / templ / sqlc / goose / air スタック記述 |
+| `steering/tech.md` | Go 1.26 / Gin / templ / sqlc / goose / air スタック記述 |
 | `steering/structure.md` | `cmd/` + `internal/` レイアウト、Go 命名規則、`goimports` グループ |
 | `steering-custom/testing.md` | `testing` パッケージ + Table-driven、`*_test.go` |
-| `steering-custom/authentication.md` | Echo middleware + bcrypt/argon2、ESP32 デバイストークン |
+| `steering-custom/authentication.md` | Gin ミドルウェア + bcrypt/argon2、ESP32 デバイストークン |
 | `steering-custom/error-handling.md` | sentinel / 独自型 + `%w` wrap + `errors.Is/As`、`slog` / `zap` |
 | `steering-custom/security.md` | `go-playground/validator`、`govulncheck`、`gosec`、templ エスケープ |
 | `specs/design.md` | Go interface 例、`internal/` ツリー、`.go` 拡張子 |

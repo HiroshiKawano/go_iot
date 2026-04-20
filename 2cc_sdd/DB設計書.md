@@ -28,7 +28,7 @@ DB設計書を新規作成する際に以下が揃っているか確認する：
 - [ ] マスターデータとして使用する Enum の値・`Label()`・追加メソッド（`Unit()` / `Evaluate()` 等）を Go 用に定義
 - [ ] Enum カラムを持つテーブルの `CHECK` 制約（PostgreSQL 標準）を記載
 - [ ] テーブル間の JOIN / 先行取得クエリの sqlc 関数名を一覧化
-- [ ] バリデーションルール（`validate:"required,oneof=temperature humidity"` / `gte=-40,lte=125` 等）を記載（実行方式は実装設計側で定義）
+- [ ] バリデーションルール（`binding:"required,oneof=temperature humidity"` / `gte=-40,lte=125` 等）を記載（実行方式は実装設計側で定義）
 - [ ] 主要クエリパターン（グラフ表示 / 期間集計 / アラート判定等）を SQL / sqlc で記載
 - [ ] 設計方針（外部キー非設定 / 論理削除適用範囲 / 集計テーブルの有無）を明記
 - [ ] 非同期 / 同期処理方針（Queue 使用の有無 / 実行タイミング）を明記
@@ -310,19 +310,19 @@ label := m.Label() + op.Label() + fmt.Sprintf("%.2f", threshold) + m.Unit()
 ## バリデーションルール定義
 
 > **cc-sdd への価値:**
-> Enum 値を含むカラムのバリデーションには `validate:"oneof=..."` タグが必要。テーブル定義の型情報だけでは導出しにくい。センサー値の物理的な範囲（温湿度の上下限）もここで定義する。
+> Enum 値を含むカラムのバリデーションには `binding:"oneof=..."` タグが必要。テーブル定義の型情報だけでは導出しにくい。センサー値の物理的な範囲（温湿度の上下限）もここで定義する。
 
-> **注意:** 本セクションはバリデーション**ルール**（何を検証するか）を定義する。バリデーションの**実行方式**（`go-playground/validator` + Echo の `e.Validator` 経由）は `2cc_sdd/HTMX実装ガイド(動的).md` の「バリデーションエラー表示」を参照。
+> **注意:** 本セクションはバリデーション**ルール**（何を検証するか）を定義する。バリデーションの**実行方式**（Gin の `ShouldBind` 系 API が `binding` タグを解釈して内蔵 `go-playground/validator` を起動）は `2cc_sdd/HTMX実装ガイド(動的).md` の「バリデーションエラー表示」を参照。
 
 ### AlertRule 用（Web UI フォーム）
 
 ```go
 // internal/handler/alert_rule.go
 type CreateAlertRuleRequest struct {
-    DeviceID  int64   `form:"device_id" validate:"required,min=1"`
-    Metric    string  `form:"metric"    validate:"required,oneof=temperature humidity"`
-    Operator  string  `form:"operator"  validate:"required,oneof=> < >= <="`
-    Threshold float64 `form:"threshold" validate:"required"`
+    DeviceID  int64   `form:"device_id" binding:"required,min=1"`
+    Metric    string  `form:"metric"    binding:"required,oneof=temperature humidity"`
+    Operator  string  `form:"operator"  binding:"required,oneof=> < >= <="`
+    Threshold float64 `form:"threshold" binding:"required"`
     IsEnabled bool    `form:"is_enabled"`
 }
 ```
@@ -332,10 +332,10 @@ type CreateAlertRuleRequest struct {
 ```go
 // internal/handler/sensor_api.go
 type CreateSensorReadingRequest struct {
-    DeviceID    int64     `json:"device_id"    validate:"required,min=1"`
-    Temperature float64   `json:"temperature"  validate:"gte=-40,lte=125"`
-    Humidity    float64   `json:"humidity"     validate:"gte=0,lte=100"`
-    RecordedAt  time.Time `json:"recorded_at"  validate:"required"`
+    DeviceID    int64     `json:"device_id"    binding:"required,min=1"`
+    Temperature float64   `json:"temperature"  binding:"gte=-40,lte=125"`
+    Humidity    float64   `json:"humidity"     binding:"gte=0,lte=100"`
+    RecordedAt  time.Time `json:"recorded_at"  binding:"required"`
 }
 ```
 

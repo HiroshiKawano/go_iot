@@ -20,7 +20,8 @@
 パターン例 (Go):
 ```go
 if !user.HasPermission("resource:action") {
-    return echo.NewHTTPError(http.StatusForbidden, "forbidden")
+    c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "forbidden"})
+    return
 }
 ```
 
@@ -49,7 +50,7 @@ if !user.HasPermission("resource:action") {
 ## ヘッダ & トランスポート
 - TLS 強制、HSTS
 - セキュリティヘッダを設定（CSP、X-Frame-Options、X-Content-Type-Options）
-  - Echo なら `middleware.Secure()` を入口に
+  - Gin なら `github.com/gin-contrib/secure` の `secure.New(...)` を入口に
 - 最新の暗号を優先、弱い TLS/暗号は無効化
 
 ## 脆弱性対応

@@ -9,7 +9,7 @@
 ### エントリポイント
 **場所**: `cmd/<binary-name>/main.go`
 **目的**: 各実行バイナリの `main` パッケージ。設定読込と DI 組立のみ
-**例**: `cmd/server/main.go`（Echo サーバー起動）
+**例**: `cmd/server/main.go`（Gin サーバー起動）
 
 ### 非公開アプリケーションコード
 **場所**: `internal/<domain>/`
@@ -43,8 +43,8 @@ import (
     "net/http"
 
     // 2. サードパーティ
+    "github.com/gin-gonic/gin"
     "github.com/jackc/pgx/v5/pgxpool"
-    "github.com/labstack/echo/v4"
 
     // 3. 自プロジェクト
     "github.com/HiroshiKawano/go_iot/internal/device"
