@@ -5,17 +5,17 @@
    Lism CSS 共存方針:
    - ファイル全体を @layer lism-custom でラップし、Lism のカスケードに組込む
    - 優先度: lism-base/primitive/component < ★lism-custom (この中身) < lism-utility
-   - 既存のコンポーネント的スタイルは維持し、Lism のユーティリティクラス
-     (-p:20, -g:10, -my-e:20 等) で HTML 側から微調整する
-   - リセットと line-height は Lism-base に委譲。重複は削除済み
 
-   ハイブリッド方針 (B パターン: Lism トークン借用):
-   - スペース値 (0.25rem, 0.5rem, 0.75rem, 1rem, 1.5rem) は Lism の
-     --s5 / --s10 / --s15 / --s20 / --s30 を借用
-   - 影 (--shadow-sm/md) と border (--color-border) は Lism 委譲済み
-   - Lism の標準刻みに合わない値 (1.25rem, 2rem, 0.9rem 等) は独自維持
-   - フォントサイズは Lism の calc 式と合わないため独自維持
-   - 独自色トークン (--color-primary など) は見た目維持のため保持
+   Lism トークン全面採用 (完全寄せ):
+   - スペース値:     var(--s5) 〜 var(--s40) に全置換
+   - フォントサイズ: var(--fz--s) 〜 var(--fz--2xl) に全置換 (em ベース、親 fz に追従)
+   - 角丸:           var(--bdrs--10) を --radius にエイリアス
+   - 影:             var(--sh--5) を --shadow-sm 等にエイリアス
+   - 色 divider:     var(--divider) を --color-border にエイリアス
+   - コンテナ幅:     var(--sz--xs)・var(--sz--l) を borrow
+   - 独自維持:       プロジェクト固有色 (primary/danger/warning/bg/surface)、
+                     レイアウト固定値 (sidebar-width 220px, header-height 56px,
+                     chart 300px, device-grid 280px, min-width 系)
    ======================================================================== */
 
 @layer lism-custom {
@@ -31,13 +31,13 @@ html { height: 100%; }
   --color-muted: #6c757d;
   --color-bg: #f5f7fa;
   --color-surface: #ffffff;
-  /* Lism の --divider に委譲 (#dedfe3, 既存 #dee2e6 とほぼ同値) */
-  --color-border: var(--divider);
   --color-text: #212529;
-  --radius: 6px;
-  /* Lism のシャドウトークンに委譲 */
+  /* Lism 変数へのエイリアス */
+  --color-border: var(--divider);       /* ≈ #dedfe3 */
+  --radius: var(--bdrs--10);            /* 0.25rem = 4px */
   --shadow-sm: var(--sh--5);
   --shadow-md: var(--sh--10);
+  /* プロジェクト固有 (Lism に該当トークンなし) */
   --sidebar-width: 220px;
   --header-height: 56px;
 }
@@ -66,7 +66,7 @@ a:hover { text-decoration: underline; }
   z-index: 10;
 }
 .site-header .logo {
-  font-size: 1.25rem;
+  font-size: var(--fz--xl);
   font-weight: 700;
   color: var(--color-primary);
 }
@@ -85,7 +85,7 @@ a:hover { text-decoration: underline; }
 }
 .sidebar li a {
   display: block;
-  padding: var(--s15) 1.25rem;
+  padding: var(--s15) var(--s20);
   color: var(--color-text);
   border-left: 3px solid transparent;
 }
@@ -101,7 +101,7 @@ a:hover { text-decoration: underline; }
   padding-top: var(--header-height);
   min-height: 100%;
 }
-.main-inner { padding: var(--s30); max-width: 1200px; }
+.main-inner { padding: var(--s30); max-width: var(--sz--l); }
 
 .page-header {
   display: flex;
@@ -111,7 +111,7 @@ a:hover { text-decoration: underline; }
   padding-bottom: var(--s15);
   border-bottom: 1px solid var(--color-border);
 }
-.page-header h1 { font-size: 1.5rem; font-weight: 600; }
+.page-header h1 { font-size: var(--fz--2xl); font-weight: 600; }
 
 /* --- ゲスト (login / register) 用レイアウト --- */
 .guest-layout {
@@ -124,21 +124,21 @@ a:hover { text-decoration: underline; }
 .guest-card {
   background: var(--color-surface);
   border-radius: var(--radius);
-  padding: 2rem;
+  padding: var(--s40);
   width: 100%;
   max-width: 400px;
   box-shadow: var(--shadow-md);
 }
 .guest-card h1 {
   text-align: center;
-  font-size: 1.5rem;
+  font-size: var(--fz--2xl);
   margin-bottom: var(--s30);
   color: var(--color-primary);
 }
 .guest-card .form-footer {
   text-align: center;
   margin-top: var(--s20);
-  font-size: 0.9rem;
+  font-size: var(--fz--s);
 }
 
 /* --- フォーム共通 --- */
@@ -162,8 +162,11 @@ a:hover { text-decoration: underline; }
   padding: var(--s10) var(--s15);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  /* 固定値で揃える (Lism の em ベース fz--m は親依存で高さが揃わない) */
   font-size: 1rem;
+  line-height: 1.5;
   background: var(--color-surface);
+  box-sizing: border-box;
 }
 .form-group input:focus,
 .form-group select:focus,
@@ -171,16 +174,36 @@ a:hover { text-decoration: underline; }
   outline: 2px solid var(--color-primary);
   outline-offset: -1px;
 }
+/* select にも appearance: none を適用して独自矢印に置換、input と完全に同じ寸法にする */
+.form-group select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%236c757d' stroke-width='2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--s15) center;
+  padding-right: calc(var(--s15) * 2 + 12px);
+}
+/* input[type=number] のスピナーを非表示化し、他の input/select と見た目を統一 */
+.form-group input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.form-group input[type="number"]::-webkit-outer-spin-button,
+.form-group input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 .form-help {
   display: block;
   color: var(--color-muted);
-  font-size: 0.875rem;
+  font-size: var(--fz--s);
   margin-top: var(--s5);
 }
 .error-message {
   display: block;
   color: var(--color-danger);
-  font-size: 0.875rem;
+  font-size: var(--fz--s);
   margin-top: var(--s5);
   min-height: 1em;
 }
@@ -199,9 +222,10 @@ a:hover { text-decoration: underline; }
 .btn {
   display: inline-block;
   padding: var(--s10) var(--s20);
-  border: none;
+  /* input と同じ見かけ高さにするため transparent border を敷く (2px 分) */
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  font-size: 1rem;
+  font-size: var(--fz--m);
   cursor: pointer;
   text-decoration: none;
   text-align: center;
@@ -214,17 +238,17 @@ a:hover { text-decoration: underline; }
 .btn-secondary:hover { background: #5a6268; text-decoration: none; }
 .btn-danger { background: var(--color-danger); color: #fff; }
 .btn-danger:hover { background: #c82333; text-decoration: none; }
-.btn-small { padding: var(--s5) var(--s15); font-size: 0.875rem; }
+.btn-small { padding: var(--s5) var(--s15); font-size: var(--fz--s); }
 
 /* --- カード --- */
 .card {
   background: var(--color-surface);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  padding: var(--s20);
   box-shadow: var(--shadow-sm);
   margin-bottom: var(--s20);
 }
-.card h2 { font-size: 1.1rem; margin-bottom: var(--s15); }
+.card h2 { font-size: var(--fz--l); margin-bottom: var(--s15); }
 
 /* --- テーブル --- */
 .table-wrapper {
@@ -242,11 +266,11 @@ a:hover { text-decoration: underline; }
   text-align: left;
   border-bottom: 1px solid var(--color-border);
 }
-.data-table th { font-weight: 600; color: var(--color-muted); font-size: 0.875rem; }
+.data-table th { font-weight: 600; color: var(--color-muted); font-size: var(--fz--s); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover { background: var(--color-bg); }
 .empty-message {
-  padding: 2rem;
+  padding: var(--s30);
   text-align: center;
   color: var(--color-muted);
 }
@@ -283,12 +307,12 @@ a:hover { text-decoration: underline; }
 .alert-banner {
   background: #fff3cd;
   border-left: 4px solid var(--color-warning);
-  padding: var(--s20) 1.25rem;
+  padding: var(--s20);
   border-radius: var(--radius);
   margin-bottom: var(--s30);
 }
 .alert-banner h2 {
-  font-size: 1rem;
+  font-size: var(--fz--m);
   color: #856404;
   margin-bottom: var(--s10);
 }
@@ -306,14 +330,14 @@ a:hover { text-decoration: underline; }
 .device-card {
   background: var(--color-surface);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  padding: var(--s20);
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: var(--s10);
 }
-.device-card h3 { font-size: 1.1rem; }
-.device-card .meta { color: var(--color-muted); font-size: 0.875rem; }
+.device-card h3 { font-size: var(--fz--l); }
+.device-card .meta { color: var(--color-muted); font-size: var(--fz--s); }
 .status-active { color: var(--color-primary); }
 .readings-row {
   display: flex;
@@ -327,8 +351,8 @@ a:hover { text-decoration: underline; }
   flex: 1;
   text-align: center;
 }
-.reading-value .label { font-size: 0.875rem; color: var(--color-muted); }
-.reading-value .value { font-size: 1.5rem; font-weight: 600; }
+.reading-value .label { font-size: var(--fz--s); color: var(--color-muted); }
+.reading-value .value { font-size: var(--fz--2xl); font-weight: 600; }
 
 /* --- デバイス詳細: 情報 --- */
 .device-info dl {
@@ -351,7 +375,7 @@ a:hover { text-decoration: underline; }
   background: var(--color-surface);
   border-radius: var(--radius);
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: var(--fz--s);
 }
 /* .period-btn.active は pagination セクションで .pagination .current と束ねて定義 */
 
@@ -382,6 +406,11 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
 }
 .filter-form .form-group { margin: 0; flex: 1; min-width: 150px; }
+/* button を form-group の input 上端と揃える (error-message 空間 + margin-top 分だけ下げる) */
+.filter-form > .btn,
+.rule-form > .btn {
+  margin-bottom: calc(var(--fz--s) + var(--s5));
+}
 
 .summary-grid {
   display: grid;
@@ -396,8 +425,8 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
-.summary-box .label { font-size: 0.875rem; color: var(--color-muted); }
-.summary-box .value { font-size: 1.25rem; font-weight: 600; margin-top: var(--s5); }
+.summary-box .label { font-size: var(--fz--s); color: var(--color-muted); }
+.summary-box .value { font-size: var(--fz--l); font-weight: 600; margin-top: var(--s5); }
 
 /* --- アラートルール管理 --- */
 .rule-form {
@@ -423,7 +452,7 @@ a:hover { text-decoration: underline; }
   background: var(--color-surface);
   padding: var(--s30);
   border-radius: var(--radius);
-  max-width: 500px;
+  max-width: var(--sz--xs);
   width: 90%;
 }
 
