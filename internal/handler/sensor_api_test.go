@@ -2,12 +2,17 @@ package handler
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/HiroshiKawano/go_iot/internal/auth"
+	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestMain(m *testing.M) {
@@ -94,5 +99,119 @@ func TestSensorAPI_Create_ValidationFailureReturns422(t *testing.T) {
 				t.Errorf("status code: got %d, want %d, body=%s", got, want, w.Body.String())
 			}
 		})
+	}
+}
+
+// --- 認可経路 (所有者認可 / DB エラー) のテスト ---
+
+// fakeSensorRepo は SensorRepo の最小モック (認可経路テスト用)。
+type fakeSensorRepo struct {
+	device       repository.Device
+	getErr       error
+	reading      repository.SensorReading
+	createErr    error
+	createCalled bool
+}
+
+func (f *fakeSensorRepo) GetDevice(_ context.Context, _ int64) (repository.Device, error) {
+	return f.device, f.getErr
+}
+
+func (f *fakeSensorRepo) CreateSensorReading(_ context.Context, _ repository.CreateSensorReadingParams) (repository.SensorReading, error) {
+	f.createCalled = true
+	return f.reading, f.createErr
+}
+
+func (f *fakeSensorRepo) UpdateDeviceLastCommunicated(_ context.Context, _ int64) error {
+	return nil
+}
+
+// newRouterWithUser は user_id を注入したうえで SensorAPI.Create を呼ぶルータ。
+// DeviceAuth 成功後 (auth.SetUserID 済み) の状態を再現する。
+func newRouterWithUser(h *SensorAPI, userID int64) *gin.Engine {
+	r := gin.New()
+	r.POST("/api/sensor-data", func(c *gin.Context) {
+		auth.SetUserID(c, userID)
+		c.Next()
+	}, h.Create)
+	return r
+}
+
+// validSensorBody は所有者認可以降の経路へ到達する有効なリクエストボディ。
+const validSensorBody = `{"device_id":10,"temperature":20,"humidity":50,"recorded_at":"2026-04-21T00:00:00Z"}`
+
+func postSensorData(t *testing.T, r *gin.Engine) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/sensor-data", strings.NewReader(validSensorBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func TestSensorAPI_Create_所有者一致なら201(t *testing.T) {
+	repo := &fakeSensorRepo{device: repository.Device{ID: 10, UserID: 7}}
+	w := postSensorData(t, newRouterWithUser(&SensorAPI{Repo: repo}, 7))
+
+	if got, want := w.Code, http.StatusCreated; got != want {
+		t.Errorf("status: got %d, want %d, body=%s", got, want, w.Body.String())
+	}
+	if !repo.createCalled {
+		t.Error("所有者一致なのに CreateSensorReading が呼ばれていない")
+	}
+}
+
+func TestSensorAPI_Create_他ユーザーのデバイスは403かつ保存しない(t *testing.T) {
+	repo := &fakeSensorRepo{device: repository.Device{ID: 10, UserID: 999}}
+	w := postSensorData(t, newRouterWithUser(&SensorAPI{Repo: repo}, 7))
+
+	if got, want := w.Code, http.StatusForbidden; got != want {
+		t.Errorf("status: got %d, want %d, body=%s", got, want, w.Body.String())
+	}
+	if repo.createCalled {
+		t.Error("403 のはずが CreateSensorReading が呼ばれた (BOLA リスク)")
+	}
+}
+
+func TestSensorAPI_Create_未認証userID0は401かつ保存しない(t *testing.T) {
+	// device.UserID も 0 にし、ゼロ値一致で誤って通らない (BOLA 多重防御) ことを固定する。
+	repo := &fakeSensorRepo{device: repository.Device{ID: 10, UserID: 0}}
+	w := postSensorData(t, newRouterWithUser(&SensorAPI{Repo: repo}, 0))
+
+	if got, want := w.Code, http.StatusUnauthorized; got != want {
+		t.Errorf("status: got %d, want %d, body=%s", got, want, w.Body.String())
+	}
+	if repo.createCalled {
+		t.Error("未認証(userID=0)で CreateSensorReading が呼ばれた (BOLA リスク)")
+	}
+}
+
+func TestSensorAPI_Create_存在しないデバイスは422(t *testing.T) {
+	repo := &fakeSensorRepo{getErr: pgx.ErrNoRows}
+	w := postSensorData(t, newRouterWithUser(&SensorAPI{Repo: repo}, 7))
+
+	if got, want := w.Code, http.StatusUnprocessableEntity; got != want {
+		t.Errorf("status: got %d, want %d, body=%s", got, want, w.Body.String())
+	}
+}
+
+func TestSensorAPI_Create_デバイス参照のDBエラーは500(t *testing.T) {
+	repo := &fakeSensorRepo{getErr: errors.New("db down")}
+	w := postSensorData(t, newRouterWithUser(&SensorAPI{Repo: repo}, 7))
+
+	if got, want := w.Code, http.StatusInternalServerError; got != want {
+		t.Errorf("status: got %d, want %d, body=%s", got, want, w.Body.String())
+	}
+}
+
+func TestSensorAPI_Create_保存失敗は500(t *testing.T) {
+	repo := &fakeSensorRepo{
+		device:    repository.Device{ID: 10, UserID: 7},
+		createErr: errors.New("insert failed"),
+	}
+	w := postSensorData(t, newRouterWithUser(&SensorAPI{Repo: repo}, 7))
+
+	if got, want := w.Code, http.StatusInternalServerError; got != want {
+		t.Errorf("status: got %d, want %d, body=%s", got, want, w.Body.String())
 	}
 }

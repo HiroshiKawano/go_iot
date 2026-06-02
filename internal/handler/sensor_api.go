@@ -1,24 +1,34 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/HiroshiKawano/go_iot/internal/auth"
+	"github.com/HiroshiKawano/go_iot/internal/authz"
 	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 )
 
+// SensorRepo は SensorAPI が必要とする最小の DB ポート (consumer interface)。
+// repository.Querier / *repository.Queries はこれを満たす。最小メソッドに限定することで
+// テスト時のモックを小さく保つ (DIP / アーキ決定の「consumer 最小 interface」)。
+// 所有者認可に使う GetDevice は authz.DeviceGetter から取り込む。
+type SensorRepo interface {
+	authz.DeviceGetter // GetDevice(ctx, id) (repository.Device, error)
+	CreateSensorReading(ctx context.Context, arg repository.CreateSensorReadingParams) (repository.SensorReading, error)
+	UpdateDeviceLastCommunicated(ctx context.Context, id int64) error
+}
+
 // SensorAPI は ESP8266 等のデバイスから呼ばれる REST API ハンドラ。
 // 認証は auth.DeviceAuth ミドルウェアで済んでいる前提。
 type SensorAPI struct {
-	// Repo は DB ポート (sqlc emit_interface の Querier)。具象 *Queries ではなく
-	// interface に依存することで、テスト時に最小モックへ差し替え可能 (DIP)。
-	Repo repository.Querier
+	Repo SensorRepo
 }
 
 // CreateSensorReadingRequest は POST /api/sensor-data のリクエストボディ。
@@ -52,6 +62,7 @@ type CreateSensorReadingResponse struct {
 // HTTP ステータス:
 //   - 201: 作成成功
 //   - 400: JSON 形式エラー
+//   - 401: 未認証 (多重防御。通常は DeviceAuth が先に 401 を返す)
 //   - 403: 他ユーザーのデバイスに書き込もうとした
 //   - 422: バリデーションエラー / 存在しない device_id
 //   - 500: DB エラー
@@ -74,17 +85,21 @@ func (h *SensorAPI) Create(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := auth.UserID(c)
 
-	device, err := h.Repo.GetDevice(ctx, req.DeviceID)
+	// 所有者認可は authz に集約 (BOLA 防止)。sentinel error を HTTP ステータスへ写す。
+	// 注: 「存在しない(422)」と「他ユーザー所有(403)」を区別する。device_id は連番のため
+	// 認証済みクライアントには存在オラクルとなりうるが、書込は防げており IoT 用途では許容する。
+	device, err := authz.RequireDeviceOwner(ctx, h.Repo, req.DeviceID, userID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		switch {
+		case errors.Is(err, authz.ErrUnauthenticated):
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "authentication required"})
+		case errors.Is(err, pgx.ErrNoRows):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": "device not found or deleted"})
-			return
+		case errors.Is(err, authz.ErrNotOwner):
+			c.JSON(http.StatusForbidden, gin.H{"message": "device belongs to a different user"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "device lookup failed"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "device lookup failed"})
-		return
-	}
-	if device.UserID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"message": "device belongs to a different user"})
 		return
 	}
 

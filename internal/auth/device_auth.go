@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -19,11 +20,17 @@ const (
 	ctxKeyDeviceTokenID = "device_auth_token_id"
 )
 
+// TokenRepo は DeviceAuth が必要とする最小の DB ポート (consumer interface)。
+// repository.Querier / *repository.Queries はこれを満たす。最小メソッドに限定することで
+// テスト時のモックを小さく保つ (DIP / アーキ決定の「consumer 最小 interface」)。
+type TokenRepo interface {
+	GetDeviceTokenByHash(ctx context.Context, tokenHash string) (repository.DeviceToken, error)
+	UpdateDeviceTokenLastUsed(ctx context.Context, id int64) error
+}
+
 // DeviceAuthConfig は DeviceAuth ミドルウェアの依存を保持する。
 type DeviceAuthConfig struct {
-	// Repo は DB ポート (sqlc emit_interface の Querier)。具象 *Queries ではなく
-	// interface に依存することで、テスト時に最小モックへ差し替え可能 (DIP)。
-	Repo repository.Querier
+	Repo TokenRepo
 }
 
 // DeviceAuth は Authorization: Bearer <token> を検証し、成功した場合に
@@ -64,10 +71,17 @@ func DeviceAuth(cfg DeviceAuthConfig) gin.HandlerFunc {
 		// last_used_at の更新は認証の必須要件ではないためエラーは無視
 		_ = cfg.Repo.UpdateDeviceTokenLastUsed(c.Request.Context(), tok.ID)
 
-		c.Set(ctxKeyUserID, tok.UserID)
+		SetUserID(c, tok.UserID)
 		c.Set(ctxKeyDeviceTokenID, tok.ID)
 		c.Next()
 	}
+}
+
+// SetUserID は認証成功後の user_id を Gin コンテキストへ格納する。
+// DeviceAuth(本パッケージ) と将来の Session 認証が共通で使い、ダウンストリームは
+// 認証方式に依らず UserID(c) で取得できる。テストの認可経路セットアップにも使う。
+func SetUserID(c *gin.Context, id int64) {
+	c.Set(ctxKeyUserID, id)
 }
 
 // UserID は DeviceAuth 成功後の Gin コンテキストから user_id を取得する。
