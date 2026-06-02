@@ -16,7 +16,9 @@ import (
 // SensorAPI は ESP8266 等のデバイスから呼ばれる REST API ハンドラ。
 // 認証は auth.DeviceAuth ミドルウェアで済んでいる前提。
 type SensorAPI struct {
-	Repo *repository.Queries
+	// Repo は DB ポート (sqlc emit_interface の Querier)。具象 *Queries ではなく
+	// interface に依存することで、テスト時に最小モックへ差し替え可能 (DIP)。
+	Repo repository.Querier
 }
 
 // CreateSensorReadingRequest は POST /api/sensor-data のリクエストボディ。

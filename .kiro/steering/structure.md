@@ -16,7 +16,7 @@ go_iot/
 │   ├── infra/{db,pgconv,token}/ pgxpool / 型変換 / トークン
 │   ├── auth/                   device_auth.go（Bearer）。session_auth.go は実装予定
 │   ├── handler/                HTTP ハンドラ
-│   ├── repository/             sqlc 生成コード（全34クエリ）
+│   ├── repository/             sqlc 生成コード（全37クエリ）
 │   ├── docs/                   OpenAPI YAML + Scalar（go:embed）
 │   ├── service/                アラート判定等のサービス置き場（実装予定）
 │   ├── middleware/             SessionLoad / MethodOverride 置き場（実装予定）
@@ -27,6 +27,30 @@ go_iot/
 ├── 2cc_sdd/                    設計書群
 └── other/                      補助ドキュメント
 ```
+
+## 依存方向ルール（アーキテクチャ規約・必須）
+
+> 採用方針は「実務的 Layered-lite」（layer-first + 画面=feature ファイル分割）。厳格 Clean Architecture は不採用。
+> 以下は安定ルール（常時順守）。**いつ `service` 層を挟むか＝層の厚みの線引き基準は、最初の 1-2 画面で SSR+HTMX 依存フローを検証してから追記する**（現時点では意図的に未定義）。下記は「依存の向き」の規約であり、どの処理で層を挟むかの基準ではない。
+
+1. **依存は下向き一方向**。上位 → 下位のみを許可し、逆流・循環を禁止する。下向きであれば隣接層を飛ばしてよい（チェーンは「呼べる方向」であって「必ず全層を経由する」意味ではない）。
+   ```
+   cmd（合成ルート） → handler / middleware / auth → service → repository → infra
+                                                  └─→ domain（純粋・無依存の値/ルール層。上位から参照のみ）
+   ```
+   - `cmd/server/main.go` が唯一の合成ルート（依存を生成し配線する）。下位層は上位層を import しない。
+   - `domain` は最下流の純粋層で **`infra` も import しない**（上図のとおり repository/service とは別系統。詳細はルール②）。
+   - 隣接層スキップの例: `handler` が `service` を経由せず `repository` を直接呼ぶ構成も許容する（どの処理で `service` を挟むかの基準は上記のとおり検証後に確定）。
+
+2. **domain の純粋性を死守**。`internal/domain/` は標準ライブラリ（現状 `fmt` のみ）に依存し、`repository` / `infra` / `gin` / DB 型（pgtype 等）を一切 import しない。
+
+3. **DIP は 2 点限定**。むやみに interface を増やさない。
+   - **DB ポート = `repository.Querier`**（sqlc `emit_interface=true` の生成 interface）。handler / auth は具象 `*repository.Queries` ではなく `Querier` に依存する（テスト時に最小モックへ差し替え可能）。詳細は [tech.md の「データアクセス方針」](./tech.md) を参照。
+   - **service の consumer interface は必要時のみ**定義する（消費側が必要とする最小メソッドだけを切り出す）。先回りの抽象化はしない。
+
+4. **view → repository / service を禁止**。view（templ）は handler が渡した表示用データのみを描画する。
+   - 許可: `view → domain の表示メソッド`（例: `Metric.Label()` / `Metric.Unit()` 等の表示専用メソッド）。
+   - 禁止: view から DB アクセス（repository）やビジネスロジック（service）を直接呼ぶこと。
 
 ## view 層の3層構成（`internal/view/`）
 

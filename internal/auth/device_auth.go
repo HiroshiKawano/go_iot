@@ -21,7 +21,9 @@ const (
 
 // DeviceAuthConfig は DeviceAuth ミドルウェアの依存を保持する。
 type DeviceAuthConfig struct {
-	Repo *repository.Queries
+	// Repo は DB ポート (sqlc emit_interface の Querier)。具象 *Queries ではなく
+	// interface に依存することで、テスト時に最小モックへ差し替え可能 (DIP)。
+	Repo repository.Querier
 }
 
 // DeviceAuth は Authorization: Bearer <token> を検証し、成功した場合に
