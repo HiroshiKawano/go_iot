@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>デバイス詳細 - 農業IoTシステム</title>
-  <link rel="stylesheet" href="./lism.css">
   <link rel="stylesheet" href="./style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
@@ -58,12 +57,12 @@
           <button type="button" class="period-btn">30日間</button>
         </div>
 
-        <h2 class="-my-s:30">温度グラフ</h2>
+        <h2 class="u-mbs-6">温度グラフ</h2>
         <div class="chart-wrapper">
           <div class="chart-placeholder">SVGグラフ (温度 / 横軸:時間, 縦軸:℃)</div>
         </div>
 
-        <h2 class="-my-s:30">湿度グラフ</h2>
+        <h2 class="u-mbs-6">湿度グラフ</h2>
         <div class="chart-wrapper">
           <div class="chart-placeholder">SVGグラフ (湿度 / 横軸:時間, 縦軸:%)</div>
         </div>
@@ -89,7 +88,7 @@
           </table>
           <p class="empty-message" style="display:none;">計測データはまだありません。</p>
         </div>
-        <div class="-ta:right -my-s:10">
+        <div class="u-ta-right u-mbs-2">
           <a href="/devices/1/readings">もっと見る →</a>
         </div>
       </section>
@@ -100,7 +99,7 @@
   <div class="modal-overlay" x-show="deleteModalOpen" x-cloak style="display:none;">
     <div class="modal-content">
       <h2>デバイスを削除しますか？</h2>
-      <p class="-my:20">この操作は元に戻せません。</p>
+      <p class="u-mb-4">この操作は元に戻せません。</p>
       <form action="/devices/1" method="post">
         <input type="hidden" name="_method" value="delete">
         <div class="form-actions">

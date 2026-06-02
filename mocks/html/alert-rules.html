@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>アラートルール管理 - 農業IoTシステム</title>
-  <link rel="stylesheet" href="./lism.css">
   <link rel="stylesheet" href="./style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
@@ -82,7 +81,7 @@
         </form>
       </section>
 
-      <h2 class="-my-e:15">ルール一覧</h2>
+      <h2 class="u-mbe-3">ルール一覧</h2>
       <div class="table-wrapper">
         <table class="data-table">
           <thead>
@@ -97,7 +96,7 @@
           <tbody>
             <tr>
               <td>
-                <form action="/alerts/rules/1/toggle" method="post" class="-d:inline">
+                <form action="/alerts/rules/1/toggle" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="patch">
                   <input type="checkbox" name="is_enabled" value="1" checked>
                 </form>
@@ -107,7 +106,7 @@
               <td>35.00℃</td>
               <td class="rule-list-actions">
                 <a href="/alerts/rules/1/edit" class="btn btn-small btn-secondary">編集</a>
-                <form action="/alerts/rules/1" method="post" class="-d:inline">
+                <form action="/alerts/rules/1" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="delete">
                   <button type="submit" class="btn btn-small btn-danger">削除</button>
                 </form>
@@ -115,7 +114,7 @@
             </tr>
             <tr>
               <td>
-                <form action="/alerts/rules/2/toggle" method="post" class="-d:inline">
+                <form action="/alerts/rules/2/toggle" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="patch">
                   <input type="checkbox" name="is_enabled" value="1" checked>
                 </form>
@@ -125,7 +124,7 @@
               <td>30.00%</td>
               <td class="rule-list-actions">
                 <a href="/alerts/rules/2/edit" class="btn btn-small btn-secondary">編集</a>
-                <form action="/alerts/rules/2" method="post" class="-d:inline">
+                <form action="/alerts/rules/2" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="delete">
                   <button type="submit" class="btn btn-small btn-danger">削除</button>
                 </form>
@@ -133,7 +132,7 @@
             </tr>
             <tr>
               <td>
-                <form action="/alerts/rules/3/toggle" method="post" class="-d:inline">
+                <form action="/alerts/rules/3/toggle" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="patch">
                   <input type="checkbox" name="is_enabled" value="1">
                 </form>
@@ -143,7 +142,7 @@
               <td>5.00℃</td>
               <td class="rule-list-actions">
                 <a href="/alerts/rules/3/edit" class="btn btn-small btn-secondary">編集</a>
-                <form action="/alerts/rules/3" method="post" class="-d:inline">
+                <form action="/alerts/rules/3" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="delete">
                   <button type="submit" class="btn btn-small btn-danger">削除</button>
                 </form>

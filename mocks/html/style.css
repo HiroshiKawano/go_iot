@@ -1,56 +1,110 @@
 /* ========================================================================
    農業IoTシステム 共通スタイルシート
-   モックHTML全画面で共有。HTML作成ルール.md R02 に従い ID セレクタ不使用。
+   モックHTML全画面で共有。HTML作成ルール R02 に従い ID セレクタ不使用。
 
-   Lism CSS 共存方針:
-   - ファイル全体を @layer lism-custom でラップし、Lism のカスケードに組込む
-   - 優先度: lism-base/primitive/component < ★lism-custom (この中身) < lism-utility
-
-   Lism トークン全面採用 (完全寄せ):
-   - スペース値:     var(--s5) 〜 var(--s40) に全置換
-   - フォントサイズ: var(--fz--s) 〜 var(--fz--2xl) に全置換 (em ベース、親 fz に追従)
-   - 角丸:           var(--bdrs--10) を --radius にエイリアス
-   - 影:             var(--sh--5) を --shadow-sm 等にエイリアス
-   - 色 divider:     var(--divider) を --color-border にエイリアス
-   - コンテナ幅:     var(--sz--xs)・var(--sz--l) を borrow
-   - 独自維持:       プロジェクト固有色 (primary/danger/warning/bg/surface)、
-                     レイアウト固定値 (sidebar-width 220px, header-height 56px,
-                     chart 300px, device-grid 280px, min-width 系)
+   Lism CSS 非依存（2026-06-03 完全drop）:
+   - 旧 Lism トークン（--s*/--fz--*/--bdrs--*/--sh--*/--divider/--sz--*）は
+     すべて自前トークンに実値化。lism.css の読み込みは不要。
+   - カスケードは自前 @layer（reset < base < components < utilities）で管理。
+     優先度: reset < base(:root・要素) < components(.card 等) < utilities(.u-* ヘルパ)
+   - レスポンシブは素のモダンCSS（grid auto-fill/auto-fit, clamp(), @media 1個）で対応。
+     コンポーネント自己レスポンシブが要るときは各部品に @container を内包する。
+   - フォントサイズは旧 Lism の em 追従をやめ rem 固定に変更（親 fz 非依存で
+     フォーム要素の高さブレを構造的に根絶）。
    ======================================================================== */
 
-@layer lism-custom {
+@layer reset, base, components, utilities;
 
-/* --- ベース (リセットは Lism が提供するため最小限) --- */
-html { height: 100%; }
+/* ============================ reset ============================ */
+@layer reset {
+  *, *::before, *::after { box-sizing: border-box; }
+  * { margin: 0; }
 
-:root {
-  --color-primary: #28a745;
-  --color-primary-dark: #218838;
-  --color-danger: #dc3545;
-  --color-warning: #ffc107;
-  --color-muted: #6c757d;
-  --color-bg: #f5f7fa;
-  --color-surface: #ffffff;
-  --color-text: #212529;
-  /* Lism 変数へのエイリアス */
-  --color-border: var(--divider);       /* ≈ #dedfe3 */
-  --radius: var(--bdrs--10);            /* 0.25rem = 4px */
-  --shadow-sm: var(--sh--5);
-  --shadow-md: var(--sh--10);
-  /* プロジェクト固有 (Lism に該当トークンなし) */
-  --sidebar-width: 220px;
-  --header-height: 56px;
+  html {
+    height: 100%;
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
+    overflow-wrap: anywhere;
+    tab-size: 4;
+  }
+  body {
+    min-height: 100dvh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* クラス付きリストのみマーカー除去（sidebar 等のクラス無し ul は従来通り） */
+  :is(ul, ol)[class] { list-style: none; padding: 0; }
+
+  img, picture, svg, video, canvas {
+    max-width: 100%;
+    height: auto;
+    vertical-align: middle;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :is([type="checkbox"], [type="radio"], label[for], select, summary) { cursor: pointer; }
+  :is(button, [type="button"], [type="submit"], [type="reset"]) {
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  :disabled { cursor: not-allowed; }
+  table { border-collapse: collapse; }
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
-               "Yu Gothic UI", "Meiryo", sans-serif;
-  color: var(--color-text);
-  background: var(--color-bg);
+/* ============================ base ============================ */
+@layer base {
+  :root {
+    /* --- カラー（プロジェクト固有・Lism非依存、従来通り） --- */
+    --color-primary: #28a745;
+    --color-primary-dark: #218838;
+    --color-danger: #dc3545;
+    --color-warning: #ffc107;
+    --color-muted: #6c757d;
+    --color-bg: #f5f7fa;
+    --color-surface: #ffffff;
+    --color-text: #212529;
+    --color-border: #dedfe3;              /* 旧 var(--divider) を実値化 */
+
+    /* --- スペーススケール（4px グリッド。旧 Lism --s* を実値化） --- */
+    --space-1: 0.25rem;   /* 4px  （旧 --s5）  */
+    --space-2: 0.5rem;    /* 8px  （旧 --s10） */
+    --space-3: 0.75rem;   /* 12px （旧 --s15） */
+    --space-4: 1rem;      /* 16px （旧 --s20） */
+    --space-6: 1.5rem;    /* 24px （旧 --s30） */
+    --space-10: 2.5rem;   /* 40px （旧 --s40） */
+
+    /* --- フォントサイズ（rem 固定。旧 Lism em追従 --fz* を実値化） --- */
+    --fs-sm: 0.875rem;    /* 14px   （旧 --fz--s）  */
+    --fs-base: 1rem;      /* 16px   （旧 --fz--m）  */
+    --fs-lg: 1.125rem;    /* 18px   （旧 --fz--l）  */
+    --fs-xl: 1.3125rem;   /* 21px   （旧 --fz--xl） */
+    --fs-2xl: 1.6rem;     /* 25.6px （旧 --fz--2xl）*/
+
+    /* --- 角丸・影・コンテナ幅（旧 Lism エイリアスを実値化） --- */
+    --radius: 0.25rem;                              /* 旧 --bdrs--10 */
+    --shadow-sm: 0 1px 3px rgba(20, 20, 21, 0.05);  /* 旧 --sh--5  */
+    --shadow-md: 0 2px 6px rgba(20, 20, 21, 0.05);  /* 旧 --sh--10 */
+    --container-l: 1280px;   /* 旧 --sz--l  */
+    --container-xs: 32rem;   /* 旧 --sz--xs */
+
+    /* --- レイアウト固定値（Lism にトークンなし） --- */
+    --sidebar-width: 220px;
+    --header-height: 56px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
+                 "Yu Gothic UI", "Meiryo", sans-serif;
+    color: var(--color-text);
+    background: var(--color-bg);
+  }
+
+  a { color: var(--color-primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 }
 
-a { color: var(--color-primary); text-decoration: none; }
-a:hover { text-decoration: underline; }
+/* ============================ components ============================ */
+@layer components {
 
 /* --- 共通レイアウト (ヘッダ + サイドバー) --- */
 .site-header {
@@ -62,15 +116,15 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--s20);
+  padding: 0 var(--space-4);
   z-index: 10;
 }
 .site-header .logo {
-  font-size: var(--fz--xl);
+  font-size: var(--fs-xl);
   font-weight: 700;
   color: var(--color-primary);
 }
-.user-menu { display: flex; align-items: center; gap: var(--s20); }
+.user-menu { display: flex; align-items: center; gap: var(--space-4); }
 .user-name { color: var(--color-muted); }
 .logout-form { display: inline; }
 
@@ -80,12 +134,12 @@ a:hover { text-decoration: underline; }
   width: var(--sidebar-width);
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
-  padding-top: var(--s20);
+  padding-top: var(--space-4);
   overflow-y: auto;
 }
 .sidebar li a {
   display: block;
-  padding: var(--s15) var(--s20);
+  padding: var(--space-3) var(--space-4);
   color: var(--color-text);
   border-left: 3px solid transparent;
 }
@@ -101,17 +155,17 @@ a:hover { text-decoration: underline; }
   padding-top: var(--header-height);
   min-height: 100%;
 }
-.main-inner { padding: var(--s30); max-width: var(--sz--l); }
+.main-inner { padding: clamp(var(--space-4), 3vw, var(--space-6)); max-width: var(--container-l); }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--s30);
-  padding-bottom: var(--s15);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--color-border);
 }
-.page-header h1 { font-size: var(--fz--2xl); font-weight: 600; }
+.page-header h1 { font-size: var(--fs-2xl); font-weight: 600; }
 
 /* --- ゲスト (login / register) 用レイアウト --- */
 .guest-layout {
@@ -119,34 +173,34 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: var(--s20);
+  padding: var(--space-4);
 }
 .guest-card {
   background: var(--color-surface);
   border-radius: var(--radius);
-  padding: var(--s40);
+  padding: var(--space-10);
   width: 100%;
   max-width: 400px;
   box-shadow: var(--shadow-md);
 }
 .guest-card h1 {
   text-align: center;
-  font-size: var(--fz--2xl);
-  margin-bottom: var(--s30);
+  font-size: var(--fs-2xl);
+  margin-bottom: var(--space-6);
   color: var(--color-primary);
 }
 .guest-card .form-footer {
   text-align: center;
-  margin-top: var(--s20);
-  font-size: var(--fz--s);
+  margin-top: var(--space-4);
+  font-size: var(--fs-sm);
 }
 
 /* --- フォーム共通 --- */
-.form-group { margin-bottom: var(--s20); }
+.form-group { margin-bottom: var(--space-4); }
 .form-group > label {
   display: block;
   font-weight: 500;
-  margin-bottom: var(--s5);
+  margin-bottom: var(--space-1);
 }
 .required-mark { color: var(--color-danger); }
 
@@ -159,10 +213,10 @@ a:hover { text-decoration: underline; }
 .form-group select,
 .form-group textarea {
   width: 100%;
-  padding: var(--s10) var(--s15);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  /* 固定値で揃える (Lism の em ベース fz--m は親依存で高さが揃わない) */
+  /* 固定値で揃える (rem 基準のトークンなので親 fz に依存せず高さが揃う) */
   font-size: 1rem;
   line-height: 1.5;
   background: var(--color-surface);
@@ -181,8 +235,8 @@ a:hover { text-decoration: underline; }
   -moz-appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%236c757d' stroke-width='2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right var(--s15) center;
-  padding-right: calc(var(--s15) * 2 + 12px);
+  background-position: right var(--space-3) center;
+  padding-right: calc(var(--space-3) * 2 + 12px);
 }
 /* input[type=number] のスピナーを非表示化し、他の input/select と見た目を統一 */
 .form-group input[type="number"] {
@@ -197,35 +251,35 @@ a:hover { text-decoration: underline; }
 .form-help {
   display: block;
   color: var(--color-muted);
-  font-size: var(--fz--s);
-  margin-top: var(--s5);
+  font-size: var(--fs-sm);
+  margin-top: var(--space-1);
 }
 .error-message {
   display: block;
   color: var(--color-danger);
-  font-size: var(--fz--s);
-  margin-top: var(--s5);
+  font-size: var(--fs-sm);
+  margin-top: var(--space-1);
   min-height: 1em;
 }
-.radio-group { display: flex; gap: var(--s20); }
+.radio-group { display: flex; gap: var(--space-4); }
 .radio-group label { font-weight: normal; }
 
 .form-actions {
   display: flex;
-  gap: var(--s15);
+  gap: var(--space-3);
   justify-content: flex-end;
-  margin-top: var(--s30);
+  margin-top: var(--space-6);
 }
 .form-actions.full-width .btn { width: 100%; }
 
 /* --- ボタン --- */
 .btn {
   display: inline-block;
-  padding: var(--s10) var(--s20);
+  padding: var(--space-2) var(--space-4);
   /* input と同じ見かけ高さにするため transparent border を敷く (2px 分) */
   border: 1px solid transparent;
   border-radius: var(--radius);
-  font-size: var(--fz--m);
+  font-size: var(--fs-base);
   cursor: pointer;
   text-decoration: none;
   text-align: center;
@@ -238,17 +292,17 @@ a:hover { text-decoration: underline; }
 .btn-secondary:hover { background: #5a6268; text-decoration: none; }
 .btn-danger { background: var(--color-danger); color: #fff; }
 .btn-danger:hover { background: #c82333; text-decoration: none; }
-.btn-small { padding: var(--s5) var(--s15); font-size: var(--fz--s); }
+.btn-small { padding: var(--space-1) var(--space-3); font-size: var(--fs-sm); }
 
 /* --- カード --- */
 .card {
   background: var(--color-surface);
   border-radius: var(--radius);
-  padding: var(--s20);
+  padding: var(--space-4);
   box-shadow: var(--shadow-sm);
-  margin-bottom: var(--s20);
+  margin-bottom: var(--space-4);
 }
-.card h2 { font-size: var(--fz--l); margin-bottom: var(--s15); }
+.card h2 { font-size: var(--fs-lg); margin-bottom: var(--space-3); }
 
 /* --- テーブル --- */
 .table-wrapper {
@@ -256,21 +310,21 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   overflow-x: auto;
-  margin-bottom: var(--s20);
+  margin-bottom: var(--space-4);
 }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table thead { background: var(--color-bg); }
 .data-table th,
 .data-table td {
-  padding: var(--s15) var(--s20);
+  padding: var(--space-3) var(--space-4);
   text-align: left;
   border-bottom: 1px solid var(--color-border);
 }
-.data-table th { font-weight: 600; color: var(--color-muted); font-size: var(--fz--s); }
+.data-table th { font-weight: 600; color: var(--color-muted); font-size: var(--fs-sm); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover { background: var(--color-bg); }
 .empty-message {
-  padding: var(--s30);
+  padding: var(--space-6);
   text-align: center;
   color: var(--color-muted);
 }
@@ -278,13 +332,13 @@ a:hover { text-decoration: underline; }
 /* --- ページネーション --- */
 .pagination {
   display: flex;
-  gap: var(--s5);
+  gap: var(--space-1);
   justify-content: center;
-  margin-top: var(--s20);
+  margin-top: var(--space-4);
 }
 .pagination a,
 .pagination span {
-  padding: var(--s10) var(--s15);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   color: var(--color-text);
@@ -307,17 +361,17 @@ a:hover { text-decoration: underline; }
 .alert-banner {
   background: #fff3cd;
   border-left: 4px solid var(--color-warning);
-  padding: var(--s20);
+  padding: var(--space-4);
   border-radius: var(--radius);
-  margin-bottom: var(--s30);
+  margin-bottom: var(--space-6);
 }
 .alert-banner h2 {
-  font-size: var(--fz--m);
+  font-size: var(--fs-base);
   color: #856404;
-  margin-bottom: var(--s10);
+  margin-bottom: var(--space-2);
 }
 .alert-banner li {
-  padding: var(--s5) 0;
+  padding: var(--space-1) 0;
   color: #856404;
 }
 
@@ -325,40 +379,40 @@ a:hover { text-decoration: underline; }
 .device-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--s20);
+  gap: var(--space-4);
 }
 .device-card {
   background: var(--color-surface);
   border-radius: var(--radius);
-  padding: var(--s20);
+  padding: var(--space-4);
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: var(--s10);
+  gap: var(--space-2);
 }
-.device-card h3 { font-size: var(--fz--l); }
-.device-card .meta { color: var(--color-muted); font-size: var(--fz--s); }
+.device-card h3 { font-size: var(--fs-lg); }
+.device-card .meta { color: var(--color-muted); font-size: var(--fs-sm); }
 .status-active { color: var(--color-primary); }
 .readings-row {
   display: flex;
-  gap: var(--s20);
-  padding: var(--s15) 0;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
   border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
-  margin: var(--s10) 0;
+  margin: var(--space-2) 0;
 }
 .reading-value {
   flex: 1;
   text-align: center;
 }
-.reading-value .label { font-size: var(--fz--s); color: var(--color-muted); }
-.reading-value .value { font-size: var(--fz--2xl); font-weight: 600; }
+.reading-value .label { font-size: var(--fs-sm); color: var(--color-muted); }
+.reading-value .value { font-size: var(--fs-2xl); font-weight: 600; }
 
 /* --- デバイス詳細: 情報 --- */
 .device-info dl {
   display: grid;
   grid-template-columns: 100px 1fr;
-  gap: var(--s10);
+  gap: var(--space-2);
 }
 .device-info dt { font-weight: 600; color: var(--color-muted); }
 .device-info dd { color: var(--color-text); }
@@ -366,16 +420,16 @@ a:hover { text-decoration: underline; }
 /* --- デバイス詳細: 期間セレクタ --- */
 .period-selector {
   display: flex;
-  gap: var(--s10);
-  margin-bottom: var(--s20);
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 .period-btn {
-  padding: var(--s10) var(--s20);
+  padding: var(--space-2) var(--space-4);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   border-radius: var(--radius);
   cursor: pointer;
-  font-size: var(--fz--s);
+  font-size: var(--fs-sm);
 }
 /* .period-btn.active は pagination セクションで .pagination .current と束ねて定義 */
 
@@ -401,7 +455,7 @@ a:hover { text-decoration: underline; }
 /* --- センサーデータ履歴: フィルタとサマリ --- */
 .filter-form {
   display: flex;
-  gap: var(--s20);
+  gap: var(--space-4);
   align-items: flex-end;
   flex-wrap: wrap;
 }
@@ -409,34 +463,35 @@ a:hover { text-decoration: underline; }
 /* button を form-group の input 上端と揃える (error-message 空間 + margin-top 分だけ下げる) */
 .filter-form > .btn,
 .rule-form > .btn {
-  margin-bottom: calc(var(--fz--s) + var(--s5));
+  margin-bottom: calc(var(--fs-sm) + var(--space-1));
 }
 
 .summary-grid {
   display: grid;
+  /* 温度3指標 + 湿度3指標を 2行×3列 で表示（設計意図を保持）。狭幅では @media で1列化 */
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--s10);
-  margin-bottom: var(--s30);
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
 }
 .summary-box {
   background: var(--color-surface);
-  padding: var(--s20);
+  padding: var(--space-4);
   text-align: center;
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
-.summary-box .label { font-size: var(--fz--s); color: var(--color-muted); }
-.summary-box .value { font-size: var(--fz--l); font-weight: 600; margin-top: var(--s5); }
+.summary-box .label { font-size: var(--fs-sm); color: var(--color-muted); }
+.summary-box .value { font-size: var(--fs-lg); font-weight: 600; margin-top: var(--space-1); }
 
 /* --- アラートルール管理 --- */
 .rule-form {
   display: flex;
-  gap: var(--s15);
+  gap: var(--space-3);
   align-items: flex-end;
   flex-wrap: wrap;
 }
 .rule-form .form-group { margin: 0; flex: 1; min-width: 120px; }
-.rule-list-actions { display: flex; gap: var(--s10); }
+.rule-list-actions { display: flex; gap: var(--space-2); }
 
 /* --- モーダル (R14) --- */
 .modal-overlay {
@@ -450,13 +505,13 @@ a:hover { text-decoration: underline; }
 }
 .modal-content {
   background: var(--color-surface);
-  padding: var(--s30);
+  padding: var(--space-6);
   border-radius: var(--radius);
-  max-width: var(--sz--xs);
+  max-width: var(--container-xs);
   width: 90%;
 }
 
-/* --- レスポンシブ --- */
+/* --- レスポンシブ (ビューポート起因の切替のみ。grid 系は auto-fill/auto-fit で対応済み) --- */
 @media (max-width: 768px) {
   .sidebar { display: none; }
   .main-content { margin-left: 0; }
@@ -465,4 +520,16 @@ a:hover { text-decoration: underline; }
   .form-actions .btn { width: 100%; }
 }
 
-} /* end @layer lism-custom */
+} /* end @layer components */
+
+/* ============================ utilities ============================ */
+/* 旧 Lism Property Class (-d:inline, -my-e:15 等) の置換先。components より優先。 */
+@layer utilities {
+  .u-d-inline { display: inline; }
+  .u-ta-right { text-align: right; }
+  .u-mb-4  { margin-block: var(--space-4); }
+  .u-mbs-2 { margin-block-start: var(--space-2); }
+  .u-mbs-6 { margin-block-start: var(--space-6); }
+  .u-mbe-3 { margin-block-end: var(--space-3); }
+  .u-mbe-4 { margin-block-end: var(--space-4); }
+}
