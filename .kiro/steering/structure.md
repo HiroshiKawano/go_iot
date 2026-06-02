@@ -1,0 +1,65 @@
+# プロジェクト構造（structure.md）
+
+> ディレクトリ構成・view 層の設計・CSS 構造の規約。templ 実装はこの構造に従う。
+
+## ディレクトリ構成
+
+```
+go_iot/
+├── cmd/
+│   ├── server/main.go          エントリポイント（API配線済み、Web UI は実装予定）
+│   ├── seed/main.go            開発用シードデータ投入CLI
+│   └── gen-token/main.go       デバイスAPI用 Bearer トークン発行CLI
+├── internal/
+│   ├── config/                 環境変数読込・検証
+│   ├── domain/                 Metric / ComparisonOperator Enum
+│   ├── infra/{db,pgconv,token}/ pgxpool / 型変換 / トークン
+│   ├── auth/                   device_auth.go（Bearer）。session_auth.go は実装予定
+│   ├── handler/                HTTP ハンドラ
+│   ├── repository/             sqlc 生成コード（全34クエリ）
+│   ├── docs/                   OpenAPI YAML + Scalar（go:embed）
+│   ├── service/                アラート判定等のサービス置き場（実装予定）
+│   ├── middleware/             SessionLoad / MethodOverride 置き場（実装予定）
+│   └── view/                   ★templ 配置先（layout / component / page の3層）
+├── db/{migrations,queries}/    goose / sqlc 入力
+├── mocks/html/                 全9画面の静的HTMLモック + style.css（CSS自前・Lism非依存）
+├── .kiro/steering/             本ステアリング（tech.md / structure.md）
+├── 2cc_sdd/                    設計書群
+└── other/                      補助ドキュメント
+```
+
+## view 層の3層構成（`internal/view/`）
+
+| 層 | 役割 | 例 |
+|---|---|---|
+| **layout** | 共通レイアウト（children 受け取り型） | `App.templ`（認証後: header+sidebar+main枠）/ `Guest.templ`（login/register） |
+| **page** | フルページ画面 | `Dashboard.templ` / `DeviceShow.templ` / `Readings.templ` 等 |
+| **component** | 再利用部品・HTMX 部分更新ターゲット | `SiteHeader` / `Sidebar` / `Button` / `Card` / `DataTable` / `DeviceForm` 等 |
+
+### templ コンポーネントの規約
+
+- 部分テンプレートを別ファイル化せず、**ページ用 templ 内 or component に細分化した templ 関数**として定義し、Handler が `HX-Request` 有無で対象関数を直接 `Render` する。
+- HTMX 部分更新ターゲットの **id（ケバブケース）** と **templ 関数名（PascalCase）** を対応させる（例: `device-cards` → `DeviceCards`）。
+- 2配置パターン: メイン（innerHTML swap、コンテナ内側の中身を返す）/ OOB（outerHTML swap、`id` + `hx-swap-oob="true"` の要素全体を返す）。
+- `id` は HTMX 差し替え専用。**スタイリングには使わない**（R01/R02）。
+
+## CSS 構造（`mocks/html/style.css` → templ 共通CSSへ移植）
+
+- **Lism 非依存の素のモダンCSS**。詳細方針は [tech.md の「CSS 方針」](./tech.md) を参照（唯一の正）。
+- カスケード: `@layer reset, base, components, utilities;`
+- トークン（`--space-*` / `--fs-*` / `--radius` 等）は `:root`（base 層）に定義。
+- 部品スタイルは **`@layer components`**、ヘルパは **`@layer utilities`（`.u-*`）**。
+- ❌ templ の `css` スコープスタイル式は使わない（unlayered 問題）。コンポーネント固有CSSは `@layer components` へ追記。
+
+### クラス命名
+
+- 部品: `.card` / `.btn`（`.btn-primary` 等の variant）/ `.site-header` / `.data-table` …（独自命名、BEM 風）
+- ユーティリティ: `.u-*`（例: `.u-d-inline`, `.u-mbe-3`）
+- レイアウト固有値は `:root` のレイアウト変数（`--sidebar-width` 等）で管理。
+
+## 設計の前提（重要）
+
+- **外部キー制約は張らない**（参照整合性はアプリ層 JOIN で担保）。
+- **論理削除**（`deleted_at`）採用。sqlc クエリは常に `WHERE deleted_at IS NULL`。
+- マスターデータは DB テーブルではなく **Go 定数 + VARCHAR + CHECK 制約**。
+- 認証: ESP32 = 自作 Bearer（SHA-256）/ ブラウザ = Session（scs、実装予定）。
