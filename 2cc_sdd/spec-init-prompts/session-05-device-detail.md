@@ -15,7 +15,7 @@
 
 ## 背景・現状
 
-バックエンド（DB・sqlc全34クエリ・デバイスBearer認証・POST /api/sensor-data・CLI）はほぼ完成している。設計が想定する Web UI 層（scs Session未実装・templ画面未着手・HTMX属性0件・アラート判定接続）は全面未着手。internal/service, internal/middleware, internal/view は空。本セッションはS1基盤（セッション認証・ルーティング・エラーハンドリング）とS4デバイス登録編集の後に実行し、/devices/{device} エンドポイントを通じてtempl + HTMX + Alpine.js の統合を初めて具体化する。
+バックエンド（DB・sqlc全37クエリ・デバイスBearer認証・POST /api/sensor-data・CLI）はほぼ完成している。設計が想定する Web UI 層（scs Session未実装・templ画面未着手・HTMX属性0件・アラート判定接続）は全面未着手。internal/service, internal/middleware, internal/view は空。本セッションはS1基盤（セッション認証・ルーティング・エラーハンドリング）とS4デバイス登録編集の後に実行し、/devices/{device} エンドポイントを通じてtempl + HTMX + Alpine.js の統合を初めて具体化する。
 
 ## このセッションのスコープ（実装対象）
 

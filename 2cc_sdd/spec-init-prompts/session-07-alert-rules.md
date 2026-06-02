@@ -15,7 +15,7 @@
 ## 背景・現状
 
 ### 既実装（S1基盤で用意済み）
-- PostgreSQL テーブル alert_rules（id/device_id/metric/operator/threshold/is_enabled/created_at/updated_at/deleted_at）、全34 sqlc クエリ
+- PostgreSQL テーブル alert_rules（id/device_id/metric/operator/threshold/is_enabled/created_at/updated_at/deleted_at）、全37 sqlc クエリ
 - domain.Metric（温度/湿度）と domain.ComparisonOperator（>/</>=/<= を記号で DB 値として格納）、Label()/Unit() メソッド完成
 - scs セッションミドルウェア導入予定（session_auth.go 未作成）
 - CSRF ミドルウェア採用方針（ライブラリ未確定）、MethodOverride ミドルウェア採用方針（方式未確定）

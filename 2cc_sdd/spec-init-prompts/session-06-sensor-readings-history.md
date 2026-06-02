@@ -19,7 +19,7 @@
 
 ## 背景・現状
 
-- **バックエンド完成状態**: DB 6テーブル・sqlc 全34クエリが実装済み。`ListSensorReadingsPaginated`（LIMIT 20 OFFSET）、`GetSensorReadingsSummary`（平均/最高/最低）、`CountSensorReadingsInRange`（総件数）はすべて用意済み。
+- **バックエンド完成状態**: DB 6テーブル・sqlc 全37クエリが実装済み。`ListSensorReadingsPaginated`（LIMIT 20 OFFSET）、`GetSensorReadingsSummary`（平均/最高/最低）、`CountSensorReadingsInRange`（総件数）はすべて用意済み。
 - **フロントエンド未着手**: `internal/view/` は空。templ コンポーネント・レイアウト、ミドルウェア（SessionLoad / MethodOverride）は S1 で準備予定。本セッションはそれ以降を想定。
 - **モック完成**: `mocks/html/readings.html` は静的 HTMLモック完成。素のモダンCSS（`mocks/html/style.css` の自前トークン + `@layer` カスケード）+ クラスセレクタのみで id 属性ゼロ。HTMX 属性はまだなく、templ 変換時に付与する。スタイルは class のみで行い、id はスタイリングに使わない（HTMX 差し替え専用）。
 - **位置づけ**: S5（device-detail）の「詳細情報表示」から「もっと見る」リンクで遷移してくる。初期表示は日付フィルタなし・全期間最新順。

@@ -15,7 +15,7 @@
 ## 背景・現状
 
 **実装現状（実装現状サマリ §1 / §5-5 / §9 より）:**
-- バックエンド API 層（6テーブル・sqlc 全34クエリ・デバイス Bearer 認証・POST /api/sensor-data）はほぼ実装完了。
+- バックエンド API 層（6テーブル・sqlc 全37クエリ・デバイス Bearer 認証・POST /api/sensor-data）はほぼ実装完了。
 - `SESSION_SECRET` は `config.Load()` で検証済みだが、`main.go` では未使用のままである（Web UI 未実装のため）。
 - `cmd/server/main.go` はプレースホルダ `/` で固定文字列を返すだけ。Web UI ルーターグループが存在しない。
 - `internal/view/`、`internal/middleware/`、`internal/auth/session_auth.go` は全て空もしくは未作成。
