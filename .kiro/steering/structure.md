@@ -14,7 +14,8 @@ go_iot/
 │   ├── config/                 環境変数読込・検証
 │   ├── domain/                 Metric / ComparisonOperator Enum
 │   ├── infra/{db,pgconv,token}/ pgxpool / 型変換 / トークン
-│   ├── auth/                   device_auth.go（Bearer）。session_auth.go は実装予定
+│   ├── auth/                   認証(authN): device_auth.go（Bearer）+ SetUserID。session_auth.go は実装予定
+│   ├── authz/                  認可(authZ): 所有者認可(BOLA防止)を集約（RequireDeviceOwner）
 │   ├── handler/                HTTP ハンドラ
 │   ├── repository/             sqlc 生成コード（全37クエリ）
 │   ├── docs/                   OpenAPI YAML + Scalar（go:embed）
@@ -23,7 +24,7 @@ go_iot/
 │   └── view/                   ★templ 配置先（layout / component / page の3層）
 ├── db/{migrations,queries}/    goose / sqlc 入力
 ├── mocks/html/                 全9画面の静的HTMLモック + style.css（CSS自前・Lism非依存）
-├── .kiro/steering/             本ステアリング（tech.md / structure.md）
+├── .kiro/steering/             本ステアリング（product.md / tech.md / structure.md）
 ├── 2cc_sdd/                    設計書群
 └── other/                      補助ドキュメント
 ```
@@ -51,6 +52,10 @@ go_iot/
 4. **view → repository / service を禁止**。view（templ）は handler が渡した表示用データのみを描画する。
    - 許可: `view → domain の表示メソッド`（例: `Metric.Label()` / `Metric.Unit()` 等の表示専用メソッド）。
    - 禁止: view から DB アクセス（repository）やビジネスロジック（service）を直接呼ぶこと。
+
+5. **所有者認可（BOLA 防止）は `internal/authz` に集約**。`device.UserID != userID` の類の所有者チェックを各ハンドラへ散らさず、`authz.RequireDeviceOwner` 等を再利用する（散在は BOLA = Broken Object Level Authorization の温床）。
+   - ハンドラは sentinel error（`ErrUnauthenticated` / `pgx.ErrNoRows` / `ErrNotOwner`）を HTTP ステータス（401 / 404・422 / 403）へ写すだけにする。
+   - `authz` の consumer は最小 interface（`DeviceGetter` 等）に依存し、`userID<=0`（未認証）は所有者判定の前に fail-closed する。
 
 ## view 層の3層構成（`internal/view/`）
 
