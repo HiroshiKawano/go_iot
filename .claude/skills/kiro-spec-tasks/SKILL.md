@@ -35,6 +35,12 @@ Otherwise, load all necessary context:
 - If auto-approve flag (`-y`) is true: Auto-approve requirements and design in spec.json. Tasks approval is also handled automatically in Step 4.
 - Otherwise: Verify both approved (stop if not, see Safety & Fallback)
 
+> **【本プロジェクト固有・必須】HTMX実装ガイド参照（cc-sdd 既知の落とし穴回避）**
+>
+> templ + HTMX + Alpine.js の既知の落とし穴は `2cc_sdd/HTMX実装ガイド(動的).md` に集約されている。タスク分解前に、まず同書冒頭の `## cc-sdd参照ガイド`（★付き索引・約60行）を読み、`design.md` が依拠している節（§2 変換ルール / templ 分割、§3 id属性一覧、§4 画面別HTMX操作仕様、§7 バリデーション、§8 CSRF、Tom Select 画面は §16・C12）を確認すること。ガイド全体（約288KB）は丸読みせず、索引 → 該当節に絞る。
+>
+> ガイドの該当節を、タスク粒度・順序・依存（部分コンポーネント返却の単位、OOB エンドポイント、Tom Select 再初期化のグローバル JS 前提、422+部分返却のエラー表示 等）が漏れなく executable なタスクとして表れているかの検証根拠に用いる。
+
 ### Step 2: Generate Implementation Tasks
 
 - Read `rules/tasks-generation.md` from this skill's directory for principles

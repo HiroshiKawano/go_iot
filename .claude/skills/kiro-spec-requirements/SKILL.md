@@ -29,6 +29,12 @@ Otherwise, load all necessary context:
 - Additional steering files only when directly relevant to feature scope, user personas, business/domain rules, compliance/security constraints, operational constraints, or existing product boundaries
 - Relevant local agent skills or playbooks only when they clearly match the feature's host environment or use case and contain domain terminology or workflow rules that shape user-observable requirements
 
+> **【本プロジェクト固有・必須】HTMX実装ガイド参照（cc-sdd 既知の落とし穴回避）**
+>
+> templ + HTMX + Alpine.js の既知の落とし穴は `2cc_sdd/HTMX実装ガイド(動的).md` に集約されている。requirements 生成前に、まず同書冒頭の `## cc-sdd参照ガイド`（★付き索引・約60行）を読み、対象画面に関係する節（特に §4 画面別HTMX操作仕様・§7 バリデーションエラー表示）を確認すること。ガイド全体（約288KB）は丸読みせず、索引 → 該当節に絞る。
+>
+> ただし requirements は **WHAT（ユーザーに見える振る舞い・境界）** を書く層であり、HOW（実装詳細）は持ち込まない。ガイドはここでは「どの操作が HTMX 部分更新か / フルページ遷移か」「バリデーション表示方式が体験に与える影響」など、**ユーザー観測可能な振る舞いと境界の判断**にのみ用いる。実装パターンの詳細は design フェーズで参照する。
+
 ### Step 2: Read Guidelines
 - Read `rules/ears-format.md` from this skill's directory for EARS syntax rules
 - Read `rules/requirements-review-gate.md` from this skill's directory for pre-write review criteria

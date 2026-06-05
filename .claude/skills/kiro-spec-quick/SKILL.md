@@ -26,6 +26,10 @@ Execute 4 spec phases sequentially. In automatic mode, execute all phases withou
 
 Before claiming quick generation is complete, run one lightweight sanity review over the generated requirements, design, and tasks. If the host supports fresh subagents, use one. Otherwise run the sanity review inline.
 
+> **【本プロジェクト固有・必須】HTMX実装ガイド参照（cc-sdd 既知の落とし穴回避）**
+>
+> 本コマンドは requirements → design → tasks を一括生成する。各フェーズで templ + HTMX + Alpine.js の既知の落とし穴を回避するため、`2cc_sdd/HTMX実装ガイド(動的).md` を参照すること。Phase 2/3/4 が Skill ツール経由で呼ぶ `/kiro-spec-requirements` `/kiro-spec-design` `/kiro-spec-tasks` は各々この参照ルールを内蔵しているが、自動モードでも省略しないこと。最低限、design フェーズ（Phase 3）の前に同書冒頭の `## cc-sdd参照ガイド`（★付き索引・約60行）→ 対象画面の該当★★★節を読む。ガイド全体（約288KB）は丸読みしない。
+
 ## Execution Steps
 
 ### Step 1: Parse Arguments and Initialize

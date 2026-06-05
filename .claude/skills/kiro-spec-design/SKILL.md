@@ -31,6 +31,16 @@ Otherwise, load all necessary context:
 - Read `rules/design-principles.md` from this skill's directory for design principles
 - `.kiro/settings/templates/specs/research.md` for discovery log structure
 
+> **【本プロジェクト固有・必須】HTMX実装ガイド参照（cc-sdd 既知の落とし穴回避）**
+>
+> templ + HTMX + Alpine.js の動的実装には既知の落とし穴が多数あり、`2cc_sdd/HTMX実装ガイド(動的).md` に集約されている。設計（Handler の部分返却・templ コンポーネント分割・ルーティング・HTMX 属性・バリデーション・CSRF）を書く前に、**必ず**次を行うこと:
+> 1. まず同書冒頭の `## cc-sdd参照ガイド`（優先度★付きセクション索引・約60行）を読む。
+> 2. 対象画面の `2cc_sdd/spec-init-prompts/session-*.md` または `.kiro/specs/{feature}/brief.md` が参照すべき節を行番号付きで列挙していれば、その節を読む。
+> 3. 列挙がなければ、索引から対象画面に該当する ★★★ 節を選んで読む（§2 モック→templ+HTMX 変換ルール / templ コンポーネント分割 / 命名規約、§3 id属性一覧、§4 画面別HTMX操作仕様、§7 バリデーションエラー表示、§8 CSRF）。Tom Select を使う画面は §16・C12 も読む。
+> 4. ガイド全体（約288KB）は丸読みしない。索引 → 該当節に絞ること。
+>
+> 読んだ節とそこから得た設計制約（HTMX 化する操作 / フルページ操作、422+部分返却方式、OOB エンドポイント、Tom Select 再初期化方針 等）は `research.md` の Discovery 所見に記録し、`design.md` の該当判断の根拠とする。
+
 **Validate requirements approval**:
 - If auto-approve flag is true: Auto-approve requirements in spec.json
 - Otherwise: Verify approval status (stop if unapproved, see Safety & Fallback)
