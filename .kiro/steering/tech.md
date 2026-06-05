@@ -90,7 +90,19 @@ templ + HTMX + Alpine.js の**動的振る舞い**（部分更新・モーダル
 - cc-sdd の **design / tasks** を書く際は、まず同書冒頭の `## cc-sdd参照ガイド`（優先度★付きセクション索引）を読み、対象画面の該当節を参照すること。特に ★★★: §2 モック→templ+HTMX 変換ルール / templ コンポーネント分割 / 命名規約、§3 id属性一覧、§4 画面別HTMX操作仕様、§7 バリデーションエラー表示、§8 CSRF。Tom Select を使う画面は §16・C12。
 - **requirements** では、HTMX 部分更新 / フルページ遷移の別やバリデーション表示方式など「ユーザー観測可能な振る舞い・境界」の把握に留め、実装詳細は持ち込まない（WHAT/HOW 分離）。
 - ガイドは約288KB。**丸読みせず索引 → 該当節に絞る**こと。画面ごとの参照節は `2cc_sdd/spec-init-prompts/session-*.md` が行番号付きで列挙している。
-- 強制手段（多層）: `/kiro-spec-{requirements,design,quick,tasks}` 実行時に上記参照を `.claude/hooks/inject-htmx-guide-ref.sh`（UserPromptSubmit フック）が自動注入し、各 SKILL.md の Step 1 にも必須参照ステップを内蔵している。
+- 強制手段（多層）: `/kiro-spec-{requirements,design,quick,tasks}` 実行時に、本書の HTMX実装ガイド参照と後述の DBスキーマ現状参照を `.claude/hooks/inject-cc-sdd-refs.sh`（UserPromptSubmit フック）が自動注入し、各 SKILL.md の Step 1 にも必須参照ステップを内蔵している。
+
+---
+
+## DBスキーマ現状の参照（cc-sdd 必読・存在しないカラム/型の防止）
+
+cc-sdd の design / tasks でデータモデルを設計する際、**存在しないカラム・型・テーブルを選ばない**ため、`docs/database_snapshot/` を**権威ある現状スキーマ**として参照する（過去に別プロジェクトで実在しないカラム/型が選定された事故への対策）。
+
+- `docs/database_snapshot/table_definitions.md`（約190行・全読み可）= テーブル・カラム・型・NULL・デフォルト・索引・CHECK 制約（enum 許容値）の現状。`docs/database_snapshot/er_diagram.mmd` = 論理リレーション。
+- 設計・タスクで参照するテーブル/カラム/型は、必ず本ファイルに**実在する**ものに限る。enum 的な値は CHECK 制約の許容リストに従う（例: metric=temperature/humidity、operator=>,<,>=,<=）。
+- 新規カラム/型/テーブルが要る場合は、それを既存前提にせず **migration 追加（`db/migrations/`）を明示的な設計判断/タスク**として記述し、`make db-snapshot` で再生成する。
+- スナップショットは `make db-snapshot` で自動生成（手動編集しない）。マイグレーション変更後は必ず再生成。
+- requirements では「実在するデータ項目の範囲」の把握に留め、カラム/型の選定は持ち込まない（WHAT/HOW 分離）。CLAUDE.md「DB Schema Reference」と整合。
 
 ---
 

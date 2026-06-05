@@ -35,6 +35,10 @@ Otherwise, load all necessary context:
 >
 > ただし requirements は **WHAT（ユーザーに見える振る舞い・境界）** を書く層であり、HOW（実装詳細）は持ち込まない。ガイドはここでは「どの操作が HTMX 部分更新か / フルページ遷移か」「バリデーション表示方式が体験に与える影響」など、**ユーザー観測可能な振る舞いと境界の判断**にのみ用いる。実装パターンの詳細は design フェーズで参照する。
 
+> **【本プロジェクト固有・必須】DBスキーマ現状参照（存在しないカラム/型の防止）**
+>
+> `docs/database_snapshot/table_definitions.md`（権威ある現状スキーマ・約190行・全読み可）を確認し、要件で扱うデータ項目が実在するテーブル/カラムに対応するか把握する。ただしカラム/型の選定は design 層の仕事であり requirements には持ち込まない（WHAT/HOW 分離）。
+
 ### Step 2: Read Guidelines
 - Read `rules/ears-format.md` from this skill's directory for EARS syntax rules
 - Read `rules/requirements-review-gate.md` from this skill's directory for pre-write review criteria

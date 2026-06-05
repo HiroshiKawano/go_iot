@@ -41,6 +41,10 @@ Otherwise, load all necessary context:
 >
 > ガイドの該当節を、タスク粒度・順序・依存（部分コンポーネント返却の単位、OOB エンドポイント、Tom Select 再初期化のグローバル JS 前提、422+部分返却のエラー表示 等）が漏れなく executable なタスクとして表れているかの検証根拠に用いる。
 
+> **【本プロジェクト固有・必須】DBスキーマ現状参照（存在しないカラム/型の防止）**
+>
+> `docs/database_snapshot/table_definitions.md` を権威ある現状スキーマとして読み、design が参照するテーブル/カラム/型と整合するタスクか確認する。スキーマ変更が必要な箇所は migration 追加タスク（`db/migrations/`）と `make db-snapshot` 再生成を明示する。存在しないカラム/型を前提にしたタスクを作らない。
+
 ### Step 2: Generate Implementation Tasks
 
 - Read `rules/tasks-generation.md` from this skill's directory for principles

@@ -29,6 +29,8 @@ Before claiming quick generation is complete, run one lightweight sanity review 
 > **【本プロジェクト固有・必須】HTMX実装ガイド参照（cc-sdd 既知の落とし穴回避）**
 >
 > 本コマンドは requirements → design → tasks を一括生成する。各フェーズで templ + HTMX + Alpine.js の既知の落とし穴を回避するため、`2cc_sdd/HTMX実装ガイド(動的).md` を参照すること。Phase 2/3/4 が Skill ツール経由で呼ぶ `/kiro-spec-requirements` `/kiro-spec-design` `/kiro-spec-tasks` は各々この参照ルールを内蔵しているが、自動モードでも省略しないこと。最低限、design フェーズ（Phase 3）の前に同書冒頭の `## cc-sdd参照ガイド`（★付き索引・約60行）→ 対象画面の該当★★★節を読む。ガイド全体（約288KB）は丸読みしない。
+>
+> **DBスキーマ現状**: 各フェーズで `docs/database_snapshot/table_definitions.md`（権威ある現状スキーマ・約190行）を参照し、**存在しないカラム/型を選ばない**。特に design（Phase 3）の前に必読。スキーマ変更が要る場合は migration 追加タスク（`db/migrations/`）を明示する。各 phase の SKILL.md もこの参照ルールを内蔵している。
 
 ## Execution Steps
 

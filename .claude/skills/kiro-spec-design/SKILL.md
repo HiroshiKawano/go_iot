@@ -41,6 +41,10 @@ Otherwise, load all necessary context:
 >
 > 読んだ節とそこから得た設計制約（HTMX 化する操作 / フルページ操作、422+部分返却方式、OOB エンドポイント、Tom Select 再初期化方針 等）は `research.md` の Discovery 所見に記録し、`design.md` の該当判断の根拠とする。
 
+> **【本プロジェクト固有・必須】DBスキーマ現状参照（存在しないカラム/型の防止）**
+>
+> データモデル設計の前に `docs/database_snapshot/table_definitions.md`（権威ある現状スキーマ・約190行・全読み可）と `docs/database_snapshot/er_diagram.mmd`（論理リレーション）を**必ず**読む。設計で参照するテーブル/カラム/型は本ファイルに**実在する**ものに限り、スナップショットに無いものを発明しない。enum 的な値は CHECK 制約の許容リストに従う（例: metric=temperature/humidity、operator=>,<,>=,<=）。新規カラム/型/テーブルが必要なら、それを既存前提にせず migration 追加（`db/migrations/`）を明示的な設計判断・タスクとして記述し、再生成は `make db-snapshot`。
+
 **Validate requirements approval**:
 - If auto-approve flag is true: Auto-approve requirements in spec.json
 - Otherwise: Verify approval status (stop if unapproved, see Safety & Fallback)

@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/inject-htmx-guide-ref.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/inject-cc-sdd-refs.sh\""
           }
         ]
       }
