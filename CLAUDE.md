@@ -7,6 +7,14 @@ Kiro-style Spec-Driven Development on an agentic SDLC
 ### Paths
 - Steering: `.kiro/steering/`
 - Specs: `.kiro/specs/`
+- DB snapshot: `docs/database_snapshot/`
+
+### DB Schema Reference (IMPORTANT)
+- **実DB に接続・クエリする前に、必ず `docs/database_snapshot/` を読むこと。** 全テーブルのカラム・型・デフォルト・索引・CHECK 制約・論理リレーションが記録された自動生成スナップショットがある。
+  - `table_definitions.md` — テーブル定義 (カラム/型/NULL/デフォルト/コメント/索引/CHECK)
+  - `er_diagram.mmd` — Mermaid ER 図 (論理リレーション)
+- スナップショットは `make db-snapshot` で再生成される (実DB を内省: `cmd/db-snapshot` + `internal/dbsnapshot`)。**マイグレーション (`db/migrations/`) を変更したら必ず再生成すること。**
+- 設計 (`/kiro-spec-design` 等) や実装時は、このスナップショットを権威ある現状スキーマとして参照する。`db/migrations/*.sql`・`db/queries/*.sql`・`internal/repository/`(sqlc 生成) も併せて正とする。
 
 ### Steering vs Specification
 

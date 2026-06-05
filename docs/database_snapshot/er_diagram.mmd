@@ -1,0 +1,74 @@
+erDiagram
+%% DBスナップショット — ER図 (Mermaid)。make db-snapshot で自動生成。手動編集しない。
+%% 外部キー制約は張らない方針のため、関連は <table>_id 命名からの推論（論理リレーション）。
+    alert_histories {
+        bigint id PK
+        bigint alert_rule_id FK
+        varchar metric
+        varchar operator
+        numeric threshold
+        numeric actual_value
+        boolean is_notified
+        timestamptz triggered_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+    alert_rules {
+        bigint id PK
+        bigint device_id FK
+        varchar metric
+        varchar operator
+        numeric threshold
+        boolean is_enabled
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+    device_tokens {
+        bigint id PK
+        bigint user_id FK
+        varchar name
+        varchar token_hash
+        jsonb abilities
+        timestamptz last_used_at
+        timestamptz expires_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    devices {
+        bigint id PK
+        bigint user_id FK
+        varchar name
+        varchar mac_address
+        varchar location
+        boolean is_active
+        timestamptz last_communicated_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+    sensor_readings {
+        bigint id PK
+        bigint device_id FK
+        numeric temperature
+        numeric humidity
+        timestamptz recorded_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+    users {
+        bigint id PK
+        varchar name
+        varchar email
+        varchar password_hash
+        timestamptz email_verified_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    alert_rules ||--o{ alert_histories : alert_rule_id
+    devices ||--o{ alert_rules : device_id
+    users ||--o{ device_tokens : user_id
+    users ||--o{ devices : user_id
+    devices ||--o{ sensor_readings : device_id

@@ -1,4 +1,4 @@
-.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status sqlc templ clean
+.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status sqlc templ db-snapshot clean
 
 # .env を読み込む (存在すれば)
 ifneq (,$(wildcard .env))
@@ -66,6 +66,10 @@ sqlc: ## sqlc でリポジトリコード生成
 
 templ: ## templ でテンプレートコード生成
 	go tool templ generate
+
+## --- DBスナップショット (AI/開発者向けスキーマ資産) ---
+db-snapshot: ## 実DBを内省し docs/database_snapshot/ にテーブル定義+ER図を生成 (要 make up + migrate-up)
+	@bash scripts/db-snapshot.sh
 
 ## --- クリーンアップ ---
 clean: ## ビルド成果物を削除
