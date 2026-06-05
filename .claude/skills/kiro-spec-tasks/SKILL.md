@@ -2,7 +2,7 @@
 name: kiro-spec-tasks
 description: Generate implementation tasks from requirements and design. Use when creating actionable task lists.
 allowed-tools: Read, Write, Edit, Glob, Grep, Agent
-argument-hint: <feature-name> [-y] [--sequential]
+argument-hint: <feature-name> [-y] [--parallel]
 metadata:
   shared-rules: "tasks-generation.md, tasks-parallel-analysis.md"
 ---
@@ -28,8 +28,9 @@ Otherwise, load all necessary context:
 - Core steering context: `product.md`, `tech.md`, `structure.md`
 - Additional steering files only when directly relevant to requirements coverage, design boundaries, runtime prerequisites, or team conventions that affect task executability
 
-- Determine execution mode:
-  - `sequential = (sequential flag is true)`
+- Determine execution mode（**本プロジェクトの既定は逐次 sequential**。タスクを上から1行ずつ `/tdd` で実装するため `(P)` 並列マーカーを付けない）:
+  - `parallel = (--parallel flag is present)`（既定は false）
+  - `sequential = (not parallel)`（既定は true。`--sequential` を明示しても可＝既定と同じ）
 
 **Validate approvals**:
 - If auto-approve flag (`-y`) is true: Auto-approve requirements and design in spec.json. Tasks approval is also handled automatically in Step 4.
@@ -66,9 +67,9 @@ After all parallel research completes, synthesize findings before generating tas
 - Verify task progression is logical and incremental
 - Ensure each executable sub-task includes at least one detail bullet that states what "done" looks like in observable terms
 - Keep normal implementation tasks within a single responsibility boundary; if work crosses boundaries, make it an explicit integration task
-- Apply `(P)` markers to tasks that satisfy parallel criteria when `!sequential`
-- Explicitly note dependencies preventing `(P)` when tasks appear parallel but are not safe
-- If sequential mode is true, omit `(P)` entirely
+- **既定（sequential）では `(P)` 並列マーカーを一切付けない**。タスクは番号の昇順がそのまま実装順になるよう、依存が自然な順序に並ぶ番号付けにする（上から1行ずつ `/tdd` で実装する前提）。
+- `--parallel` が明示されたときのみ、parallel criteria を満たすタスクに `(P)` を付与し、並列に見えて安全でない依存は明示する。
+- 各 executable サブタスクは `/tdd` の1サイクル（先にテスト→最小実装→リファクタ）で完了できる粒度・単一責務にする。
 - If existing tasks.md found, merge with new content
 
 ### Step 3: Review Task Plan

@@ -80,6 +80,7 @@ Focus on capabilities and outcomes, not code structure.
 - **Major tasks**: As many sub-tasks as logically needed (group by cohesion)
 - **Sub-tasks**: 1-3 hours each, 3-10 details per sub-task
 - Balance between too granular and too broad
+- 本プロジェクトは各 executable サブタスクを **`/tdd` の1サイクルで完了できる粒度**（先にテストを書ける単一の観測可能な振る舞い）にする。1サブタスクに複数の独立検証可能な成果を詰め込まない。
 
 **Don't force arbitrary numbers** - let logical grouping determine structure.
 
@@ -162,8 +163,10 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - Sub-tasks reset per major task: 1.1, 1.2, then 2.1, 2.2...
 - Never repeat major task numbers
 
-### Parallel Analysis (default)
-- Assume parallel analysis is enabled unless explicitly disabled (e.g. `--sequential` flag).
+### Parallel Analysis（本プロジェクトは既定で無効＝逐次）
+- **本プロジェクトはタスクを上から1行ずつ `/tdd`（テスト駆動）で実装するため、既定で逐次（sequential）とし `(P)` 並列マーカーを付けない。** 並列分析は `--parallel` を明示したときのみ有効化する。
+- 既定（逐次）では: タスクは番号の昇順がそのまま実装順になるよう並べ、各 executable サブタスクは直前までの成果に積み上がる**単一の TDD サイクル（RED→GREEN→REFACTOR）**として完結させる。`(P)` は付けない。
+- 以下の `(P)` 付与基準は `--parallel` 指定時のみ適用する。
 - `(P)` means: this task has no dependency on its immediately preceding peers and can run concurrently with them.
 - Identify tasks that can run concurrently when **all** conditions hold:
   - No data dependency on other pending tasks

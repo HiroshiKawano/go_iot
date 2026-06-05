@@ -3,6 +3,8 @@
 ## Purpose
 Provide a consistent way to identify implementation tasks that can be safely executed in parallel while generating `tasks.md`.
 
+> **本プロジェクトの既定は逐次（sequential）**: タスクは上から1行ずつ `/tdd` で実装するため、既定では `(P)` を付けない。本ルールは `--parallel` を明示したときのみ適用する。
+
 ## Relationship to Task Ordering
 
 `(P)` means: this task has no dependency on its immediately preceding peers and can run concurrently with them. The Task Ordering Principle (see tasks-generation.md) ensures Foundation-phase tasks run first, making Core-phase tasks the primary `(P)` candidates.

@@ -19,6 +19,6 @@ Use whichever pattern fits the work breakdown:
   - _Boundary: {{COMPONENT_NAMES}}_ *(Only for (P) tasks. Omit when scope is obvious.)*
   - _Depends: {{TASK_IDS}}_ *(Only for non-obvious cross-boundary dependencies. Most tasks omit this.)*
 
-> **Parallel marker**: Append ` (P)` only to tasks that can be executed in parallel. Omit the marker when running in `--sequential` mode.
+> **Parallel marker**: 本プロジェクトは既定で**逐次（sequential）**（上から1行ずつ `/tdd` で実装）。**既定では ` (P)` を付けない**。`--parallel` を明示したときのみ、並列実行可能なタスクに ` (P)` を付ける（その場合 `{{PARALLEL_MARK}}`/`{{SUB_PARALLEL_MARK}}` を使用）。
 >
 > **Optional test coverage**: When a sub-task is deferrable test work tied to acceptance criteria, mark the checkbox as `- [ ]*` and explain the referenced requirements in the detail bullets.

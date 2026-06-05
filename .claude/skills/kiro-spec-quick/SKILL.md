@@ -145,6 +145,7 @@ Wait for completion. IGNORE any "Next Step" message.
 Invoke `/kiro-spec-tasks {feature-name} -y` via the Skill tool.
 
 Note: `-y` flag auto-approves requirements, design, and tasks.
+Note: 本プロジェクトの既定は逐次（sequential）。生成タスクは `(P)` 並列マーカーを付けず、上から1行ずつ `/tdd` で実装できる順序にする（並列が必要な場合のみ `--parallel` を付けて呼ぶ）。
 
 Wait for completion.
 
