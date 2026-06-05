@@ -41,7 +41,7 @@ Requirements should clarify the feature boundary in user- or operator-observable
 Before applying judgment, verify these mechanically:
 - **Numeric IDs present**: Every requirement heading has a numeric ID (1, 1.1, 2, etc.). Scan the draft for headings without IDs.
 - **Acceptance criteria exist**: Every requirement has at least one EARS-format acceptance criterion. Scan for requirements with no "When/If/While/Where" acceptance statements.
-- **No implementation language**: Scan for technology-specific terms (database names, framework names, API patterns) that belong in design, not requirements. Flag any found.
+- **No implementation language**: Scan for technology-specific terms (database names, framework names, internal REST ルーティング/エンドポイント命名/ハンドラ構造) that belong in design, not requirements. Flag any found. ただし**ユーザー/オペレーターから観測可能なインターフェース種別**（画面表示か、デバイス向けの機械間 API か、Bearer トークン認証の有無）は要件として明示してよい（実装詳細ではなく観測可能な境界差）。
 
 ## Review Loop
 

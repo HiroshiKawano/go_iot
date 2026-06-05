@@ -10,10 +10,10 @@
 - Do not leak downstream-specific behavior or assumptions into upstream boundaries
 
 ### 1. Type Safety is Mandatory
-- **NEVER** use `any` type in TypeScript interfaces
-- Define explicit types for all parameters and returns
-- Use discriminated unions for error handling
-- Specify generic constraints clearly
+- 公開シグネチャ（関数・メソッド・interface）は明示的な型を持つ。Go では `interface{}` / `any` への退避を避け、最小の interface を定義する。
+- すべてのパラメータと戻り値に明示的な型を定義する。
+- エラーは Go の `error` 値（センチネル / 型付きエラー + `errors.Is`/`errors.As`）で判別可能に表現する。
+- ジェネリクスを使う場合は型制約を明記する。
 
 ### 2. Design vs Implementation
 - **Focus on WHAT, not HOW**
@@ -57,7 +57,7 @@
 - **Contract Visibility**: Surface API and event contracts in design.md while linking extended details from `research.md`
 
 ### 8. Dependency Direction
-- **Define and enforce the dependency direction** in the architecture section of design.md (e.g., Types → Config → Repository → Service → Runtime → UI)
+- **Define and enforce the dependency direction** in the architecture section of design.md（本プロジェクトは structure.md steering のレイヤ方向に従う。例: `handler → service → repository.Querier`（sqlc ポート）、`domain` は上位から参照のみ、認可は `internal/authz` に集約。厳格 Clean / Hexagonal ではなく実務的 Layered-lite）
 - Each layer imports only from layers to its left — never upward
 - This constraint is not a suggestion; implementation and review should treat violations as errors
 - When the File Structure Plan maps files to components, the dependency direction determines which imports are allowed
@@ -116,7 +116,7 @@
 - Dependencies table must mark each entry as Inbound/Outbound/External and assign Criticality (`P0` blocking, `P1` high-risk, `P2` informational).
 - Summaries of external dependency research stay here; detailed investigation (API signatures, rate limits, migration notes) belongs in `research.md`.
 - design.md must remain a self-contained reviewer artifact. Reference `research.md` only for background, and restate any conclusions or decisions here.
-- Contracts: tick only the relevant types (Service/API/Event/Batch/State). Unchecked types should not appear later in the component section.
+- Contracts: tick only the relevant types (View/Template / Service / API(JSON) / Event / Batch / State). Web UI 画面は **View/Template**（templ 返却・HTMX 部分更新）で記述し、`API(JSON)` はデバイス取込API・ドキュメント専用とする。Unchecked types should not appear later in the component section.
 - Service interfaces must declare method signatures, inputs/outputs, and error envelopes. API/Event/Batch contracts require schema tables or bullet lists covering trigger, payload, delivery, idempotency.
 - Use **Integration & Migration Notes**, **Validation Hooks**, and **Open Questions / Risks** to document rollout strategy, observability, and unresolved decisions.
 - Detail density rules:
@@ -125,10 +125,10 @@
 - Implementation Notes must combine Integration / Validation / Risks into a single bulleted subsection to reduce repetition.
 - Prefer lists or inline descriptors for short data (dependencies, contract selections). Use tables only when comparing multiple items.
 
-### Shared Interfaces & Props
-- Define a base interface (e.g., `BaseUIPanelProps`) for recurring UI components and extend it per component to capture only the deltas.
-- Hooks, utilities, and integration adapters that introduce new contracts should still include full TypeScript signatures.
-- When reusing a base contract, reference it explicitly (e.g., “Extends `BaseUIPanelProps` with `onSubmitAnswer` callback”) instead of duplicating the code block.
+### Shared UI Component Contracts（templ）
+- 繰り返し使う templ コンポーネントは**共通パラメータ struct**（Go struct）を定義し、コンポーネントごとに差分フィールドを追加する。React の props 継承階層ではなく、struct 埋め込み / 共有パラメータで再利用する。
+- HTMX フラグメントを返すハンドラ・ユーティリティ・外部連携アダプタが新しい契約を導入する場合は、Go の関数 / interface シグネチャで契約を明記する。
+- 共通レイアウトや共有 struct を再利用する場合は、コードブロックを複製せず明示的に参照する（例: 「共通 `PageLayout` を埋め込み、`DeviceFilter` を追加」）。
 
 ### Data Models
 - Domain Model covers aggregates, entities, value objects, domain events, and invariants. Add Mermaid diagrams only when relationships are non-trivial.

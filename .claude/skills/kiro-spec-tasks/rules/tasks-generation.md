@@ -27,6 +27,7 @@ Focus on capabilities and outcomes, not code structure.
 
 **Tasks must follow this phase order**:
 1. **Foundation**: Environment setup, test infrastructure, shared utilities, database schema, configuration
+   - 本プロジェクトの生成依存順を Foundation 内で守る: **goose migration 定義 → `make db-snapshot` 再生成 → `sqlc generate`（`repository.Querier`/モデル生成）→ `templ generate` → 生成物を消費する実装**。コード生成タスクは消費側より前に置く。
 2. **Core**: Primary feature implementation (parallel-capable tasks grouped here)
 3. **Integration**: Wiring components together, cross-boundary connections
 4. **Validation**: E2E tests, edge cases, regression checks
@@ -62,6 +63,7 @@ Focus on capabilities and outcomes, not code structure.
 
 **Each task should declare its component boundary** using design.md component/module names:
 - `_Boundary: AuthService_` or `_Boundary: API Layer, UserRepository_`
+- 本プロジェクトでは実在する境界名を使う: templ コンポーネント / Gin handler（ルートグループ）/ `repository.Querier`（sqlc ポート）/ `internal/authz`。Web UI タスクは画面・部分テンプレ単位で境界を切る。
 - Helps validate parallel safety: tasks with non-overlapping boundaries are parallel candidates
 - Helps agents understand scope: what to touch and what not to touch
 
@@ -92,6 +94,7 @@ Focus on capabilities and outcomes, not code structure.
 
 **Each executable task must include at least one detail bullet that describes the observable completed state**:
 - Phrase it as a deliverable, runtime behavior, persisted state, UI state, endpoint behavior, test result, or integration outcome
+- **Web UI タスクの観測可能完了は HTML/HTMX 観点で書く**（例: 画面が templ で描画される / HTMX で該当 templ フラグメントが `hx-target` に差し替わる / `HX-Redirect`・422+部分返却が返る）。JSON エンドポイント表現はデバイス取込API・ドキュメントに限る。
 - Avoid vague bullets like "implement support", "wire things up", or "handle logic" unless paired with a concrete observable result
 - Prefer making one detail bullet clearly answer: "What will be true when this task is done?"
 - Keep this within the existing task body; do not add extra bookkeeping fields
@@ -105,7 +108,7 @@ Focus on capabilities and outcomes, not code structure.
 
 **Exclude**:
 - Deployment tasks
-- Documentation tasks
+- Documentation tasks（ただし**コード契約に直結する成果物**＝デバイス取込API の OpenAPI/Scalar 定義は実装タスクとして含める。除外は人間向け解説ドキュメント等に限る。templ は UI 実装であり除外対象でない）
 - User testing
 - Marketing/business activities
 

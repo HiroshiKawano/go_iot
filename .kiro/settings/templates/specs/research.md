@@ -22,7 +22,7 @@ Document notable investigation steps and their outcomes. Group entries by topic 
 
 ### [Topic or Question]
 - **Context**: What triggered this investigation?
-- **Sources Consulted**: Links, documentation, API references, benchmarks
+- **Sources Consulted**: プロジェクト内の正典を優先（`docs/database_snapshot/`＝現状スキーマ、`2cc_sdd/HTMX実装ガイド(動的).md`＝templ+HTMX 変換ルール、steering）／外部 Links, documentation, API references, benchmarks
 - **Findings**: Concise bullet points summarizing the insights
 - **Implications**: How this affects architecture, contracts, or implementation
 
@@ -33,7 +33,7 @@ List candidate patterns or approaches that were considered. Use the table format
 
 | Option | Description | Strengths | Risks / Limitations | Notes |
 |--------|-------------|-----------|---------------------|-------|
-| Hexagonal | Ports & adapters abstraction around core domain | Clear boundaries, testable core | Requires adapter layer build-out | Aligns with existing steering principle X |
+| Layered-lite（本プロジェクト採用） | `handler → service → repository.Querier` の薄い層分離＋画面=feature ファイル分割。DB ポートは sqlc 生成の `repository.Querier` | 初速が高く、テストは Querier モックで安価に分離 | 層の厚みは最初の画面検証後に追記（過剰な抽象化を避ける） | structure.md steering の決定（厳格 Clean / Hexagonal は不採用）に整合 |
 
 ## Design Decisions
 Record major decisions that influence `design.md`. Focus on choices with significant trade-offs.

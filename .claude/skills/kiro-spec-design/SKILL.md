@@ -150,9 +150,8 @@ After all findings return, synthesize in main context before proceeding.
 ## Critical Constraints
  - **Type Safety**:
    - Enforce strong typing aligned with the project's technology stack.
-   - For statically typed languages, define explicit types/interfaces and avoid unsafe casts.
-   - For TypeScript, never use `any`; prefer precise types and generics.
-   - For dynamically typed languages, provide type hints/annotations where available (e.g., Python type hints) and validate inputs at boundaries.
+   - **Go（本プロジェクト）**: 明示的な型と最小 interface を定義し、`any` / `interface{}` への退避を避ける。DB アクセスは sqlc 生成の `repository.Querier` interface を唯一の DB ポートとして契約化する。入力境界は Gin の binding タグ + `go-playground/validator` で検証する。エラーは `error` 値で判別可能に返す。
+   - For other statically typed languages, define explicit types/interfaces and avoid unsafe casts.
    - Document public interfaces and contracts clearly to ensure cross-component type safety.
 - **Requirements Traceability IDs**: Use numeric requirement IDs only (e.g. "1.1", "1.2", "3.1", "3.3") exactly as defined in requirements.md. Do not invent new IDs or use alphabetic labels.
 

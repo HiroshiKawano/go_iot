@@ -218,7 +218,7 @@ Quick Spec Generation Complete!
 Generated Files:
 - specs/{feature}/spec.json
 - specs/{feature}/requirements.md ({X} requirements)
-- specs/{feature}/design.md ({Y} components, {Z} endpoints)
+- specs/{feature}/design.md ({Y} components, {Z} routes/handlers)
 - specs/{feature}/tasks.md ({N} tasks)
 
 Skipped: /kiro-validate-gap, /kiro-validate-design

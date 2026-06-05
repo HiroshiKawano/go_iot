@@ -157,10 +157,11 @@ Provide a quick reference before diving into per-component details.
 - Summaries can be a table or compact list. Example table:
   | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
   |-----------|--------------|--------|--------------|--------------------------|-----------|
-  | ExampleComponent | UI | Displays XYZ | 1, 2 | GameProvider (P0), MapPanel (P1) | Service, State |
-- Only components introducing new boundaries (e.g., logic hooks, external integrations, persistence) require full detail blocks. Simple presentation components can rely on the summary row plus a short Implementation Note.
+  | DeviceListView | View (templ) | デバイス一覧テーブルを描画 | 1, 2 | LayoutBase (P0), DeviceCardsPartial (P1) | View/Template |
+  | DeviceIngestAPI | Backend | 取込API（JSON）を受理 | 3 | repository.Querier (P0) | API (JSON) |
+- Only components introducing new boundaries (e.g., HTMX フラグメントを返すハンドラ, external integrations, persistence) require full detail blocks. Simple presentation components（静的な templ 部品）can rely on the summary row plus a short Implementation Note.
 
-Group detailed blocks by domain or architectural layer. For each detailed component, list requirement IDs as `2.1, 2.3` (omit “Requirement”). When multiple UI components share the same contract, reference a base interface/props definition instead of duplicating code blocks.
+Group detailed blocks by domain or architectural layer. For each detailed component, list requirement IDs as `2.1, 2.3` (omit “Requirement”). 本プロジェクトの UI は **templ コンポーネント**（typed な Go struct / 明示パラメータで受け取る）であり、クライアント状態は Alpine.js、サーバ部分更新は HTMX で扱う。複数の View が同じ構造を共有する場合は、共通レイアウト templ または共有パラメータ struct を参照して重複記述を避ける（React の props 継承ではない）。
 
 ### [Domain / Layer]
 
@@ -184,7 +185,23 @@ Group detailed blocks by domain or architectural layer. For each detailed compon
 
 Summarize external dependency findings here; deeper investigation (API signatures, rate limits, migration notes) lives in `research.md`.
 
-**Contracts**: Service [ ] / API [ ] / Event [ ] / Batch [ ] / State [ ]  ← check only the ones that apply.
+**Contracts**: View/Template [ ] / Service [ ] / API (JSON) [ ] / Event [ ] / Batch [ ] / State [ ]  ← check only the ones that apply.
+
+> 本プロジェクトの分界: **Web UI 画面 = `View/Template`**（templ が HTML を直接返す。部分更新は HTMX）。**`API (JSON)` はデバイス取込API（ESP8266→Go, Bearer）と OpenAPI/Scalar ドキュメントのみ**。Web UI 画面ハンドラを `API (JSON)` 契約として書かないこと。
+
+##### View / Template Contract
+Web UI 画面ハンドラ（templ 返却・HTMX 部分更新）の契約。
+
+| Trigger | Method | Path | 認証 | 返却モード | 返却 templ コンポーネント | 入力(binding) | エラー時 |
+|---------|--------|------|------|-----------|--------------------------|---------------|----------|
+| 初期表示 | GET | /devices | session | full page | `DevicesPage` | DeviceListQuery | 再レンダリング |
+| hx-get | GET | /devices/cards | session | HTMX partial | `DeviceCards`(hx-target=#device-cards) | DeviceFilter | 422+同一partial |
+
+- **返却モード**: full page templ / HTMX partial（返却する templ コンポーネント名と分割方針）。OOB 同時更新があれば対象も記す。
+- **HTMX トリガ**: `hx-get/post/delete`・`hx-target`・`hx-swap`。
+- **バリデーション**: 入力は binding 構造体（`go-playground/validator` タグ）。エラーは**同一テンプレに field error を載せて再レンダリング**（HTMX フォームは 422 で部分返却）。
+- **CSRF**: meta tag + `htmx:configRequest`（ミューテーション時）。
+- 詳細パターンは `2cc_sdd/HTMX実装ガイド(動的).md` の該当節に従う。
 
 ##### Service Interface
 ```go
@@ -196,11 +213,14 @@ type [ComponentName]Service interface {
 - 事前条件:
 - 事後条件:
 - 不変条件:
+- 永続化は **sqlc 生成の `repository.Querier`（`emit_interface=true`、本プロジェクト唯一の DB ポート）** を DI で受け取って経由する。独自 Repository interface を新設しない。テストでは `Querier` をモック差し替えする。
 
-##### API Contract
-| Method | Endpoint | Request | Response | Errors |
-|--------|----------|---------|----------|--------|
-| POST | /api/resource | CreateRequest | Resource | 400, 409, 500 |
+##### API (JSON) Contract
+> **デバイス取込API・ドキュメント専用**。Web UI 画面はここに書かず `View / Template Contract` を使う。
+
+| Method | Endpoint | Request | Response | Auth | Errors |
+|--------|----------|---------|----------|------|--------|
+| POST | /api/v1/ingest | IngestRequest (JSON) | 202 Accepted | Bearer | 400, 401, 422, 500 |
 
 ##### Event Contract
 - Published events:  
@@ -240,10 +260,11 @@ Focus on the portions of the data landscape that change with this feature.
 - Attributes and their types
 - Natural keys and identifiers
 - Referential integrity rules
+  > 本プロジェクトは **DB の外部キー制約を張らない**方針（参照整合性はアプリ層の JOIN クエリ / サービス層チェックで担保）。論理リレーションは `docs/database_snapshot/er_diagram.mmd` を参照。
 
 **Consistency & Integrity**:
 - Transaction boundaries
-- Cascading rules
+- Cascading rules（DB CASCADE ではなくサービス層の削除順序で表現）
 - Temporal aspects (versioning, audit)
 
 ### Physical Data Model
@@ -274,10 +295,10 @@ Focus on the portions of the data landscape that change with this feature.
 
 ### Data Contracts & Integration
 
-**API Data Transfer**
-- Request/response schemas
-- Validation rules
-- Serialization format (JSON, Protobuf, etc.)
+**Data Transfer**
+- **Web UI**: ハンドラ→templ に渡す ViewModel / パラメータ構造体（Go struct）と、フォーム入力の binding 構造体（`go-playground/validator` タグ）。HTML レンダリングのため JSON シリアライズは不要。
+- **JSON API（デバイス取込 / ドキュメントのみ）**: Request/Response の JSON スキーマと `ShouldBindJSON` + binding タグ。シリアライズ形式は JSON（Protobuf 等は使わない）。
+- バリデーションルール（境界値・必須・enum 許容値は `docs/database_snapshot/` の CHECK 制約に整合させる）。
 
 **Event Schemas**
 - Published event structures
@@ -310,10 +331,10 @@ Error tracking, logging, and health monitoring implementation.
 ## Testing Strategy
 
 ### Default sections (adapt names/sections to fit the domain)
-- Unit Tests: 3–5 items from core functions/modules (e.g., auth methods, subscription logic)
-- Integration Tests: 3–5 cross-component flows (e.g., webhook handling, notifications)
-- E2E/UI Tests (if applicable): 3–5 critical user paths (e.g., forms, dashboards)
-- Performance/Load (if applicable): 3–4 items (e.g., concurrency, high-volume ops)
+- Unit Tests: 3–5 items（table-driven テスト。Service は `repository.Querier` をモック差し替え／binding バリデーションの境界値）
+- Integration Tests: 3–5 cross-component flows（`httptest` でハンドラ→templ レンダリング結果（HTML / HTMX partial）をアサート。`Querier` 差し替えで DB 境界を分離）
+- E2E/UI Tests (if applicable): 3–5 critical user paths（HTMX 部分更新で `hx-target` が差し替わること、フォーム送信・リダイレクト）
+- Performance/Load (if applicable): 3–4 items（pgx コネクションプール、取込API スループット）
 
 ## Optional Sections (include when relevant)
 

@@ -12,27 +12,27 @@ Keep EARS trigger keywords and fixed phrases in English (`When`, `If`, `While`, 
 ### 1. Event-Driven Requirements
 - **Pattern**: When [event], the [system] shall [response/action]
 - **Use Case**: Responses to specific events or triggers
-- **Example**: When user clicks checkout button, the Checkout Service shall validate cart contents
+- **Example**: When a sensor reading exceeds its alert threshold, the Alert Service shall create an alert history record
 
 ### 2. State-Driven Requirements
 - **Pattern**: While [precondition], the [system] shall [response/action]
 - **Use Case**: Behavior dependent on system state or preconditions
-- **Example**: While payment is processing, the Checkout Service shall display loading indicator
+- **Example**: While a device has reported no readings for 24 hours, the Dashboard shall display an offline indicator for that device
 
 ### 3. Unwanted Behavior Requirements
 - **Pattern**: If [trigger], the [system] shall [response/action]
 - **Use Case**: System response to errors, failures, or undesired situations
-- **Example**: If invalid credit card number is entered, then the website shall display error message
+- **Example**: If an invalid Bearer token is used to access the device ingest API, then the system shall reject the request with 401 Unauthorized
 
 ### 4. Optional Feature Requirements
 - **Pattern**: Where [feature is included], the [system] shall [response/action]
 - **Use Case**: Requirements for optional or conditional features
-- **Example**: Where the car has a sunroof, the car shall have a sunroof control panel
+- **Example**: Where email notification is enabled, the Alert Service shall send an email when an alert fires
 
 ### 5. Ubiquitous Requirements
 - **Pattern**: The [system] shall [response/action]
 - **Use Case**: Always-active requirements and fundamental system properties
-- **Example**: The mobile phone shall have a mass of less than 100 grams
+- **Example**: The device ingest API shall accept temperature and humidity readings only from registered devices
 
 ## Combined Patterns
 - While [precondition], when [event], the [system] shall [response/action]
