@@ -4,7 +4,7 @@
 > 推奨 feature-name: alert-rules
 > 実行例: /kiro-spec-init "（本文を貼り付け）"
 > 前提セッション: S1（基盤）。判定の実行はS2だがルールのCRUDは独立
-> 設計フェーズで参照: 画面設計書(静的).md §7（行467-521）・§フォーム復元方針（行594-602）、HTMX実装ガイド(動的).md §3.6（行1304-1316）・§4 alert-rules（行1529-1562）・§7 バリデーション（行1650-1704）・§8 CSRF（行1900-1929）・§11 削除確認（行2351-2371）・§12 インラインCRUD（行2373-2452）・§16 Tom Select（行2905-2945）、DB設計書.md alert_rules（行450-480）・Metric Enum（行168-210）・ComparisonOperator Enum（行221-289）、mocks/html/alert-rules.html、other/templ実装仕様書.md
+> 設計フェーズで参照: 画面設計書(静的).md §7（行467-521）・§フォーム復元方針（行594-602）、HTMX実装ガイド(動的).md §3.6（行1304-1316）・§4 alert-rules（行1529-1562）・§7 バリデーション（行1650-1704）・§8 CSRF（行1900-1929）・§11 削除確認（行2351-2371）・§12 インラインCRUD（行2373-2452）・§16 Tom Select（行2905-2945）、DB設計書.md alert_rules（行450-480）・Metric Enum（行168-210）・ComparisonOperator Enum（行221-289）、mocks/html/alert-rules.html、HTMX実装ガイド(動的).md §1（templ コンポーネント分割・命名規約）
 
 --- spec-init 本文 ここから ---
 
@@ -184,7 +184,7 @@
 - HTMX実装ガイド(動的).md §3.6 id一覧・§4 alert-rules 操作表・§7 バリデーション・§8 CSRF・§11 削除確認・§12 インラインCRUD・§16 Tom Select
 - DB設計書.md §alert_rules テーブル・Metric/ComparisonOperator Enum
 - HTMLモック作成ルール.md R01〜R27（CSS クラス・構造）
-- other/templ実装仕様書.md（templ の基本記法・セキュリティ）
+- HTMX実装ガイド(動的).md §1（templ コンポーネント分割アプローチ・命名規約）・§8（CSRF）: templ の基本記法・セキュリティ
 
 ### 日本語・コード言語の使い分け
 - 応答メッセージ・コメント・ボタンラベル・エラーメッセージ: **日本語**

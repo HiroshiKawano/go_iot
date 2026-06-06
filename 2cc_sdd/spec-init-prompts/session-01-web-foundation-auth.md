@@ -4,7 +4,7 @@
 > 推奨 feature-name: web-foundation-auth
 > 実行例: /kiro-spec-init "（本文を貼り付け）"
 > 前提セッション: なし（全セッション最初の土台。このセッションなしに他のセッションは進まない）
-> 設計フェーズで参照: 実装現状サマリ §2/§5-5/§9、画面設計書(静的) 行72-202、HTMX実装ガイド §3.1/§3.8・§4 login/register・§8/§9、templ実装仕様書 全体、DB設計書 users テーブル
+> 設計フェーズで参照: 実装現状サマリ §2/§5-5/§9、画面設計書(静的) 行72-202、HTMX実装ガイド §3.1/§3.8・§4 login/register・§8/§9、HTMX実装ガイド §1（templ コンポーネント分割アプローチ）、DB設計書 users テーブル
 
 --- spec-init 本文 ここから ---
 
@@ -241,7 +241,7 @@ public/
 - 実装現状サマリ.md §2/§5-5/§9: 現在のアーキ・実装状況・次のステップ確認
 - 画面設計書(静的).md 行72-202: 共通レイアウト・login・register の要件定義
 - HTMX実装ガイド(動的).md §3.1/§3.8・§4 login/register・§8 CSRF・§9 HX-Redirect: 動的振る舞い・バリデーション再表示・リダイレクト処理
-- templ実装仕様書.md: templ コンポーネント分割・Handler からの呼び出しパターン・OOB Swap（この sesssion では使わないが仕様把握）
+- HTMX実装ガイド(動的).md §1（templ コンポーネント分割アプローチ）・§5（OOB 同時更新）: templ コンポーネント分割・Handler からの返却パターン・OOB Swap（この session では使わないが仕様把握）
 - DB設計書.md users テーブル: ID / name / email / password_hash / email_verified_at / created_at / updated_at・制約・sqlc 方針
 
 ## 受け入れ基準（概略）

@@ -86,7 +86,7 @@
 5. **HTMX実装ガイド(動的).md § 16 Tom Select**: デバイス select への Tom Select 適用・初期化方式
 6. **DB設計書.md § alert_histories（482-511）**: テーブル定義・非正規化保持・CHECK 制約
 7. **DB設計書.md § sqlc リレーション方針（514-527）**: `ListAlertHistoriesPaginated` / `CountAlertHistoriesInRange` の要件
-8. **templ実装仕様書（other/）**: templ コンポーネント分割・Fragment 返却方式
+8. **HTMX実装ガイド(動的).md §1（templ コンポーネント分割アプローチ）・§2 C02（tbody を Fragment 返却）**: templ コンポーネント分割・Fragment 返却方式
 
 **実装言語・フレームワーク:**
 - Go 1.26 + Gin v1.12 + templ v0.3 + HTMX + 素のモダンCSS（CSSフレームワーク不使用。トークンは自前 :root 定義 mocks/html/style.css、カスケードは @layer reset, base, components, utilities。詳細は .kiro/steering/tech.md「CSS方針」参照）

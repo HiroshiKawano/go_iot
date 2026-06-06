@@ -45,7 +45,7 @@
 - 7日/30日グラフ: `ListDailySensorAggregates` sqlcクエリで日次集計（GROUP BY DATE(recorded_at)、MAX/MIN集計）を取得
 - 集計結果の MAX/MIN は nullable な pgtype.Numeric のため pgconv.NumericToFloat() で安全に変換（実装現状サマリ §5.2 の関数名）
 - SVG 出力は templ の `@templ.Raw(svgString)` で埋め込み（HTML エスケープ回避）
-- SVG 自作生成の技術仕様（線色・フォント・軸ラベル等）は other/templ実装仕様書.md を参照。詳細レイアウトはこのセッション内で実装確定
+- SVG 自作生成の技術仕様（線色・フォント・軸ラベル等）は システム構成図.md「サーバサイド SVG グラフ自作」を参照。詳細レイアウト・色/フォントはこのセッション設計フェーズで確定
 
 ### 最新計測データテーブル
 
@@ -121,9 +121,9 @@
 
 ## 未確定事項・要確認（あれば）
 
-- **SVG グラフ生成ライブラリ**: 標準 Go 実装（strings.Builder で XML 直描画）か golang.org/x/image 等の軽量ライブラリを使うか？ — 本プロジェクトは軽量・自作方針を選択（他/templ実装仕様書.md を参照）
+- **SVG グラフ生成ライブラリ**: 標準 Go 実装（strings.Builder で XML 直描画）か golang.org/x/image 等の軽量ライブラリを使うか？ — 本プロジェクトは軽量・自作方針を選択（システム構成図.md「サーバサイド SVG グラフ自作」を参照）
 - **CSRF ライブラリ**: Gin 公式ミドルウェア（github.com/gin-contrib/sessions）か別ライブラリか？ — S1で確定済み想定
 - **Method Override ミドルウェア**: HTML フォーム DELETE 対応の _method ハンドリング方式 — S1で確定済み想定（または fetch 使用）
-- **グラフ色・フォント仕様**: SVG内の線色（温度・湿度の区別）、フォントサイズ、軸ラベルフォーマット — other/templ実装仕様書.md で確認。なければこのセッション設計フェーズで確定
+- **グラフ色・フォント仕様**: SVG内の線色（温度・湿度の区別）、フォントサイズ、軸ラベルフォーマット — システム構成図.md「サーバサイド SVG グラフ自作」で確認。詳細はこのセッション設計フェーズで確定
 
 --- spec-init 本文 ここまで ---
