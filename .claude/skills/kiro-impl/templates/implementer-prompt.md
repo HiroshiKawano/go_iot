@@ -67,6 +67,8 @@ If any of these cannot be determined from the spec — the requirements are too 
 - Use the exact section numbers from `requirements.md` and `design.md` in all notes and reports; do NOT invent `REQ-*` aliases
 - Do NOT stop at a mock, stub, placeholder, fake, or TODO-only implementation unless the task explicitly requires it
 - Prefer the minimal implementation that satisfies the Task Brief and tests
+- **UI（templ/CSS）タスクでは、対応するモック `mocks/html/{画面}.html` を正本として写経する**: HTML 構造・要素順・クラス名をそのまま写し、足すのは `id`・`hx-*`・templ の `for`/`if` による動的化のみ。**独自 CSS クラスを新設しない**（正典 `2cc_sdd/HTMX実装ガイド(動的).md` §31）。CSS をゼロから書き起こさない。
+- **CSS の正本は `mocks/html/style.css` の1ファイルのみ。** 本番配信 `internal/view/public/css/style.css` は `make sync-css` の生成物なので**直接編集しない**。CSS 追記が必要なら正本（mocks 側）を編集して `make sync-css`（§40-B 単一ソース運用）。
 
 ## Status Report
 

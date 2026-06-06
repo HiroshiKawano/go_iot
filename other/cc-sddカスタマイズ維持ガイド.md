@@ -190,6 +190,25 @@
   - 目印: `本プロジェクトの既定は逐次（sequential）`
   - 関連コミット: `08e8ee1`
 
+### E. モック→本番 CSS 単一ソース運用（2026-06-07 追加）
+
+> 「CSS は `mocks/html/style.css` を唯一の正本とし、本番はその生成物」「HTML/CSS は再生成せずモックから写経」を機構化した変更群。**steering / 2cc_sdd / Makefile / .gitignore は再生成耐性あり（cc-sdd 非対象）**、`.claude/skills/*` のみ高リスク（再生成で消える）。A〜D に既出のファイルは、その項目に加えて本節の目印も確認する。
+
+**耐久（cc-sdd 再生成で消えない・確認のみ）**
+
+- [ ] **`Makefile`** … `sync-css` ターゲット＋`build`/`dev` の前段同期。目印: `sync-css:`／関連: 本変更
+- [ ] **`.gitignore`** … 生成物の無視。目印: `internal/view/public/css/style.css`
+- [ ] **`2cc_sdd/HTMX実装ガイド(動的).md`** … §40-B に「単一ソース運用」節（canonical パス確定）＋§31 末尾に参照。目印: `単一ソース運用（mocks/html/style.css が唯一の正本`
+- [ ] **`.kiro/steering/tech.md`** … 「モック CSS の単一ソース運用」節（既出の B 項目に追加）。目印: `モック CSS の単一ソース運用`
+- [ ] **`.kiro/steering/structure.md`** … CSS 構造節を単一ソースに改稿。目印: `単一ソース: ` + "`mocks/html/style.css` が唯一の正本"
+
+**高リスク（cc-sdd 再生成で消える・要再適用）**
+
+- [ ] **`.claude/skills/kiro-spec-tasks/rules/tasks-generation.md`** … Foundation に CSS アセット配信タスクを必須化（既出 D 項目に追加）。目印: `CSS アセット配信を Foundation タスクとして必ず含める`
+- [ ] **`.claude/skills/kiro-spec-design/SKILL.md`** … ★★★必読索引に §31・§40-B を追加（既出 D 項目に追加）。目印: `§40-B CSS 単一ソース運用`
+- [ ] **`.claude/skills/kiro-impl/templates/implementer-prompt.md`**（**目録初掲載**）… UI 写経＋本番CSS非編集の Critical Constraint。目印: `UI（templ/CSS）タスクでは、対応するモック`
+- [ ] **`.claude/skills/kiro-impl/templates/reviewer-prompt.md`**（**目録初掲載**）… レビュー項目12「Mock Fidelity」。目印: `Mock Fidelity`
+
 ### 一括復元のショートカット
 
 特定コミット時点の machinery を丸ごと戻したい場合:
@@ -234,3 +253,4 @@ git checkout bb3476e -- <path>          # ファイル単位で復元
 | 日付 | 内容 |
 |---|---|
 | 2026-06-06 | 初版作成。HTMXガイド/DBスナップショット参照の多層強制、cc-sdd machinery の Go/templ/HTMX 最適化、タスク逐次既定化までを目録化（コミット 73e3a2d / 796928e / bb3476e / 08e8ee1）。 |
+| 2026-06-07 | §6 に E 節追加。モック→本番 CSS 単一ソース運用（正本=`mocks/html/style.css`・本番は `make sync-css` 生成物）と templ 写経の機構化を目録化（steering tech/structure・Makefile・.gitignore・HTMXガイド §40-B/§31 ＋ skills: tasks-generation / design SKILL / kiro-impl の implementer・reviewer プロンプト）。 |

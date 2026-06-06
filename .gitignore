@@ -14,6 +14,9 @@ coverage.html
 *_templ.go
 *_templ.txt
 
+# CSS 単一ソースの生成物 (正本は mocks/html/style.css。make sync-css で再生成・手編集禁止)
+/internal/view/public/css/style.css
+
 # 環境変数ファイル (機密情報を含むため絶対にコミットしない)
 .env
 .env.local

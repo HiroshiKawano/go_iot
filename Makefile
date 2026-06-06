@@ -1,4 +1,4 @@
-.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status sqlc templ db-snapshot clean
+.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status sqlc templ sync-css db-snapshot clean
 
 # .env を読み込む (存在すれば)
 ifneq (,$(wildcard .env))
@@ -22,11 +22,11 @@ up: ## docker-compose で PostgreSQL を起動
 down: ## PostgreSQL を停止
 	docker compose down
 
-dev: ## air でホットリロード開発サーバを起動
+dev: sync-css ## air でホットリロード開発サーバを起動
 	go tool air
 
 ## --- ビルド / 実行 ---
-build: ## 本番用バイナリをビルド
+build: sync-css ## 本番用バイナリをビルド
 	go tool templ generate
 	go build -o ./tmp/main ./cmd/server
 
@@ -66,6 +66,12 @@ sqlc: ## sqlc でリポジトリコード生成
 
 templ: ## templ でテンプレートコード生成
 	go tool templ generate
+
+## --- CSS 単一ソース同期 (正本: mocks/html/style.css) ---
+sync-css: ## モックの style.css を本番 public/ へ複製 (本番は生成物・手編集しない)
+	@mkdir -p internal/view/public/css
+	@cp mocks/html/style.css internal/view/public/css/style.css
+	@echo "synced: mocks/html/style.css -> internal/view/public/css/style.css"
 
 ## --- DBスナップショット (AI/開発者向けスキーマ資産) ---
 db-snapshot: ## 実DBを内省し docs/database_snapshot/ にテーブル定義+ER図を生成 (要 make up + migrate-up)

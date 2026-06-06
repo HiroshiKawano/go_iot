@@ -84,6 +84,11 @@ Evaluate each item. If ANY item fails, the verdict is REJECTED.
 - Error paths are handled, not just the happy path.
 - Errors are not silently swallowed.
 
+**12. Mock Fidelity（UI/templ タスクのみ・非UIタスクは N/A）**
+- templ 実装が対応するモック `mocks/html/{画面}.html` を正本として写経しているか（HTML 構造・要素順・クラス名が一致。`git diff` と該当モックを突き合わせる）。差分は `id` 付与・`hx-*`・`for`/`if` の動的化に限られるべき。
+- **独自 CSS クラスを新設していないか**（正典 §31 の確定済み実クラス語彙 `.btn` `.card` `.data-table` `.device-card` `.form-group` 等から外れたクラス名がないか `grep` で洗い出す）。
+- 本番 CSS `internal/view/public/css/style.css` を手編集していないか（生成物。編集は正本 `mocks/html/style.css` のみ）。逸脱があれば REJECTED。
+
 ## Review Verdict
 
 End your response with this structured verdict:

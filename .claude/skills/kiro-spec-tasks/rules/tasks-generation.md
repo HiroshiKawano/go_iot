@@ -28,6 +28,7 @@ Focus on capabilities and outcomes, not code structure.
 **Tasks must follow this phase order**:
 1. **Foundation**: Environment setup, test infrastructure, shared utilities, database schema, configuration
    - 本プロジェクトの生成依存順を Foundation 内で守る: **goose migration 定義 → `make db-snapshot` 再生成 → `sqlc generate`（`repository.Querier`/モデル生成）→ `templ generate` → 生成物を消費する実装**。コード生成タスクは消費側より前に置く。
+   - **Web UI を含む spec では CSS アセット配信を Foundation タスクとして必ず含める**: `make sync-css`（正本 `mocks/html/style.css` → 生成物 `internal/view/public/css/style.css`）＋ `internal/view/static.go` の `//go:embed all:public` ＋ Gin `StaticFS("/static", …)` ＋ `CSSURL()` バージョンクエリ。CSS の正本はモック1ファイルで、本番は生成物（手編集しない）。詳細は `2cc_sdd/HTMX実装ガイド(動的).md` §40-B「単一ソース運用」。
 2. **Core**: Primary feature implementation (parallel-capable tasks grouped here)
 3. **Integration**: Wiring components together, cross-boundary connections
 4. **Validation**: E2E tests, edge cases, regression checks

@@ -21,7 +21,7 @@ go_iot/
 │   ├── docs/                   OpenAPI YAML + Scalar（go:embed）
 │   ├── service/                アラート判定等のサービス置き場（実装予定）
 │   ├── middleware/             SessionLoad / MethodOverride 置き場（実装予定）
-│   └── view/                   ★templ 配置先（layout / component / page の3層）
+│   └── view/                   ★templ 配置先（layout / component / page の3層）。public/css/style.css は配信用CSS（make sync-css の生成物）
 ├── db/{migrations,queries}/    goose / sqlc 入力
 ├── mocks/html/                 全9画面の静的HTMLモック + style.css（CSS自前・Lism非依存）
 ├── .kiro/steering/             本ステアリング（product.md / tech.md / structure.md）
@@ -72,13 +72,17 @@ go_iot/
 - 2配置パターン: メイン（innerHTML swap、コンテナ内側の中身を返す）/ OOB（outerHTML swap、`id` + `hx-swap-oob="true"` の要素全体を返す）。
 - `id` は HTMX 差し替え専用。**スタイリングには使わない**（R01/R02）。
 
-## CSS 構造（`mocks/html/style.css` → templ 共通CSSへ移植）
+## CSS 構造（単一ソース: `mocks/html/style.css` が唯一の正本）
 
+- **`mocks/html/style.css` を CSS の唯一の正本（single source of truth）とする。** 本番配信用 `internal/view/public/css/style.css` は `make sync-css` がモックから複製する**生成物**で、手編集しない（`.gitignore` 済み）。`build` / `dev` ターゲットは `sync-css` を前段で実行する。
+- **双方向に手で直さない。** 「モック側を編集 → `make sync-css` で本番へ反映」の一方向だけ。これにより「片方だけ更新」によるモック↔本番のスタイル乖離が構造的に起きない。
+- 配信は `internal/view/static.go` の `//go:embed all:public`（go:embed は親ディレクトリ `..` を辿れないため public は **`internal/view/` 配下**に置く）→ Gin `StaticFS("/static", …)` → `/static/css/style.css?v=…`。詳細は `2cc_sdd/HTMX実装ガイド(動的).md` §40-B「単一ソース運用」。
+- **templ はモックの実クラスをそのまま使う**（独自クラスを新設しない＝正典 §31）。CSS をゼロから考え直さず、モックから写経する。
 - **Lism 非依存の素のモダンCSS**。詳細方針は [tech.md の「CSS 方針」](./tech.md) を参照（唯一の正）。
 - カスケード: `@layer reset, base, components, utilities;`
 - トークン（`--space-*` / `--fs-*` / `--radius` 等）は `:root`（base 層）に定義。
 - 部品スタイルは **`@layer components`**、ヘルパは **`@layer utilities`（`.u-*`）**。
-- ❌ templ の `css` スコープスタイル式は使わない（unlayered 問題）。コンポーネント固有CSSは `@layer components` へ追記。
+- ❌ templ の `css` スコープスタイル式は使わない（unlayered 問題）。コンポーネント固有CSSは `@layer components` へ追記（編集先は正本 `mocks/html/style.css`、その後 `make sync-css`）。
 
 ### クラス命名
 
