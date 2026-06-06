@@ -7,9 +7,12 @@
   <link rel="stylesheet" href="./style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body x-data="{ deleteModalOpen: false }">
+<body x-data="{ deleteModalOpen: false, navOpen: false }">
   <header class="site-header">
-    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="header-left">
+      <button type="button" class="nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-label="メニュー">☰</button>
+      <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    </div>
     <div class="user-menu">
       <span class="user-name">テストユーザー</span>
       <form action="/logout" method="post" class="logout-form">
@@ -18,7 +21,7 @@
     </div>
   </header>
 
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-open': navOpen }">
     <nav>
       <ul>
         <li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
@@ -27,6 +30,9 @@
       </ul>
     </nav>
   </aside>
+
+  <!-- モバイルドロワー開時の背面オーバーレイ（タップで閉じる） -->
+  <div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
 
   <main class="main-content">
     <div class="main-inner">
@@ -51,10 +57,11 @@
 
       <section class="card">
         <h2>期間選択</h2>
+        <!-- R24: 期間切替はフィルタ操作のため <a href="?period="> で実装（hx-boost / URL状態保持） -->
         <div class="period-selector">
-          <button type="button" class="period-btn active">24時間</button>
-          <button type="button" class="period-btn">7日間</button>
-          <button type="button" class="period-btn">30日間</button>
+          <a href="?period=24h" class="period-btn active">24時間</a>
+          <a href="?period=7d" class="period-btn">7日間</a>
+          <a href="?period=30d" class="period-btn">30日間</a>
         </div>
 
         <h2 class="u-mbs-6">温度グラフ</h2>
@@ -86,7 +93,7 @@
               <tr><td>2026-04-20 14:20</td><td>28.10</td><td>65.80</td></tr>
             </tbody>
           </table>
-          <p class="empty-message" style="display:none;">計測データはまだありません。</p>
+          <p class="empty-message" x-show="false" x-cloak>計測データはまだありません。</p>
         </div>
         <div class="u-ta-right u-mbs-2">
           <a href="/devices/1/readings">もっと見る →</a>
@@ -96,7 +103,7 @@
   </main>
 
   <!-- R14: モーダル群を body 末尾に配置 -->
-  <div class="modal-overlay" x-show="deleteModalOpen" x-cloak style="display:none;">
+  <div class="modal-overlay" x-show="deleteModalOpen" x-cloak>
     <div class="modal-content">
       <h2>デバイスを削除しますか？</h2>
       <p class="u-mb-4">この操作は元に戻せません。</p>

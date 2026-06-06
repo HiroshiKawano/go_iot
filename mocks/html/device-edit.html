@@ -7,9 +7,12 @@
   <link rel="stylesheet" href="./style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
+<body x-data="{ navOpen: false }">
   <header class="site-header">
-    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="header-left">
+      <button type="button" class="nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-label="メニュー">☰</button>
+      <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    </div>
     <div class="user-menu">
       <span class="user-name">テストユーザー</span>
       <form action="/logout" method="post" class="logout-form">
@@ -18,7 +21,7 @@
     </div>
   </header>
 
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-open': navOpen }">
     <nav>
       <ul>
         <li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
@@ -28,24 +31,27 @@
     </nav>
   </aside>
 
+  <!-- モバイルドロワー開時の背面オーバーレイ（タップで閉じる） -->
+  <div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
+
   <main class="main-content">
     <div class="main-inner">
       <div class="page-header">
         <h1>デバイス編集: ハウスA温湿度計</h1>
       </div>
 
-      <section class="card" style="max-width: 600px;">
+      <section class="card card-narrow">
         <form action="/devices/1" method="post">
           <input type="hidden" name="_method" value="put">
 
           <div class="form-group">
-            <label>デバイス名 <span class="required-mark">*</span></label>
+            <label>デバイス名 <span class="required-mark">＊</span></label>
             <input type="text" name="name" value="ハウスA温湿度計" maxlength="255" required>
             <span class="error-message"></span>
           </div>
 
           <div class="form-group">
-            <label>MACアドレス <span class="required-mark">*</span></label>
+            <label>MACアドレス <span class="required-mark">＊</span></label>
             <input type="text" name="mac_address" value="AA:BB:CC:DD:EE:01" pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$" required>
             <span class="form-help">形式: XX:XX:XX:XX:XX:XX</span>
             <span class="error-message"></span>

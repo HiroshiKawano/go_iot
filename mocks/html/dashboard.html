@@ -7,9 +7,12 @@
   <link rel="stylesheet" href="./style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
+<body x-data="{ navOpen: false }">
   <header class="site-header">
-    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="header-left">
+      <button type="button" class="nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-label="メニュー">☰</button>
+      <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    </div>
     <div class="user-menu">
       <span class="user-name">テストユーザー</span>
       <form action="/logout" method="post" class="logout-form">
@@ -18,7 +21,7 @@
     </div>
   </header>
 
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-open': navOpen }">
     <nav>
       <ul>
         <li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
@@ -27,6 +30,9 @@
       </ul>
     </nav>
   </aside>
+
+  <!-- モバイルドロワー開時の背面オーバーレイ（タップで閉じる） -->
+  <div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
 
   <main class="main-content">
     <div class="main-inner">
@@ -44,7 +50,7 @@
             <li>ハウスB温湿度計: 湿度が30%を下回りました (25.00%)</li>
           </ul>
         </section>
-        <p class="empty-message" style="display:none;">未対応のアラートはありません。</p>
+        <p class="empty-message" x-show="false" x-cloak>未対応のアラートはありません。</p>
       </div>
 
       <h2 class="u-mbe-4">デバイス一覧</h2>
@@ -88,7 +94,7 @@
             <a href="/devices/2" class="btn btn-secondary btn-small">詳細を見る</a>
           </article>
         </div>
-        <p class="empty-message" style="display:none;">登録されたデバイスはありません。上の「デバイス登録」ボタンから追加してください。</p>
+        <p class="empty-message" x-show="false" x-cloak>登録されたデバイスはありません。上の「デバイス登録」ボタンから追加してください。</p>
       </div>
     </div>
   </main>

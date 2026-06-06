@@ -5,11 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>アラート履歴 - 農業IoTシステム</title>
   <link rel="stylesheet" href="./style.css">
+  <!-- Tom Select (TS01: head 内で CDN 読み込み、バージョン統一 2.3.1) -->
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
+<body x-data="{ navOpen: false }">
   <header class="site-header">
-    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="header-left">
+      <button type="button" class="nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-label="メニュー">☰</button>
+      <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    </div>
     <div class="user-menu">
       <span class="user-name">テストユーザー</span>
       <form action="/logout" method="post" class="logout-form">
@@ -18,7 +24,7 @@
     </div>
   </header>
 
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-open': navOpen }">
     <nav>
       <ul>
         <li><a href="/dashboard">🏠 ダッシュボード</a></li>
@@ -27,6 +33,9 @@
       </ul>
     </nav>
   </aside>
+
+  <!-- モバイルドロワー開時の背面オーバーレイ（タップで閉じる） -->
+  <div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
 
   <main class="main-content">
     <div class="main-inner">
@@ -39,7 +48,8 @@
         <form action="/alerts/history" method="get" class="filter-form">
           <div class="form-group">
             <label>デバイス</label>
-            <select name="device_id">
+            <!-- R16/R22-2: デバイス一覧は DB 由来で件数が増えるため Tom Select を適用 -->
+            <select name="device_id" class="js-tom-select">
               <option value="" selected>全デバイス</option>
               <option value="1">ハウスA温湿度計</option>
               <option value="2">ハウスB温湿度計</option>
@@ -100,7 +110,7 @@
             </tr>
           </tbody>
         </table>
-        <p class="empty-message" style="display:none;">指定期間のアラート履歴はありません。</p>
+        <p class="empty-message" x-show="false" x-cloak>指定期間のアラート履歴はありません。</p>
       </div>
 
       <nav class="pagination">
@@ -112,5 +122,18 @@
       </nav>
     </div>
   </main>
+
+  <!-- Tom Select 初期化（TS02: ページ末尾に1箇所のみ・js-tom-select を一括初期化） -->
+  <script>
+    document.querySelectorAll('select.js-tom-select:not([disabled])').forEach(function (el) {
+      new TomSelect(el, {
+        allowEmptyOption: true,
+        dropdownParent: 'body',
+        plugins: el.multiple
+          ? ['remove_button', 'dropdown_input']
+          : ['dropdown_input'],
+      });
+    });
+  </script>
 </body>
 </html>

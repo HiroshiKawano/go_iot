@@ -7,9 +7,12 @@
   <link rel="stylesheet" href="./style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
+<body x-data="{ navOpen: false }">
   <header class="site-header">
-    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="header-left">
+      <button type="button" class="nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-label="メニュー">☰</button>
+      <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    </div>
     <div class="user-menu">
       <span class="user-name">テストユーザー</span>
       <form action="/logout" method="post" class="logout-form">
@@ -18,7 +21,7 @@
     </div>
   </header>
 
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-open': navOpen }">
     <nav>
       <ul>
         <li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
@@ -27,6 +30,9 @@
       </ul>
     </nav>
   </aside>
+
+  <!-- モバイルドロワー開時の背面オーバーレイ（タップで閉じる） -->
+  <div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
 
   <main class="main-content">
     <div class="main-inner">
@@ -96,7 +102,7 @@
             <tr><td>2026-04-20 14:20</td><td>28.10</td><td>65.80</td><td>3秒</td></tr>
           </tbody>
         </table>
-        <p class="empty-message" style="display:none;">指定期間の計測データはありません。</p>
+        <p class="empty-message" x-show="false" x-cloak>指定期間の計測データはありません。</p>
       </div>
 
       <nav class="pagination">

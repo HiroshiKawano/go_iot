@@ -5,11 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>アラートルール管理 - 農業IoTシステム</title>
   <link rel="stylesheet" href="./style.css">
+  <!-- Tom Select (TS01: head 内で CDN 読み込み、バージョン統一 2.3.1) -->
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
+<body x-data="{ navOpen: false }">
   <header class="site-header">
-    <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    <div class="header-left">
+      <button type="button" class="nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-label="メニュー">☰</button>
+      <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    </div>
     <div class="user-menu">
       <span class="user-name">テストユーザー</span>
       <form action="/logout" method="post" class="logout-form">
@@ -18,7 +24,7 @@
     </div>
   </header>
 
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-open': navOpen }">
     <nav>
       <ul>
         <li><a href="/dashboard">🏠 ダッシュボード</a></li>
@@ -27,6 +33,9 @@
       </ul>
     </nav>
   </aside>
+
+  <!-- モバイルドロワー開時の背面オーバーレイ（タップで閉じる） -->
+  <div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
 
   <main class="main-content">
     <div class="main-inner">
@@ -39,7 +48,8 @@
         <form action="/alerts/rules" method="get">
           <div class="form-group">
             <label>デバイス</label>
-            <select name="device_id">
+            <!-- R16/R22-2: デバイス一覧は DB 由来で件数が増えるため Tom Select を適用 -->
+            <select name="device_id" class="js-tom-select">
               <option value="1" selected>ハウスA温湿度計</option>
               <option value="2">ハウスB温湿度計</option>
             </select>
@@ -63,12 +73,13 @@
           </div>
           <div class="form-group">
             <label>条件</label>
+            <!-- R08: value は DB 格納値（CHECK制約: > | < | >= | <=）に合わせる。比較演算子は4値固定のため R22-2 でネイティブ select -->
             <select name="operator">
               <option value="">選択してください</option>
-              <option value="gt" selected>より大きい</option>
-              <option value="lt">より小さい</option>
-              <option value="gte">以上</option>
-              <option value="lte">以下</option>
+              <option value="&gt;" selected>より大きい</option>
+              <option value="&lt;">より小さい</option>
+              <option value="&gt;=">以上</option>
+              <option value="&lt;=">以下</option>
             </select>
             <span class="error-message"></span>
           </div>
@@ -98,7 +109,10 @@
               <td>
                 <form action="/alerts/rules/1/toggle" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="patch">
-                  <input type="checkbox" name="is_enabled" value="1" checked>
+                  <label>
+                    <input type="checkbox" name="is_enabled" value="1" checked>
+                    <span class="u-visually-hidden">有効</span>
+                  </label>
                 </form>
               </td>
               <td>温度</td>
@@ -116,7 +130,10 @@
               <td>
                 <form action="/alerts/rules/2/toggle" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="patch">
-                  <input type="checkbox" name="is_enabled" value="1" checked>
+                  <label>
+                    <input type="checkbox" name="is_enabled" value="1" checked>
+                    <span class="u-visually-hidden">有効</span>
+                  </label>
                 </form>
               </td>
               <td>湿度</td>
@@ -134,7 +151,10 @@
               <td>
                 <form action="/alerts/rules/3/toggle" method="post" class="u-d-inline">
                   <input type="hidden" name="_method" value="patch">
-                  <input type="checkbox" name="is_enabled" value="1">
+                  <label>
+                    <input type="checkbox" name="is_enabled" value="1">
+                    <span class="u-visually-hidden">有効</span>
+                  </label>
                 </form>
               </td>
               <td>温度</td>
@@ -150,9 +170,22 @@
             </tr>
           </tbody>
         </table>
-        <p class="empty-message" style="display:none;">このデバイスにはアラートルールが設定されていません。上のフォームから追加してください。</p>
+        <p class="empty-message" x-show="false" x-cloak>このデバイスにはアラートルールが設定されていません。上のフォームから追加してください。</p>
       </div>
     </div>
   </main>
+
+  <!-- Tom Select 初期化（TS02: ページ末尾に1箇所のみ・js-tom-select を一括初期化） -->
+  <script>
+    document.querySelectorAll('select.js-tom-select:not([disabled])').forEach(function (el) {
+      new TomSelect(el, {
+        allowEmptyOption: true,
+        dropdownParent: 'body',
+        plugins: el.multiple
+          ? ['remove_button', 'dropdown_input']
+          : ['dropdown_input'],
+      });
+    });
+  </script>
 </body>
 </html>
