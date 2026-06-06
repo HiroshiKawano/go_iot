@@ -26,7 +26,7 @@
 
 ## 2. なぜ「失われる」と言えるか（cc-sdd 公式挙動の根拠）
 
-`bk/cc-sdd-doc/migration-guide.md`（cc-sdd 公式の移行ガイド）に明記されている。
+`other/cc-sdd-doc/migration-guide.md`（cc-sdd 公式の移行ガイド）に明記されている。
 
 1. **再インストールは上書きを伴う**
    - インストーラは「ファイル群ごとに『上書き(overwrite)／追記(append)／保持(keep)』を選ぶよう尋ねる」。
@@ -220,7 +220,7 @@ git checkout bb3476e -- <path>          # ファイル単位で復元
 
 ## 8. 参考資料
 
-- cc-sdd 公式ドキュメント（バックアップ）: `bk/cc-sdd-doc/`
+- cc-sdd 公式ドキュメント（ローカル複製）: `other/cc-sdd-doc/`
   - `migration-guide.md` — 再インストール手順・overwrite/append/keep・「変わらないもの」
   - `customization-guide.md` — templates/ と rules/ のカスタマイズ法・「絶対に維持すべき構造」
   - `command-reference.md` / `skill-reference.md` — コマンド/スキル一覧
