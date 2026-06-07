@@ -2549,6 +2549,64 @@ templ DeviceList(devices []Device, watchedIDs []int64) {
 
 ---
 
+## 10-G: `@templ.Raw` に流してよいのは自前生成文字列だけ（SVG/自前 HTML・XML の安全条件） 📅 2026-06-08 — device-detail で確立
+
+> **cc-sdd への価値:**
+> §10-E は `<script type="application/json">` 向けに `json.Marshal` + `@templ.Raw` を扱うが、安全性は `encoding/json` の HTML エスケープ依存。SVG など**自前生成の HTML/XML 文字列**を `@templ.Raw` で埋め込む場合は安全条件が別になる。device-show の温度/湿度グラフ（サーバー生成 SVG）に適用。
+
+### 原則
+
+`@templ.Raw` は出力を一切エスケープしない。流してよいのは**自分がコードで組み立てた文字列だけ**であり、**ユーザー入力（DB 値・クエリ・フォーム）を 1 バイトも Raw に入れない**。これを「気をつける」運用ではなく**層分離で構造的に担保**する。
+
+### 確立した3条件（SVG 生成パッケージ）
+
+1. **生成パッケージを最下流の純粋ユーティリティにする。** `internal/chart` は stdlib（`strings.Builder`/`fmt`/`strconv`）のみに依存し、`gin`・DB・`templ`・`pgtype` を import しない（structure.md 最下流）。入力は整形済みの `float64` 点列（`chart.Point{Label, Y}`）に限定し、**`pgtype` 変換（`pgconv.NumericToFloat` 等）は handler の責務**とする。これにより「外部入力の生値」がそもそもパッケージ境界を越えない。
+
+2. **出力は外部入力を含まない安全な自前生成文字列のみ。** a11y 用 `<title>` や凡例名など、引数由来の文字列をマークアップに組む箇所は、外部入力を想定しない設計でも**防御的に XML 最小エスケープ（`&` `<` `>`）してから**組む。
+
+   ```go
+   // internal/chart/svg.go
+   func esc(s string) string { return xmlEscaper.Replace(s) }
+   var xmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+   // 例: fmt.Fprintf(b, `<title>%s</title>`, esc(title))
+   ```
+
+3. **テーブル・情報パネルのユーザー値は `@templ.Raw` を通さない。** 計測値テーブルやデバイス情報の DB 由来文字列は templ 既定の `{ }` エスケープ経路に乗せる。`@templ.Raw` を使うのは**自前生成 SVG だけ**に閉じる。
+
+   ```templ
+   // OK: SVG（自前生成）だけ Raw
+   <div id="temperature-chart" class="chart-wrapper">
+       @templ.Raw(v.TemperatureSVG)
+   </div>
+   // ユーザー値は { } 既定エスケープ（Raw を使わない）
+   <td>{ r.RecordedAt }</td>
+   <td>{ r.Temp }</td>
+   ```
+
+### 使い分け（§10-E / §59 との関係）
+
+| 対象 | 手段 | 安全の根拠 |
+|------|------|-----------|
+| `<script type="application/json">` の中身 | `json.Marshal` + `@templ.Raw`（§10-E） | `encoding/json` が `< > &` をエスケープ |
+| **自前生成 SVG / HTML・XML 文字列** | **生成パッケージ + `@templ.Raw`（本節）** | **外部入力を境界で遮断 + 引数文字列は防御的 XML エスケープ** |
+| ユーザー値（計測値・デバイス名等） | templ 既定 `{ }`（§59） | `{ }` が常に HTML エスケープ。Raw 直書きは非推奨 |
+
+> §59 は `@templ.Raw(value + "...")` を「XSS リスクあり・非推奨」とユーザー値側で禁じる。本節はその裏返しで、**Raw が許容される積極的条件**（= 自前生成のみ・層分離で外部入力を遮断）を定める。
+
+### 検出方法（テスト）
+
+```go
+// chart パッケージ: title に < > & を渡しても XML エスケープされること
+got := chart.LineChartSVG("a<b&c", "℃", series)
+if !strings.Contains(got, "a&lt;b&amp;c") {
+    t.Errorf("title が XML エスケープされていない: %s", got)
+}
+// component: SVG が生のまま埋め込まれること（@templ.Raw 経路）
+if !strings.Contains(body, "<svg") {
+    t.Error("SVG が埋め込まれていない")
+}
+```
+
 ## 11. 削除確認方針
 
 > **cc-sdd への価値:**
@@ -4543,6 +4601,37 @@ templ ReadingsChart(deviceID int, period string, readingsJSON string) {
 | URL 反映 | 期間ボタンに `hx-push-url="true"` を付け、リロード・共有時に期間が復元されるようにする |
 | 差し替え範囲 | 期間ボタンを含めて差し替えると active 状態も同時更新できるため、ボタン＋グラフを 1 つのサブコンポーネントにまとめ `hx-swap="outerHTML"` で置換する |
 | active 表現 | 状態クラス `active` を `templ.KV` で付与する（class のみでスタイリングし、id はスタイルに使わない） |
+
+### 補足: フラグメント取得を専用ルートに分離したら `hx-get` と `hx-push-url` を別 URL にする 📅 2026-06-08 — device-detail で確立
+
+> 本節冒頭の例は **1 本のルートを `HX-Request` ヘッダで分岐**（HTMX→フラグメント / 通常→フルページ）し、`hx-get` と同じ URL を `hx-push-url="true"` で履歴に積む。この方式ならリロード時も同 URL がフルページを返すため問題ない。一方 device-detail のように **フラグメント取得を専用ルート（レイアウト無しの部分 HTML だけを返す `/devices/{id}/chart`）に分離**した場合は、その書き方をそのまま使うと壊れる。
+
+`hx-push-url="true"` は **`hx-get` の URL をそのまま履歴に積む**。フラグメント専用ルートを `hx-get` に指定したまま `="true"` で push すると、その部分 HTML 専用 URL が履歴に入り、リロード・URL 共有・ブックマークからの直アクセスでブラウザに**レイアウト無しの部分 HTML だけ**が返って画面が崩れる。
+
+対策は **2 系統の URL を用意し、push 側だけフルページ URL に向ける**こと:
+
+- `hx-get` = フラグメント取得 URL（`/devices/{id}/chart?period=…`、レイアウト無し）
+- `hx-push-url` = ブックマーク可能なフルページ URL（`/devices/{id}?period=…`、文字列で明示。`"true"` ではない）
+
+```templ
+for _, p := range chartPeriods {
+    <button
+        type="button"
+        class={ "period-btn", templ.KV("active", p.Value == v.Period) }
+        hx-get={ fmt.Sprintf("/devices/%d/chart?period=%s", v.DeviceID, p.Value) }
+        hx-target="#device-chart-area"
+        hx-swap="innerHTML"
+        hx-push-url={ fmt.Sprintf("/devices/%d?period=%s", v.DeviceID, p.Value) }
+    >{ p.Label }</button>
+}
+```
+
+**前提（必須）:** push したフルページ URL が直アクセスでも成立するよう、フルページ Handler（`Show`）側も任意の `?period` を読んで初期描画できること。device-detail の実装では:
+
+- `Show`（フルページ）: `period := c.Query("period")` を任意で受け、未指定は既定 `24h`、不正値は 400（`isValidPeriod` で 24h/7d/30d を検証）。
+- `Chart`（フラグメント専用）: `ShouldBindQuery` + `binding:"required,oneof=24h 7d 30d"` で必須・列挙検証（不正/未指定→400）。
+
+> **使い分け:** 単一ルート + `HX-Request` 分岐なら `hx-push-url="true"` でよい（同 URL が両方を返す）。フラグメント取得を別ルートに分離した場合のみ、push 先をフルページ URL に明示する。
 
 ## 22-B. モーダル内の hx-target 使い分け（全体差替え vs 部分差替え）
 
