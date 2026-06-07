@@ -31,6 +31,7 @@ Before writing any code, synthesize a concrete Task Brief from the spec sections
 If any of these cannot be determined from the spec — the requirements are too vague, the design doesn't specify the approach, or the task description is ambiguous — report as **NEEDS_CONTEXT** immediately with what's missing. Do not guess or fill gaps with assumptions.
 
 ### Step 3: Implement with TDD
+- **テストは `2cc_sdd/テストガイダンス集.md`（全50節・Gin+templ+HTMX+sqlc/pgx 版）の定石に従って書く**: 冒頭 `## Go テーマ別索引` → 対象テーマ（DB / HTTP / templ / HTMX / 認証・認可・CSRF / バリデーション / クライアントサイド / CRUD・CSV / データ整合性）の節に絞り、本書の既知パターンを再利用する — Querier 手書きモックで DB 非依存に検証、`httptest`+gin、templ は `Render`→`bytes.Buffer`→`strings.Contains`、gorilla/csrf は GET→トークン往復（dev は `csrf.PlaintextHTTPRequest`）、scs は `sm.Load(ctx,"")` で in-memory、go-playground/validator 単体、カバレッジ80%は GET表示・認証済リダイレクト・各DB 500経路で達成、ユーザー列挙防止、302/303 使い分け。約370KB の丸読みは禁止し索引→該当節に絞る。
 - For behavioral tasks, follow the Feature Flag Protocol:
   1. Add a flag defaulting OFF
   2. RED: write/adjust tests so they fail with the flag OFF. **Run tests and capture the failing output.** You will include this in the status report as evidence.

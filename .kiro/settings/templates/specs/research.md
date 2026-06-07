@@ -22,7 +22,7 @@ Document notable investigation steps and their outcomes. Group entries by topic 
 
 ### [Topic or Question]
 - **Context**: What triggered this investigation?
-- **Sources Consulted**: プロジェクト内の正典を優先（`docs/database_snapshot/`＝現状スキーマ、`2cc_sdd/HTMX実装ガイド(動的).md`＝templ+HTMX 変換ルール、steering）／外部 Links, documentation, API references, benchmarks
+- **Sources Consulted**: プロジェクト内の正典を優先（`docs/database_snapshot/`＝現状スキーマ、`2cc_sdd/HTMX実装ガイド(動的).md`＝templ+HTMX 変換ルール、`2cc_sdd/テストガイダンス集.md`＝Go テスト定石、steering）／外部 Links, documentation, API references, benchmarks
 - **Findings**: Concise bullet points summarizing the insights
 - **Implications**: How this affects architecture, contracts, or implementation
 

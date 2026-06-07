@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
 # UserPromptSubmit フック
-#   /kiro-spec-{requirements,design,quick,tasks} 実行時に、cc-sdd で
-#   requirements / design / tasks を生成する際に必ず参照すべき「権威ある資料」
-#   への参照を必須化する追加コンテキストを注入する。
+#   /kiro-spec-{requirements,design,quick,tasks} および /tdd・/kiro-impl 実行時に、
+#   cc-sdd で requirements / design / tasks の生成・実装の際に必ず参照すべき
+#   「権威ある資料」への参照を必須化する追加コンテキストを注入する。
 #
-#   注入する2資料:
+#   注入する3資料:
 #     (A) 2cc_sdd/HTMX実装ガイド(動的).md  … templ+HTMX+Alpine.js の落とし穴回避
 #     (B) docs/database_snapshot/          … 存在しないカラム/型の選択を防ぐ現状スキーマ
+#     (C) 2cc_sdd/テストガイダンス集.md     … Go(Gin/templ/HTMX/sqlc) テストの定石・落とし穴
 #
 #   設計: HTMXガイドは約288KBあり丸読み非現実的なので「冒頭の索引→該当節のみ」、
 #   DBスナップショットは約190行と小さいので「全読み可・実在するものに限定」を指示する。
@@ -22,11 +23,11 @@ input="$(cat)"
 prompt="$(printf '%s' "$input" | jq -r '.prompt // ""' 2>/dev/null)"
 
 # 対象コマンドにマッチするか判定（先頭の空白を許容、コマンド名の直後は空白か行末）
-if printf '%s' "$prompt" | grep -qiE '^[[:space:]]*/kiro-spec-(requirements|design|quick|tasks)([[:space:]]|$)'; then
+if printf '%s' "$prompt" | grep -qiE '^[[:space:]]*/(kiro-spec-(requirements|design|quick|tasks)|kiro-impl|tdd)([[:space:]]|$)'; then
   context="$(cat <<'CTX'
 【必須・本プロジェクト固有】cc-sdd 参照必須リソース（既知の落とし穴回避）
 
-本コマンドで requirements / design / tasks を生成する前に、以下2つの権威ある資料を必ず参照すること。
+本コマンドの実行フェーズ（要件/設計/タスク生成、または /tdd・/kiro-impl の実装）に応じて、以下の権威ある資料を必ず参照すること（フェーズ別の使い分けは末尾参照）。
 
 ────────────────────────────────
 (A) HTMX実装ガイド — templ+HTMX+Alpine.js の落とし穴回避
@@ -55,10 +56,24 @@ if printf '%s' "$prompt" | grep -qiE '^[[:space:]]*/kiro-spec-(requirements|desi
   （変更後の再生成は `make db-snapshot`）。
 - スナップショットは自動生成（手動編集しない）。マイグレーション変更後は要再生成。
 
-- requirements フェーズ: (A)(B) とも「ユーザー観測可能な振る舞い・境界」と
-  「実在するデータ項目の範囲」の把握に留め、カラム/型の選定や実装詳細は持ち込まない（WHAT/HOW 分離）。
-- design / tasks フェーズ: (A) は設計判断・タスク粒度の根拠、
-  (B) はデータモデル設計の現状制約として明示的に使う。
+────────────────────────────────
+(C) テストガイダンス集 — Go(Gin+templ+HTMX+sqlc/pgx) テストの落とし穴と定石
+────────────────────────────────
+正典: `2cc_sdd/テストガイダンス集.md`（全50節）
+- Go テストの定石と既知の落とし穴を集約: Querier 手書きモックで DB 非依存検証、httptest+gin、
+  templ は Render→bytes.Buffer→strings.Contains、gorilla/csrf は GET→トークン往復＋dev は
+  csrf.PlaintextHTTPRequest、scs を sm.Load(ctx,"") で in-memory 検証、go-playground/validator 単体、
+  カバレッジ80%設計、ユーザー列挙防止、302/303 使い分け 等。
+1. まず冒頭の `## Go テーマ別索引` を読み、対象テーマ（DB / HTTP / templ / HTMX /
+   認証・認可・CSRF / バリデーション / クライアントサイド / CRUD・CSV / データ整合性）の節に絞る。
+2. 約370KB の丸読み禁止。索引 → 該当節に絞ること。
+
+- requirements フェーズ: (A)(B) のみ。「ユーザー観測可能な振る舞い・境界」と「実在するデータ項目の範囲」の
+  把握に留め、カラム/型の選定や実装詳細・テスト方式は持ち込まない（WHAT/HOW 分離）。(C) は不要。
+- design / tasks フェーズ: (A) は設計判断・タスク粒度の根拠、(B) はデータモデル設計の現状制約、
+  (C) は design の Testing Strategy 導出と tasks のテストタスク粒度（/tdd 1サイクルで書ける単位）の根拠。
+- implementation フェーズ（/tdd・/kiro-impl）: (C) を第一参照に RED→GREEN でテストを書く。
+  (A) は templ/HTMX 実装の落とし穴、(B) はクエリ/カラムの整合に用いる。
 CTX
 )"
   jq -n --arg ctx "$context" \

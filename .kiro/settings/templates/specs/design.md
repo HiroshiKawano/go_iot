@@ -330,6 +330,8 @@ Error tracking, logging, and health monitoring implementation.
 
 ## Testing Strategy
 
+> テスト項目は `2cc_sdd/テストガイダンス集.md`（冒頭の `## Go テーマ別索引` → 該当節）の Go テスト定石に沿って具体化する。汎用記述ではなく本書の具体パターン（Querier モック / `httptest`+gin / templ `Render`→`strings.Contains` / gorilla/csrf 往復 / scs in-memory / カバレッジ80%設計 / 列挙防止 / 302・303 使い分け）を引用すること。
+
 ### Default sections (adapt names/sections to fit the domain)
 - Unit Tests: 3–5 items（table-driven テスト。Service は `repository.Querier` をモック差し替え／binding バリデーションの境界値）
 - Integration Tests: 3–5 cross-component flows（`httptest` でハンドラ→templ レンダリング結果（HTML / HTMX partial）をアサート。`Querier` 差し替えで DB 境界を分離）

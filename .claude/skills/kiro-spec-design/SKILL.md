@@ -45,6 +45,10 @@ Otherwise, load all necessary context:
 >
 > データモデル設計の前に `docs/database_snapshot/table_definitions.md`（権威ある現状スキーマ・約190行・全読み可）と `docs/database_snapshot/er_diagram.mmd`（論理リレーション）を**必ず**読む。設計で参照するテーブル/カラム/型は本ファイルに**実在する**ものに限り、スナップショットに無いものを発明しない。enum 的な値は CHECK 制約の許容リストに従う（例: metric=temperature/humidity、operator=>,<,>=,<=）。新規カラム/型/テーブルが必要なら、それを既存前提にせず migration 追加（`db/migrations/`）を明示的な設計判断・タスクとして記述し、再生成は `make db-snapshot`。
 
+> **【本プロジェクト固有・必須】テストガイダンス集参照（Go テスト定石・落とし穴回避）**
+>
+> Testing Strategy セクションを導出する際は、`2cc_sdd/テストガイダンス集.md`（全50節・Gin+templ+HTMX+sqlc/pgx 版）の定石に沿ってテスト項目を具体化する。冒頭の `## Go テーマ別索引` から対象テーマ（DB / HTTP / templ / HTMX / 認証・認可・CSRF / バリデーション 等）の節に絞り、汎用的な「テストを書く」ではなく本書の具体パターン（Querier モックで DB 非依存、`httptest`+gin、templ は `Render`→`strings.Contains`、gorilla/csrf 往復、scs in-memory、カバレッジ80%設計、列挙防止、302/303 使い分け 等）で記述する。約370KB の丸読みは禁止し索引→該当節に絞る。実装（`/tdd`・`/kiro-impl`）の第一参照でもある。
+
 **Validate requirements approval**:
 - If auto-approve flag is true: Auto-approve requirements in spec.json
 - Otherwise: Verify approval status (stop if unapproved, see Safety & Fallback)

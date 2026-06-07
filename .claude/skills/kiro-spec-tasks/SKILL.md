@@ -46,6 +46,10 @@ Otherwise, load all necessary context:
 >
 > `docs/database_snapshot/table_definitions.md` を権威ある現状スキーマとして読み、design が参照するテーブル/カラム/型と整合するタスクか確認する。スキーマ変更が必要な箇所は migration 追加タスク（`db/migrations/`）と `make db-snapshot` 再生成を明示する。存在しないカラム/型を前提にしたタスクを作らない。
 
+> **【本プロジェクト固有・必須】テストガイダンス集参照（テストタスクの粒度根拠）**
+>
+> 各 executable サブタスクの「テスト可能な観測成果」と粒度（`/tdd` 1サイクルで先にテストを書ける単位）は、`2cc_sdd/テストガイダンス集.md`（全50節）の定石を根拠にする。冒頭 `## Go テーマ別索引` → 対象テーマの節に絞り、テストタスクが本書のパターン（Querier モックで DB 非依存、`httptest`+gin、templ `Render` 検証、gorilla/csrf 往復、scs in-memory、カバレッジ80%、列挙防止、302/303 使い分け）で実行可能になっているか確認する。約370KB の丸読み禁止。実装（`/tdd`・`/kiro-impl`）の第一参照でもある。
+
 ### Step 2: Generate Implementation Tasks
 
 - Read `rules/tasks-generation.md` from this skill's directory for principles
