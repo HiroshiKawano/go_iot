@@ -4,7 +4,7 @@
 > 実DBへ接続しなくても、本ファイルを読むだけでテーブル・カラム・制約・リレーションを把握できることを目的とする。
 > ※ 外部キー制約は張らない方針（参照整合性はアプリ層で担保）。Mermaid の関連は `<table>_id` 命名から推論した論理リレーション。
 
-**テーブル数:** 6
+**テーブル数:** 7
 
 ## 目次
 
@@ -13,6 +13,7 @@
 - [device_tokens](#device_tokens) — デバイスAPI用 Bearer トークン (Sanctum相当)
 - [devices](#devices) — ESP8266デバイス管理
 - [sensor_readings](#sensor_readings) — SHT31 からの温湿度計測データ (システムの中核データ)
+- [sessions](#sessions) — Web UI の Session 認証データ (scs/pgxstore が管理。sqlc 対象外)
 - [users](#users) — ユーザー (Web UI の Session 認証対象)
 
 ---
@@ -151,6 +152,22 @@ SHT31 からの温湿度計測データ (システムの中核データ)
 
 - `sensor_readings_humidity_range`: `CHECK (((humidity >= (0)::numeric) AND (humidity <= (100)::numeric)))`
 - `sensor_readings_temperature_range`: `CHECK (((temperature >= ('-40'::integer)::numeric) AND (temperature <= (125)::numeric)))`
+
+---
+
+## sessions
+
+Web UI の Session 認証データ (scs/pgxstore が管理。sqlc 対象外)
+
+| カラム | 型 | NULL | デフォルト | 説明 |
+|--------|----|------|-----------|------|
+| token | text | NO | - | PK |
+| data | bytea | NO | - | - |
+| expiry | timestamp with time zone | NO | - | - |
+
+**索引**
+
+- `sessions_expiry_idx`: `CREATE INDEX sessions_expiry_idx ON public.sessions USING btree (expiry)`
 
 ---
 

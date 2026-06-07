@@ -1,0 +1,41 @@
+package page
+
+import "github.com/HiroshiKawano/go_iot/internal/view/layout"
+
+// LoginPage は mocks/html/login.html を写経したログイン画面。
+// 非 HTMX の通常フォームとして /login へ POST し、失敗時は同一ページを再描画する。
+templ LoginPage(v LoginView) {
+	@layout.Guest("ログイン - 農業IoTシステム", v.CSSURL) {
+		<h1>農業IoTシステム</h1>
+		<form action="/login" method="post">
+			<input type="hidden" name="gorilla.csrf.Token" value={ v.CSRFToken }/>
+			if v.Errors["form"] != "" {
+				<div class="form-group">
+					<span class="error-message">{ v.Errors["form"] }</span>
+				</div>
+			}
+			<div class="form-group">
+				<label>メールアドレス</label>
+				<input type="email" name="email" value={ v.Email } required/>
+				<span class="error-message">{ v.Errors["email"] }</span>
+			</div>
+			<div class="form-group">
+				<label>パスワード</label>
+				<input type="password" name="password" required/>
+				<span class="error-message">{ v.Errors["password"] }</span>
+			</div>
+			<div class="form-group">
+				<label>
+					<input type="checkbox" name="remember" value="1"/>
+					ログイン状態を保持
+				</label>
+			</div>
+			<div class="form-actions full-width">
+				<button type="submit" class="btn btn-primary">ログイン</button>
+			</div>
+		</form>
+		<div class="form-footer">
+			アカウントをお持ちでない方は <a href="/register">アカウント登録</a>
+		</div>
+	}
+}

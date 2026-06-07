@@ -58,6 +58,11 @@ erDiagram
         timestamptz updated_at
         timestamptz deleted_at
     }
+    sessions {
+        text token PK
+        bytea data
+        timestamptz expiry
+    }
     users {
         bigint id PK
         varchar name

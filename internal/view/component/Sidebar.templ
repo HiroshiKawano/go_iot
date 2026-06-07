@@ -1,0 +1,16 @@
+package component
+
+// Sidebar は認証後レイアウトのナビゲーションを描画する。
+// 現在ページのハイライト (active) は後続セッションで動的化する想定で、
+// 本セッションでは固定 HTML とする。開閉は Alpine.js 状態 navOpen を参照する。
+templ Sidebar() {
+	<aside class="sidebar" :class="{ 'is-open': navOpen }">
+		<nav>
+			<ul>
+				<li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
+				<li><a href="/alerts/rules">🔔 アラートルール</a></li>
+				<li><a href="/alerts/history">🕐 アラート履歴</a></li>
+			</ul>
+		</nav>
+	</aside>
+}

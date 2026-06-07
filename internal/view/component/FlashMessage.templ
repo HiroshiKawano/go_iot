@@ -1,0 +1,12 @@
+package component
+
+// FlashMessage は共通通知領域 (#flash-message) を描画する。
+// id は HTMX の差し替えターゲット用 (R7.4 の通知領域)。
+// message が空の場合は空の領域のみを出力する。
+templ FlashMessage(message string) {
+	<div id="flash-message">
+		if message != "" {
+			<p>{ message }</p>
+		}
+	</div>
+}

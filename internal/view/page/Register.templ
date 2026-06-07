@@ -1,0 +1,46 @@
+package page
+
+import "github.com/HiroshiKawano/go_iot/internal/view/layout"
+
+// RegisterPage は mocks/html/register.html を写経したユーザー登録画面。
+// 非 HTMX の通常フォームとして /register へ POST し、失敗時は同一ページを再描画する。
+templ RegisterPage(v RegisterView) {
+	@layout.Guest("ユーザー登録 - 農業IoTシステム", v.CSSURL) {
+		<h1>農業IoTシステム</h1>
+		<form action="/register" method="post">
+			<input type="hidden" name="gorilla.csrf.Token" value={ v.CSRFToken }/>
+			if v.Errors["form"] != "" {
+				<div class="form-group">
+					<span class="error-message">{ v.Errors["form"] }</span>
+				</div>
+			}
+			<div class="form-group">
+				<label>ユーザー名</label>
+				<input type="text" name="name" value={ v.Name } maxlength="255" required/>
+				<span class="error-message">{ v.Errors["name"] }</span>
+			</div>
+			<div class="form-group">
+				<label>メールアドレス</label>
+				<input type="email" name="email" value={ v.Email } required/>
+				<span class="error-message">{ v.Errors["email"] }</span>
+			</div>
+			<div class="form-group">
+				<label>パスワード</label>
+				<input type="password" name="password" minlength="8" required/>
+				<span class="form-help">8文字以上</span>
+				<span class="error-message">{ v.Errors["password"] }</span>
+			</div>
+			<div class="form-group">
+				<label>パスワード（確認）</label>
+				<input type="password" name="password_confirmation" required/>
+				<span class="error-message">{ v.Errors["password_confirmation"] }</span>
+			</div>
+			<div class="form-actions full-width">
+				<button type="submit" class="btn btn-primary">登録</button>
+			</div>
+		</form>
+		<div class="form-footer">
+			既にアカウントをお持ちの方は <a href="/login">ログイン</a>
+		</div>
+	}
+}

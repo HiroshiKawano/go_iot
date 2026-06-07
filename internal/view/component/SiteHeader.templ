@@ -1,0 +1,20 @@
+package component
+
+// SiteHeader は認証後レイアウトのヘッダー (ロゴ・ユーザー名・ログアウト) を描画する。
+// ナビゲーション開閉は body の Alpine.js 状態 navOpen を参照する。
+// ログアウトは POST フォームのため CSRF トークンを hidden で送る。
+templ SiteHeader(userName string, csrfToken string) {
+	<header class="site-header">
+		<div class="header-left">
+			<button type="button" class="nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-label="メニュー">☰</button>
+			<a href="/dashboard" class="logo">🌱 農業IoT</a>
+		</div>
+		<div class="user-menu">
+			<span class="user-name">{ userName }</span>
+			<form action="/logout" method="post" class="logout-form">
+				<input type="hidden" name="gorilla.csrf.Token" value={ csrfToken }/>
+				<button type="submit" class="btn btn-small btn-secondary">ログアウト</button>
+			</form>
+		</div>
+	</header>
+}

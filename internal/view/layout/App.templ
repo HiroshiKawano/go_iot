@@ -1,0 +1,45 @@
+package layout
+
+import "github.com/HiroshiKawano/go_iot/internal/view/component"
+
+// AppLayoutData は認証後レイアウト App が必要とする共通データ。
+// 後続セッションの全画面がこの struct を共有して App を描画する。
+type AppLayoutData struct {
+	Title     string // <title> とページ見出し用
+	UserName  string // ヘッダーに表示するログイン中ユーザー名
+	CSRFToken string // <meta name="csrf-token"> と各フォームの hidden 用
+	CSSURL    string // バージョンクエリ付きスタイルシート URL
+	Flash     string // 共通通知領域に表示するメッセージ (任意)
+}
+
+// App は認証後画面の共通レイアウト。
+// ヘッダー・サイドバー・メインコンテンツ枠 (#main-content)・通知領域 (#flash-message) を持ち、
+// HTMX 部分更新のため csrf meta と htmx:configRequest を備える。
+templ App(data AppLayoutData) {
+	<!DOCTYPE html>
+	<html lang="ja">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta name="csrf-token" content={ data.CSRFToken }/>
+			<title>{ data.Title }</title>
+			<link rel="stylesheet" href={ data.CSSURL }/>
+			<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.x.x/dist/htmx.min.js"></script>
+		</head>
+		<body x-data="{ navOpen: false }">
+			@component.SiteHeader(data.UserName, data.CSRFToken)
+			@component.Sidebar()
+			<div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
+			<main id="main-content" class="main-content">
+				@component.FlashMessage(data.Flash)
+				{ children... }
+			</main>
+			<script>
+				document.addEventListener('htmx:configRequest', function(event) {
+					event.detail.headers['X-CSRF-Token'] = document.querySelector('meta[name="csrf-token"]').content;
+				});
+			</script>
+		</body>
+	</html>
+}

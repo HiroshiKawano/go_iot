@@ -1,0 +1,25 @@
+package page
+
+import "github.com/HiroshiKawano/go_iot/internal/view/layout"
+
+// DashboardPage は mocks/html/dashboard.html を写経した認証後トップ画面。
+// 本セッションでは最小プレースホルダ (空状態) のみを表示し、
+// デバイス一覧・未対応アラートの正規実装は後続セッション (S3) で行う。
+// ログイン中ユーザー名は App レイアウトのヘッダーに表示される。
+templ DashboardPage(data layout.AppLayoutData) {
+	@layout.App(data) {
+		<div class="main-inner">
+			<div class="page-header">
+				<h1>ダッシュボード</h1>
+				<a href="/devices/create" class="btn btn-primary">+ デバイス登録</a>
+			</div>
+			<div class="alert-banner-wrapper">
+				<p class="empty-message">未対応のアラートはありません。</p>
+			</div>
+			<h2 class="u-mbe-4">デバイス一覧</h2>
+			<div class="device-grid-wrapper">
+				<p class="empty-message">登録されたデバイスはありません。上の「デバイス登録」ボタンから追加してください。</p>
+			</div>
+		</div>
+	}
+}
