@@ -1,0 +1,51 @@
+package component
+
+// DeviceForm は登録/編集で共有するデバイスフォーム
+// (mocks/html/device-create.html・device-edit.html を写経)。
+// 通常フォーム (非 HTMX) のため CSRF 隠しフィールドを先頭に必須付与し、編集時のみ
+// method override 用の hidden _method=put を出す。各入力は value/checked で入力値を復元し、
+// 項目直後の .error-message に項目別エラーを表示する。独自 CSS クラスは新設しない (§31)。
+templ DeviceForm(v DeviceFormView) {
+	<section class="card card-narrow">
+		<form id="device-form" action={ v.Action } method="post">
+			<input type="hidden" name="gorilla.csrf.Token" value={ v.CSRFToken }/>
+			if v.IsEdit {
+				<input type="hidden" name="_method" value="put"/>
+			}
+			<div class="form-group">
+				<label>デバイス名 <span class="required-mark">＊</span></label>
+				<input type="text" name="name" value={ v.Name } maxlength="255" required/>
+				<span class="error-message">{ v.Errors["name"] }</span>
+			</div>
+			<div class="form-group">
+				<label>MACアドレス <span class="required-mark">＊</span></label>
+				<input type="text" name="mac_address" value={ v.MacAddress } placeholder="AA:BB:CC:DD:EE:FF" pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$" required/>
+				<span class="form-help">形式: XX:XX:XX:XX:XX:XX</span>
+				<span class="error-message">{ v.Errors["mac_address"] }</span>
+			</div>
+			<div class="form-group">
+				<label>設置場所</label>
+				<input type="text" name="location" value={ v.Location } maxlength="255"/>
+				<span class="error-message">{ v.Errors["location"] }</span>
+			</div>
+			<div class="form-group">
+				<label>ステータス</label>
+				<div class="radio-group">
+					<label><input type="radio" name="is_active" value="1" checked?={ v.IsActive == "1" }/> 稼働中</label>
+					<label><input type="radio" name="is_active" value="0" checked?={ v.IsActive == "0" }/> 停止中</label>
+				</div>
+				<span class="error-message">{ v.Errors["is_active"] }</span>
+			</div>
+			<div class="form-actions">
+				<a href={ templ.URL(v.CancelURL) } class="btn btn-secondary">キャンセル</a>
+				<button type="submit" class="btn btn-primary">
+					if v.IsEdit {
+						更新
+					} else {
+						登録
+					}
+				</button>
+			</div>
+		</form>
+	</section>
+}

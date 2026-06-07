@@ -139,6 +139,15 @@ func newHTTPHandler(cfg *config.Config, sm *scs.SessionManager, q repository.Que
 	web.POST("/logout", authH.Logout)
 	web.GET("/dashboard", middleware.RequireAuth(), authH.Dashboard)
 
+	// デバイス登録・編集 (Session 認証 + CSRF + 所有者認可)。
+	// 静的経路 /devices/create とパラメータ経路 /devices/:device を共存させる。
+	// 編集の更新は hidden _method=put → 外側の MethodOverride が PUT へ上書きしてルーティング。
+	deviceH := &handler.DeviceHandler{Repo: q}
+	web.GET("/devices/create", middleware.RequireAuth(), deviceH.ShowCreateForm)
+	web.POST("/devices", middleware.RequireAuth(), deviceH.Create)
+	web.GET("/devices/:device/edit", middleware.RequireAuth(), deviceH.ShowEditForm)
+	web.PUT("/devices/:device", middleware.RequireAuth(), deviceH.Update)
+
 	// 合成: メソッド上書き (ルーティング前) → セッション load/save → engine
 	return middleware.MethodOverride(sm.LoadAndSave(engine))
 }

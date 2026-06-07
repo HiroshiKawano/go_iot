@@ -1,0 +1,20 @@
+package page
+
+import (
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
+	"github.com/HiroshiKawano/go_iot/internal/view/layout"
+)
+
+// DeviceEditPage はデバイス編集画面 (mocks/html/device-edit.html を写経)。
+// 共通レイアウト App で囲み、見出し「デバイス編集: {DeviceName}」と共有フォームを描画する。
+// フォーム本体は複製せず component.DeviceForm に委譲する (登録と同一実装を共有)。
+templ DeviceEditPage(v DeviceFormView) {
+	@layout.App(v.Layout) {
+		<div class="main-inner">
+			<div class="page-header">
+				<h1>デバイス編集: { v.DeviceName }</h1>
+			</div>
+			@component.DeviceForm(v.Form)
+		</div>
+	}
+}
