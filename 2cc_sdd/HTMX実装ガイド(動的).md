@@ -14,7 +14,7 @@
 | ★★★ | [id属性一覧](#3-id-属性一覧) | Handler（部分返却対象）・templ（コンポーネント定義）・HTMX属性（hx-target指定）の唯一の定義元。HTMLモックにはidが原則含まれないため（R01。R01-2のlabel連携用 `field_*` idを除く）この一覧が必須 |
 | ★★★ | [画面別HTMX操作仕様](#4-画面別-htmx-操作仕様) | 各画面のトリガー・URL・ターゲットのプロジェクト固有仕様。ルーティング・Handler実装設計の根拠 |
 | ★★★ | [バリデーションエラー表示方針](#7-バリデーションエラー表示方針) | HTMXフォームは Handler 内バリデーション+422+部分コンポーネント返却、通常フォームはリダイレクト+errors引数渡しの使い分け根拠。422のswap設定方式。誤ると全フォームのエラー表示が機能しない |
-| ★★★ | [CSRF対応方針](#8-csrf対応方針) | グローバルmeta tag + `htmx:configRequest` 方式の実装根拠。未設定だと全ミューテーションリクエストが403になる |
+| ★★★ | [CSRF対応方針](#8-csrf対応方針) | グローバルmeta tag + `htmx:configRequest` 方式の実装根拠。未設定だと全ミューテーションリクエストが403になる。**§8-A に Gin 実装の確定（gorilla/csrf 採用・Web グループ限定/API 除外・SESSION_SECRET→authKey・ミドルウェア合成順）と「gorilla/csrf は既定で HTTPS 前提 → 開発で全 POST が 403」の落とし穴を記載** |
 | ★★ | [OOB同時更新エンドポイント一覧](#5-oob-同時更新エンドポイント一覧) | 1リクエストで複数コンポーネントを返却するエンドポイントの定義。単一コンポーネント設計にすると更新されない要素が生じる |
 | ★★ | [インラインCRUD方針](#12-インラインcrud方針) | アラートルールのインライン追加・編集・削除パターン。alert-rules で必須 |
 | ★★ | [HX-Redirect使用方針](#9-hx-redirect-使用方針) | 削除後のページ遷移実装根拠。`c.Redirect()` と `HX-Redirect` の使い分け |
@@ -159,6 +159,31 @@ if c.GetHeader("HX-Request") != "" {
 ```
 
 > templ は同一 `Writer` へ複数コンポーネントを順に書き込めるため、メインコンポーネントの直後に OOB コンポーネントを `Render` するだけで複数領域の同時更新が成立する。
+
+### templ レイアウトのテストとパッケージ分離 📅 2026-06-07 — S1 web-foundation-auth で確立
+
+**`{ children... }` を取るレイアウトを Go テストで描画する:** children は関数引数ではなく context 経由で渡す。`templ.WithChildren(ctx, child)` を使う（引数に追加してはならない）。children を取らないコンポーネント/ページは `comp.Render(ctx, &buf)` で直接描画する。
+
+```go
+import "github.com/a-h/templ"
+
+// children を取る Guest レイアウトのテスト
+var buf bytes.Buffer
+ctx := templ.WithChildren(context.Background(), templ.Raw("<p>子要素</p>"))
+_ = layout.Guest("タイトル", cssURL).Render(ctx, &buf)
+// buf.String() に対して文字列アサーション（#main-content / .error-message 等）
+
+// children を取らないページ/コンポーネント
+var buf2 bytes.Buffer
+_ = page.LoginPage(page.LoginView{ /* ... */ }).Render(context.Background(), &buf2)
+```
+
+**import 循環の回避（binding 構造体と View 構造体の置き場所）:** フォームの binding 構造体（`form:"..." binding:"..."` タグ付き）は **handler パッケージ**に置く。一方、templ ページが描画に使う View 構造体（`LoginView` / `RegisterView` 等）は **view（page）パッケージ**に置く。handler が view を import して描画するため、View 構造体を handler 側に置くと `view → handler` の循環依存になる。handler が binding 構造体から View 構造体へ詰め替える。
+
+```
+handler ──import──▶ view/page（LoginView, RegisterView をここに定義）
+   └ loginForm / registerForm（binding 構造体）は handler に定義し、View へ詰め替える
+```
 
 ---
 
@@ -1925,7 +1950,92 @@ templ App(csrfToken string) {
 </script>
 ```
 
-> Gin の CSRF ミドルウェア（採用ライブラリは要確認）が `X-CSRF-Token` ヘッダーを検証する想定。グローバル設定により HTMX フォームにトークン用 hidden input を書く必要はない。ヘッダー名（`X-CSRF-Token`）はミドルウェアの仕様に合わせて確定すること。
+> Gin の CSRF ミドルウェアが `X-CSRF-Token` ヘッダーを検証する。グローバル設定により HTMX フォームにトークン用 hidden input を書く必要はない。**採用ライブラリ・ヘッダー名・hidden フィールド名・開発環境での注意点・ミドルウェア合成順は §8-A で確定済み。**
+
+### 8-A. Gin 実装の確定（gorilla/csrf）📅 2026-06-07 — S1 web-foundation-auth で確立
+
+S1 で CSRF を実装し、§8 の「要確認」を以下に確定した。**後続セッションはこの実装を踏襲する。**
+
+**採用ライブラリ: `github.com/gorilla/csrf` v1.7+。** gin 専用の `utrack/gin-csrf` は `gin-contrib/sessions` 依存で scs と二重セッション化するため不採用。`justinas/nosurf` 等でも可だが、フォーム値とヘッダの双方からトークンを読める gorilla/csrf を採用した。
+
+**(1) Web ルートグループ限定で適用し、デバイス取込 API は CSRF 対象外にする**
+
+gorilla/csrf（net/http ミドルウェア）を gin に適応し、**Web ルートグループにのみ**適用する。`/api`（Bearer・機械間）に適用すると POST 取込が 403 で止まるため**必ず除外**する。
+
+```go
+// internal/middleware/csrf.go — gorilla/csrf を gin に適応（Web グループ限定）
+func CSRF(cfg *config.Config) gin.HandlerFunc {
+    isProd := cfg.AppEnv == "production"
+    protect := csrf.Protect(
+        csrfAuthKey(cfg.SessionSecret), // (2) 参照
+        csrf.Secure(isProd),            // 開発(HTTP)は Secure cookie 無効
+        csrf.Path("/"),
+        csrf.SameSite(csrf.SameSiteLaxMode),
+    )
+    return func(c *gin.Context) {
+        var passed bool
+        wrapped := protect(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+            passed = true
+            c.Request = r // csrf トークンを載せた context を後段ハンドラへ伝播
+            c.Next()
+        }))
+        req := c.Request
+        if !isProd {
+            req = csrf.PlaintextHTTPRequest(req) // ★ (3) 開発(HTTP)の Origin/Referer 強制を回避
+        }
+        wrapped.ServeHTTP(c.Writer, req)
+        if !passed {
+            c.Abort() // 403 は gorilla/csrf が書き込み済み
+        }
+    }
+}
+```
+
+```go
+// cmd/server/main.go — CSRF は Web グループのみ。/api は DeviceAuth のみで CSRF 非適用。
+web := engine.Group("/", middleware.SessionLoad(sm), middleware.CSRF(cfg))
+api := engine.Group("/api", deviceAuth) // CSRF 対象外
+```
+
+**(2) authKey は `SESSION_SECRET` から SHA-256 で 32 バイト導出する**
+
+gorilla/csrf は 32 バイトの authKey を要求する。一方 **scs はセッション cookie を署名せず**（不透明なランダムトークンを使う）`SESSION_SECRET` を消費しない。そこで `SESSION_SECRET` を CSRF の authKey に転用する。SHA-256 で畳み込めば任意長（開発で 32 文字未満でも）安全に 32 バイトになる。
+
+```go
+func csrfAuthKey(secret string) []byte {
+    sum := sha256.Sum256([]byte(secret))
+    return sum[:]
+}
+```
+
+**(3) ⚠️ 落とし穴: gorilla/csrf は既定でリクエストを HTTPS とみなす**
+
+gorilla/csrf v1.7.x は状態変更リクエストに対し **Origin ヘッダの同一オリジン検証**（Origin が無ければ **Referer 必須**・cleartext な http referer は拒否）を強制し、内部で `requestURL.Scheme = "https"` と仮定する。このため **開発環境（HTTP localhost）では全 POST が 403（`"referer not supplied"`）になる**。本番以外で `csrf.PlaintextHTTPRequest(r)` を適用して回避する（上記コードの ★）。本番（HTTPS）はブラウザが送る Origin/Referer により同一オリジン検証が機能する。TLS 終端プロキシ構成でホストが異なる場合は `csrf.TrustedOrigins([]string{...})` を追加する。
+
+**(4) hidden フィールド名 / ヘッダ名（gorilla 既定）**
+
+- **非 HTMX フォーム**（login / register / logout 等）: `<input type="hidden" name="gorilla.csrf.Token" value={ csrfToken }/>`（gorilla 既定のフィールド名）。Handler は `csrf.Token(c.Request)` でトークンを取得して templ へ引数で渡す。
+- **HTMX**: §8 の `<meta name="csrf-token">` + `htmx:configRequest`（`X-CSRF-Token` ヘッダ）。gorilla 既定の検証ヘッダが `X-CSRF-Token` なのでそのまま整合する（追加設定不要）。
+
+**(5) ミドルウェア合成順（重要）**
+
+Gin は**ミドルウェア実行前に HTTP メソッドでルーティングを解決する**。そのため `_method` によるメソッド上書き（§3/§4）と scs `LoadAndSave` は `gin.Engine` の**外側（http.Handler 層）**で合成する必要がある（engine 内の gin ミドルウェアでは間に合わない）。CSRF は逆に「`/api` を除外したい」ため engine 内の Web グループ限定 gin ミドルウェアにする。
+
+```go
+// cmd/server/main.go — 合成順（外側 → 内側）
+//   MethodOverride(http層) → scs.LoadAndSave(http層) → gin.Engine
+//     └ engine 内の Web グループ: SessionLoad → CSRF → ハンドラ
+return middleware.MethodOverride(sm.LoadAndSave(engine))
+```
+
+| 関心事 | 配置層 | 理由 |
+|---|---|---|
+| メソッド上書き（`_method`） | http.Handler 層（engine 外） | ルーティング前に `r.Method` を書き換える必要がある |
+| セッション load/save（scs `LoadAndSave`） | http.Handler 層（engine 外） | net/http ミドルウェア。context 伝播と commit を engine 全体に被せる |
+| CSRF（gorilla/csrf アダプタ） | gin ミドルウェア（Web グループ限定） | `/api`（Bearer）を除外するため |
+| SessionLoad（user_id を gin context へ橋渡し）/ RequireAuth | gin ミドルウェア | Web グループ・保護ルートに付与 |
+
+> **メソッド上書きの注意:** `_method` は form 値のため `r.PostFormValue("_method")` が body を解析する。urlencoded では `ParseForm` の結果がキャッシュされ、後段の `ShouldBind`（form binding）でも読めるため二重解析の問題は起きない。
 
 ---
 
