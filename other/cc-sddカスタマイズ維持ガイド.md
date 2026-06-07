@@ -60,6 +60,47 @@
 
 ---
 
+## 3.5 参照必須リソースの組み込み先は「主戦場（使われるフェーズ）」で決める
+
+§3 は「再生成でどれだけ消えやすいか」＝**耐久性の軸**だった。本節は別の軸＝「**その資料を cc-sdd のどのフェーズ／どのコマンド／どの層に組み込むのが効果的か**」＝**有効性の軸**を扱う。本プロジェクトの2つの正典は性格（＝最も効くフェーズ＝「主戦場」）が異なるため、組み込み方を意図的に変えている。これは**他プロジェクトで参照必須資料を増やすときの設計指針**になる。
+
+### 2つの正典は「主戦場」が逆
+
+| 観点 | (A) `HTMX実装ガイド(動的).md` | (C) `テストガイダンス集.md` |
+|---|---|---|
+| 何の正典か | templ+HTMX+Alpine.js の**設計・実装パターン**（部分更新/モーダル/CSRF/id 設計/変換ルール） | Go(Gin/templ/sqlc) の**テストの書き方**（モック/httptest/カバレッジ/列挙防止） |
+| **主戦場**（最も効く所） | **requirements〜design〜tasks**（仕様・設計の生成時） | **実装＝`/tdd`・`/kiro-impl` の RED フェーズ**（テストを書く時） |
+| requirements での要否 | 要（ただし WHAT のみ：どの操作が部分更新かフルページか等、体験への影響） | **不要**（テストは純粋に HOW＝実装層の話。WHAT/HOW 分離で持ち込まない） |
+| design / tasks での役割 | 設計判断・タスク粒度の**主たる**根拠 | **補助**：design の Testing Strategy 導出、tasks のテストタスク粒度の根拠 |
+| 実装（`/tdd`・`/kiro-impl`）での役割 | 補助：templ/HTMX 実装の落とし穴回避 | **主**：テストを本書の定石どおりに書く（第一参照） |
+
+→ 一言で言うと **HTMX ガイドは「上流（仕様・設計）が主戦場」、テストガイダンス集は「下流（実装・テスト）が主戦場」**。主戦場が逆なので、組み込み方も逆向きに寄せる。
+
+### 主戦場が違うと、組み込みの3点が変わる
+
+1. **フック（UserPromptSubmit）の発火コマンド**
+   - 設計時正典（HTMX）= `/kiro-spec-{requirements,design,quick,tasks}` の4コマンドで十分。
+   - 実装時正典（テストガイダンス）= 上記に加え **`/tdd`・`/kiro-impl`** も発火対象に含める。実装コマンドで注入されないと「テストを書く瞬間」に届かない。本プロジェクトはフックの正規表現を `/(kiro-spec-(requirements|design|quick|tasks)|kiro-impl|tdd)` に拡張した。
+2. **どの SKILL／テンプレに必須ブロックを置くか**
+   - 設計時正典 = 4つの spec SKILL.md（**requirements も含む**）＋ `design.md` テンプレの設計契約。
+   - 実装時正典 = **requirements SKILL には入れない**（WHAT/HOW 分離）。design/tasks/quick SKILL には「テスト戦略・テストタスクの根拠」として入れ、**主たる置き場所は `.claude/skills/kiro-impl/templates/implementer-prompt.md` の実装ステップ**（テストを実際に書く所）＋ `design.md` テンプレの Testing Strategy。
+3. **steering の「正典」節**
+   - それぞれ独立した正典節を持たせる（`## HTMX/templ 動的実装の正典` と `## テスト実装の正典`）。steering は常時ロードされるので、どのフェーズでも背景知識として効く。
+
+### 他プロジェクトへの一般化（資料を増やすときの手順）
+
+新しい参照必須資料を足すときは、まず**主戦場のフェーズを1つ特定し、そこから逆算して層を選ぶ**:
+
+1. **主戦場を特定** — その資料は「仕様/設計を決める時」に効くのか、「コード/テストを書く時」に効くのか。
+2. **フック発火コマンドを主戦場に合わせる** — 設計系 → spec コマンド群。実装/テスト系 → `/tdd`・`/kiro-impl` を必ず含める。
+3. **SKILL/テンプレの置き場所を主戦場に合わせる** — 設計系 → spec SKILL ＋ `design.md`/`research.md` テンプレ。実装/テスト系 → `kiro-impl/templates/*`（implementer / reviewer プロンプト）を主にする。
+4. **WHAT/HOW 分離を守る** — 実装詳細・テスト方式は requirements に入れない（requirements は「ユーザー観測可能な振る舞い・境界」だけ）。設計系資料も requirements では WHAT に限定して使う。
+5. **steering に独立した「正典」節を1つ持たせる** — フック＋SKILL（高リスク）が消えても核心（参照させる意図）が残るよう二重化する。
+
+> 要点: **「消えにくさ（§3 の耐久性の軸）」と「効きやすさ（本節の有効性の軸）」は別物**。理想は両立で、**「steering に正典宣言（耐久）＋ 主戦場のコマンド/テンプレに必須参照（有効）」の二段構え**。本プロジェクトの (A)(B)(C) はいずれもこの二段構えで、(A) は上流コマンドに、(C) は下流コマンド（`/tdd`・`/kiro-impl`）に重心を置いている点だけが違う。
+
+---
+
 ## 4. 現実的な影響と前提
 
 - **再実行しなければ無風。** これらは普通の git 管理ファイル。`npx cc-sdd` を二度と実行しなければ何も起きない（個人開発はバージョン固定で再実行しないことが多い）。
@@ -209,6 +250,28 @@
 - [ ] **`.claude/skills/kiro-impl/templates/implementer-prompt.md`**（**目録初掲載**）… UI 写経＋本番CSS非編集の Critical Constraint。目印: `UI（templ/CSS）タスクでは、対応するモック`
 - [ ] **`.claude/skills/kiro-impl/templates/reviewer-prompt.md`**（**目録初掲載**）… レビュー項目12「Mock Fidelity」。目印: `Mock Fidelity`
 
+### F. テストガイダンス集を参照必須に追加（2026-06-07・コミット `7efd6e8`）
+
+> `2cc_sdd/テストガイダンス集.md`（全50節・Go テストの定石）を (C) として多層強制に組み込んだ変更群。**主戦場が実装/テスト**のため、HTMX ガイドと違い (1) フック発火に `/tdd`・`/kiro-impl` を追加、(2) **requirements には入れない**、(3) `kiro-impl/templates/implementer-prompt.md` を主たる置き場所にする（設計思想は §3.5 参照）。A〜E に既出のファイルは、その項目に加えて本節の目印も確認する。
+
+**耐久（cc-sdd 再生成で消えない・確認のみ）**
+
+- [ ] **`.claude/hooks/inject-cc-sdd-refs.sh`** … 発火正規表現に `kiro-impl|tdd` を追加＋ (C) ブロック注入＋フェーズ別使い分け（既出 A 項目に追加）。目印: `kiro-impl|tdd` ／ `(C) テストガイダンス集`
+- [ ] **`.kiro/steering/tech.md`** … 「## テスト実装の正典（cc-sdd 必読・Go テストの落とし穴回避）」節を新設、強制手段の記述も更新（既出 B 項目に追加）。目印: `テスト実装の正典`
+
+**中（テンプレ・overwrite で消える）**
+
+- [ ] **`.kiro/settings/templates/specs/design.md`** … Testing Strategy 冒頭に (C) 参照を追記（既出 C 項目に追加）。目印: `テストガイダンス集`
+- [ ] **`.kiro/settings/templates/specs/research.md`** … Sources Consulted に (C) を追記（既出 C 項目に追加）。目印: `テストガイダンス集`
+
+**高リスク（cc-sdd 再生成で消える・要再適用）**
+
+- [ ] **`.claude/skills/kiro-spec-design/SKILL.md`** … 「テストガイダンス集参照（Go テスト定石）」必須ブロック（既出 D 項目に追加）。目印: `テストガイダンス集参照（Go テスト定石`
+- [ ] **`.claude/skills/kiro-spec-tasks/SKILL.md`** … 「テストガイダンス集参照（テストタスクの粒度根拠）」必須ブロック（既出 D 項目に追加）。目印: `テストガイダンス集参照（テストタスクの粒度`
+- [ ] **`.claude/skills/kiro-spec-quick/SKILL.md`** … 「テストガイダンス集」行（既出 D 項目に追加）。目印: `**テストガイダンス集**:`
+- [ ] **`.claude/skills/kiro-impl/templates/implementer-prompt.md`**（**主たる置き場所**）… Step3「Implement with TDD」冒頭にテスト定石の必須参照（既出 E 項目に追加）。目印: `の定石に従って書く`
+- [ ] **requirements SKILL には意図的に入れない**（WHAT/HOW 分離）。再生成後に「親切心で」`kiro-spec-requirements/SKILL.md` へ (C) を足さないこと。
+
 ### 一括復元のショートカット
 
 特定コミット時点の machinery を丸ごと戻したい場合:
@@ -223,6 +286,7 @@ git checkout bb3476e -- <path>          # ファイル単位で復元
 #   796928e  DBスキーマ現状を参照必須に追加＋フック統合
 #   bb3476e  cc-sdd machinery を Gin+templ+HTMX に最適化
 #   08e8ee1  タスク生成を逐次(sequential)既定に変更（1行ずつTDD用）
+#   7efd6e8  テストガイダンス集を参照必須に追加（実装/テストが主戦場・/tdd /kiro-impl 発火）
 ```
 
 ---
@@ -254,3 +318,4 @@ git checkout bb3476e -- <path>          # ファイル単位で復元
 |---|---|
 | 2026-06-06 | 初版作成。HTMXガイド/DBスナップショット参照の多層強制、cc-sdd machinery の Go/templ/HTMX 最適化、タスク逐次既定化までを目録化（コミット 73e3a2d / 796928e / bb3476e / 08e8ee1）。 |
 | 2026-06-07 | §6 に E 節追加。モック→本番 CSS 単一ソース運用（正本=`mocks/html/style.css`・本番は `make sync-css` 生成物）と templ 写経の機構化を目録化（steering tech/structure・Makefile・.gitignore・HTMXガイド §40-B/§31 ＋ skills: tasks-generation / design SKILL / kiro-impl の implementer・reviewer プロンプト）。 |
+| 2026-06-07 | §3.5「主戦場別の組み込み指針」を新設（HTMXガイド=上流/設計が主戦場、テストガイダンス集=下流/実装・テストが主戦場。耐久性の軸=§3 とは別の有効性の軸として整理）。§6 に F 節追加：`2cc_sdd/テストガイダンス集.md` を (C) として多層強制に組み込み（フック発火に `/tdd`・`/kiro-impl` を追加、`implementer-prompt.md` を主たる置き場所、requirements には非投入。コミット `7efd6e8`）。 |
