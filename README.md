@@ -538,6 +538,74 @@ git commit -m "feat: scsセッション認証基盤を実装（web-foundation-au
 
 ---
 
+### コピペ用プロンプト集（1セッションを通しで回す）
+
+他プロジェクトの cc-sdd と同様に、各フェーズで実際に打つプロンプトをコピペ集としてまとめます。例は **S1 `web-foundation-auth`** ですが、`{feature}` を差し替えれば全セッション共通です。
+
+> **このプロジェクト固有の3点（Laravel 版との違い）**
+> 1. コマンドは **ハイフン区切り**（`/kiro-spec-init`）。`/kiro:spec-init`（コロン区切り）ではありません。
+> 2. spec-init プロンプトは `2cc_sdd/spec-init-prompts/session-NN-*.md` に **8セッション分が作成済み**。計画済みセッションは「作成」不要で、`@` 参照するだけです（Laravel 版の `.kiro/prompts/wXXX_spec-init.md を作成` に相当する手順は、下の **B. 計画外の新規 spec** のときだけ必要）。
+> 3. `/kiro-validate-gap` の成果物は **`research.md`** に書き込まれます（`gap-analysis.md` は作られません）。design フェーズの所見も同じ `research.md` に追記されるため、`/tdd` では `research.md` を参照します。
+
+#### A. 計画済みの8セッション（spec-init プロンプトは既存）
+
+```
+✅[spec-init 実行時]
+ /kiro-spec-init "S1 アプリ基盤＋認証。詳細は @2cc_sdd/spec-init-prompts/session-01-web-foundation-auth.md を参照"
+
+✅[spec-requirements 実行時]
+ /kiro-spec-requirements web-foundation-auth
+
+✅[validate-gap 実行時（BE 既存のため推奨）]
+ /kiro-validate-gap web-foundation-auth
+
+✅[spec-design 実行時]
+ /kiro-spec-design web-foundation-auth -y
+
+✅[spec-tasks 実行時]
+ /kiro-spec-tasks web-foundation-auth -y
+
+✅[/tdd 実行時（tasks.md のタスクを1つずつ）]
+ /tdd .kiro/specs/web-foundation-auth/tasks.md の「scs セッション認証基盤」を requirements.md・research.md・design.md を参照して実装
+```
+
+> `@2cc_sdd/spec-init-prompts/session-01-web-foundation-auth.md` を参照する代わりに、同ファイルの「--- spec-init 本文 ここから ---」以降を直接コピペして引数に渡してもかまいません。
+> `-y` は design / tasks の人間レビューを飛ばす自動承認です。重要セッション（特に S1・S5）では `-y` を外して段階承認することを推奨します。
+> requirements / research / design / tasks はいずれも `.kiro/specs/web-foundation-auth/` 配下に生成されます（`/tdd` の参照先も同フォルダ内）。
+
+**全8セッションの `/kiro-spec-init` 行（コピペ用）:**
+
+```
+S1 /kiro-spec-init "S1 アプリ基盤＋認証。詳細は @2cc_sdd/spec-init-prompts/session-01-web-foundation-auth.md を参照"
+S2 /kiro-spec-init "S2 アラート判定ロジック。詳細は @2cc_sdd/spec-init-prompts/session-02-alert-evaluation.md を参照"
+S3 /kiro-spec-init "S3 ダッシュボード。詳細は @2cc_sdd/spec-init-prompts/session-03-dashboard.md を参照"
+S4 /kiro-spec-init "S4 デバイス登録・編集。詳細は @2cc_sdd/spec-init-prompts/session-04-device-create-edit.md を参照"
+S5 /kiro-spec-init "S5 デバイス詳細。詳細は @2cc_sdd/spec-init-prompts/session-05-device-detail.md を参照"
+S6 /kiro-spec-init "S6 センサーデータ履歴。詳細は @2cc_sdd/spec-init-prompts/session-06-sensor-readings-history.md を参照"
+S7 /kiro-spec-init "S7 アラートルール管理。詳細は @2cc_sdd/spec-init-prompts/session-07-alert-rules.md を参照"
+S8 /kiro-spec-init "S8 アラート履歴。詳細は @2cc_sdd/spec-init-prompts/session-08-alert-history.md を参照"
+```
+
+各セッションの feature-name は `web-foundation-auth` / `alert-evaluation` / `dashboard` / `device-create-edit` / `device-detail` / `sensor-readings-history` / `alert-rules` / `alert-history` です（`/kiro-spec-requirements` 以降の引数に使います）。
+
+#### B. 計画外の新規 spec（プロンプトを新規作成する場合）
+
+8セッションに無い画面・機能を起こすときは、まず spec-init プロンプトファイルを作ってから回します（Laravel 版の `.kiro/prompts/wXXX_spec-init.md を作成` に相当）。
+
+```
+✅[spec-init プロンプト作成時]
+ 2cc_sdd/spec-init-prompts/session-09-{feature}.md を作成
+  （who/current/change・スコープ・スコープ外・受け入れ基準・設計フェーズで参照する設計書の節番号を記載。
+   既存の session-01〜08 が雛形になります）
+
+✅[spec-init 実行時]
+ /kiro-spec-init "{機能名}。詳細は @2cc_sdd/spec-init-prompts/session-09-{feature}.md を参照"
+
+  …以降は A と同じ（requirements → validate-gap → design → tasks → /tdd）
+```
+
+---
+
 ### cc-sdd のタスク生成カスタマイズ（TDD 順序・逐次実行）
 
 cc-sdd のデフォルトでは、タスク生成時に並列マーカー `(P)` が付き、実装タスクがテストタスクの前に並ぶことがあります。本プロジェクトでは **TDD（テストファースト）順序** と **逐次実行** をデフォルトに調整済みです（設定は `.claude/skills/kiro-spec-tasks/` 配下）。
