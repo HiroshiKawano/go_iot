@@ -240,12 +240,12 @@ func seedAlertHistories(ctx context.Context, q *repository.Queries, rules []repo
 
 	for _, s := range specs {
 		hist, err := q.CreateAlertHistory(ctx, repository.CreateAlertHistoryParams{
-			AlertRuleID:  s.rule.ID,
-			Metric:       s.rule.Metric,
-			Operator:     s.rule.Operator,
-			Threshold:    s.rule.Threshold,
-			ActualValue:  numeric2(s.actual),
-			TriggeredAt:  timestamptz(s.at),
+			AlertRuleID: s.rule.ID,
+			Metric:      s.rule.Metric,
+			Operator:    s.rule.Operator,
+			Threshold:   s.rule.Threshold,
+			ActualValue: numeric2(s.actual),
+			TriggeredAt: timestamptz(s.at),
 		})
 		if err != nil {
 			return 0, err

@@ -429,6 +429,7 @@
 .device-card h3 { font-size: var(--fs-lg); }
 .device-card .meta { color: var(--color-muted); font-size: var(--fs-sm); }
 .status-active { color: var(--color-primary); }
+.status-inactive { color: var(--color-muted); }
 .readings-row {
   display: flex;
   gap: var(--space-4);
