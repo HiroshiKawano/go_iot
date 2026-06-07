@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
 	"github.com/HiroshiKawano/go_iot/internal/view/layout"
 	"github.com/a-h/templ"
 )
@@ -76,18 +77,63 @@ func TestRegisterPage_4項目とヘルプとエラー(t *testing.T) {
 	assertContains(t, html, `name="gorilla.csrf.Token"`)
 }
 
-func TestDashboardPage_ユーザー名とプレースホルダ(t *testing.T) {
-	data := layout.AppLayoutData{
-		Title:     "ダッシュボード - 農業IoTシステム",
-		UserName:  "テストユーザー",
-		CSRFToken: "tk",
-		CSSURL:    "/static/css/style.css?v=dev",
+func TestDashboardPage_0件でも見出しと登録リンクとグリッドを描画(t *testing.T) {
+	v := DashboardView{
+		Layout: layout.AppLayoutData{
+			Title:     "ダッシュボード - 農業IoTシステム",
+			UserName:  "テストユーザー",
+			CSRFToken: "tk",
+			CSSURL:    "/static/css/style.css?v=dev",
+		},
+		// Devices/Alerts ともに 0 件
 	}
-	html := render(t, DashboardPage(data))
+	html := render(t, DashboardPage(v))
 
-	assertContains(t, html, "テストユーザー") // App ヘッダー経由
+	// App レイアウト継承
+	assertContains(t, html, "テストユーザー") // ヘッダー経由
 	assertContains(t, html, `id="main-content"`)
-	assertContains(t, html, "ダッシュボード")
+	// ページ見出し + 登録リンク (h1 限定でサイドバーの「🏠 ダッシュボード」誤検出を避ける)
+	assertContains(t, html, "<h1>ダッシュボード</h1>")
+	assertContains(t, html, "+ デバイス登録")
+	assertContains(t, html, `href="/devices/create"`)
 	assertContains(t, html, "デバイス一覧")
-	assertContains(t, html, "empty-message") // 空状態プレースホルダ
+	assertContains(t, html, "u-mbe-4")
+	// device-grid は 0 件でも常設 (R03)
+	assertContains(t, html, `id="device-grid"`)
+	// 0 件メッセージ (モック全文)
+	assertContains(t, html, "登録されたデバイスはありません。上の「デバイス登録」ボタンから追加してください。")
+	// アラート 0 件メッセージ
+	assertContains(t, html, `id="unhandled-alert-banner"`)
+	assertContains(t, html, "未対応のアラートはありません。")
+}
+
+func TestDashboardPage_デバイスとアラートをカード描画(t *testing.T) {
+	v := DashboardView{
+		Layout: layout.AppLayoutData{Title: "ダッシュボード", UserName: "テストユーザー", CSSURL: "/x.css"},
+		Devices: []component.DashboardDevice{
+			{
+				ID:           1,
+				Name:         "ハウスA温湿度計",
+				Location:     "ビニールハウスA",
+				IsActive:     true,
+				TempText:     "28.50℃",
+				HumidityText: "65.30%",
+				LastCommText: "2分前",
+			},
+		},
+		Alerts: []component.DashboardAlert{
+			{Message: "ハウスA温湿度計: 温度が35℃を超えました（38.50℃）"},
+		},
+	}
+	html := render(t, DashboardPage(v))
+
+	assertContains(t, html, `id="device-grid"`)
+	assertContains(t, html, `id="device-card-1"`)
+	assertContains(t, html, "ハウスA温湿度計")
+	assertContains(t, html, "28.50℃")
+	assertContains(t, html, `href="/devices/1"`)
+	assertContains(t, html, "ハウスA温湿度計: 温度が35℃を超えました（38.50℃）")
+	if strings.Contains(html, "登録されたデバイスはありません") {
+		t.Error("デバイスありで 0 件メッセージが描画されている")
+	}
 }

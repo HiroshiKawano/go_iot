@@ -11,7 +11,6 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/view"
-	"github.com/HiroshiKawano/go_iot/internal/view/layout"
 	"github.com/HiroshiKawano/go_iot/internal/view/page"
 	"github.com/a-h/templ"
 	"github.com/alexedwards/scs/v2"
@@ -25,11 +24,17 @@ import (
 // 不在・不一致を区別せずユーザー列挙攻撃を防ぐ。
 const authFailedMessage = "メールアドレスまたはパスワードが間違っています"
 
-// AuthRepo は AuthHandler が必要とする最小の DB ポート。repository.Querier が満たす。
+// AuthRepo は Web UI ハンドラ (認証 + ダッシュボード) が必要とする最小の DB ポート。
+// repository.Querier が満たす (main.go は repository.New(pool) をそのまま渡す)。
 type AuthRepo interface {
+	// 認証フロー
 	GetUserByEmail(ctx context.Context, email string) (repository.User, error)
 	CreateUser(ctx context.Context, arg repository.CreateUserParams) (repository.User, error)
 	GetUser(ctx context.Context, id int64) (repository.User, error)
+	// ダッシュボード表示用
+	ListDevicesByUser(ctx context.Context, userID int64) ([]repository.Device, error)
+	GetLatestSensorReading(ctx context.Context, deviceID int64) (repository.SensorReading, error)
+	ListUnnotifiedAlertHistoriesWithDevice(ctx context.Context, arg repository.ListUnnotifiedAlertHistoriesWithDeviceParams) ([]repository.ListUnnotifiedAlertHistoriesWithDeviceRow, error)
 }
 
 // AuthHandler は認証フローのハンドラ群を提供する。
@@ -176,21 +181,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/login")
-}
-
-// Dashboard は認証後のトップ画面を表示する (RequireAuth 適用前提)。
-func (h *AuthHandler) Dashboard(c *gin.Context) {
-	user, err := h.Repo.GetUser(c.Request.Context(), auth.UserID(c))
-	if err != nil {
-		renderError(c, http.StatusInternalServerError)
-		return
-	}
-	renderPage(c, http.StatusOK, page.DashboardPage(layout.AppLayoutData{
-		Title:     "ダッシュボード - 農業IoTシステム",
-		UserName:  user.Name,
-		CSRFToken: csrf.Token(c.Request),
-		CSSURL:    view.CSSURL(),
-	}))
 }
 
 // Root はルート (/) を認証状態に応じて振り分ける。

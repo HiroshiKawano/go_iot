@@ -37,6 +37,20 @@ func (f fakeUserQuerier) GetUser(_ context.Context, id int64) (repository.User, 
 	return repository.User{}, pgx.ErrNoRows
 }
 
+// ダッシュボード表示用クエリ (本統合テストはログインフロー検証が目的のため空データを返す。
+// 埋め込み Querier (nil) のままだと Dashboard 描画時に nil 参照で panic するため明示実装する)。
+func (f fakeUserQuerier) ListDevicesByUser(_ context.Context, _ int64) ([]repository.Device, error) {
+	return nil, nil
+}
+
+func (f fakeUserQuerier) GetLatestSensorReading(_ context.Context, _ int64) (repository.SensorReading, error) {
+	return repository.SensorReading{}, pgx.ErrNoRows
+}
+
+func (f fakeUserQuerier) ListUnnotifiedAlertHistoriesWithDevice(_ context.Context, _ repository.ListUnnotifiedAlertHistoriesWithDeviceParams) ([]repository.ListUnnotifiedAlertHistoriesWithDeviceRow, error) {
+	return nil, nil
+}
+
 func extractCSRFToken(html string) string {
 	const marker = `name="gorilla.csrf.Token" value="`
 	i := strings.Index(html, marker)

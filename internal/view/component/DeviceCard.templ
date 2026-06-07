@@ -1,0 +1,33 @@
+package component
+
+import "strconv"
+
+// DeviceCard はデバイス1台分のカードを描画する (mocks/html/dashboard.html 行61-77 を写経)。
+// 個別カードに device-card-{id} を付与する (将来の OOB 更新ターゲット用。本画面は hx-* なし)。
+// 稼働状態は IsActive で status-active「● 稼働中」/ status-inactive「○ 停止中」を出し分ける。
+templ DeviceCard(d DashboardDevice) {
+	<article id={ "device-card-" + strconv.FormatInt(d.ID, 10) } class="device-card">
+		<h3>{ d.Name }</h3>
+		<div class="meta">場所: { d.Location }</div>
+		<div class="meta">
+			状態:
+			if d.IsActive {
+				<span class="status-active">● 稼働中</span>
+			} else {
+				<span class="status-inactive">○ 停止中</span>
+			}
+		</div>
+		<div class="readings-row">
+			<div class="reading-value">
+				<div class="label">温度</div>
+				<div class="value">{ d.TempText }</div>
+			</div>
+			<div class="reading-value">
+				<div class="label">湿度</div>
+				<div class="value">{ d.HumidityText }</div>
+			</div>
+		</div>
+		<div class="meta">最終通信: { d.LastCommText }</div>
+		<a href={ templ.URL("/devices/" + strconv.FormatInt(d.ID, 10)) } class="btn btn-secondary btn-small">詳細を見る</a>
+	</article>
+}

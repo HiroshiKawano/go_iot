@@ -1,0 +1,21 @@
+package component
+
+// UnhandledAlertBanner は未対応アラートのバナーを描画する (mocks/html/dashboard.html 行44-54 を写経)。
+// ラッパーに unhandled-alert-banner を付与する (将来の OOB 更新ターゲット用。本画面は hx-* なし)。
+// 1件以上なら見出し＋各メッセージのリスト、0件なら空メッセージを描画する。
+templ UnhandledAlertBanner(alerts []DashboardAlert) {
+	<div id="unhandled-alert-banner" class="alert-banner-wrapper">
+		if len(alerts) > 0 {
+			<section class="alert-banner">
+				<h2>⚠ 未対応アラート</h2>
+				<ul>
+					for _, a := range alerts {
+						<li>{ a.Message }</li>
+					}
+				</ul>
+			</section>
+		} else {
+			<p class="empty-message">未対応のアラートはありません。</p>
+		}
+	</div>
+}

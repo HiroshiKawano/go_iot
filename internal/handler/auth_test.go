@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,6 +25,19 @@ type fakeAuthRepo struct {
 	createErr     error
 	createCalled  bool
 	lastCreate    repository.CreateUserParams
+
+	// ダッシュボード表示用 (既定はゼロ値 = 空スライス / 未受信)
+	devices     []repository.Device                                    // ListDevicesByUser の戻り
+	devicesErr  error                                                  // ListDevicesByUser のエラー注入
+	readings    map[int64]repository.SensorReading                     // deviceID → 最新計測 (per-device)
+	readingErrs map[int64]error                                        // deviceID → エラー注入 (per-device)
+	alerts      []repository.ListUnnotifiedAlertHistoriesWithDeviceRow // 未対応アラート
+	alertsErr   error                                                  // ListUnnotified... のエラー注入
+
+	// 本人スコープ伝播検証用に handler から渡された引数を記録する (R1.3)
+	gotDevicesUserID    int64   // ListDevicesByUser が受領した userID
+	gotAlertsUserID     int64   // ListUnnotifiedAlertHistoriesWithDevice が受領した userID
+	gotReadingDeviceIDs []int64 // GetLatestSensorReading が受領した deviceID 列 (呼び出し順)
 }
 
 func (f *fakeAuthRepo) GetUserByEmail(_ context.Context, email string) (repository.User, error) {
@@ -55,6 +69,35 @@ func (f *fakeAuthRepo) GetUser(_ context.Context, id int64) (repository.User, er
 		return u, nil
 	}
 	return repository.User{}, pgx.ErrNoRows
+}
+
+func (f *fakeAuthRepo) ListDevicesByUser(_ context.Context, userID int64) ([]repository.Device, error) {
+	f.gotDevicesUserID = userID
+	if f.devicesErr != nil {
+		return nil, f.devicesErr
+	}
+	return f.devices, nil
+}
+
+// GetLatestSensorReading は per-device の値/エラー注入に対応する。
+// エラー注入 > 値注入 の優先順で判定し、いずれも無ければ未受信 (pgx.ErrNoRows)。
+func (f *fakeAuthRepo) GetLatestSensorReading(_ context.Context, deviceID int64) (repository.SensorReading, error) {
+	f.gotReadingDeviceIDs = append(f.gotReadingDeviceIDs, deviceID)
+	if err, ok := f.readingErrs[deviceID]; ok {
+		return repository.SensorReading{}, err
+	}
+	if r, ok := f.readings[deviceID]; ok {
+		return r, nil
+	}
+	return repository.SensorReading{}, pgx.ErrNoRows
+}
+
+func (f *fakeAuthRepo) ListUnnotifiedAlertHistoriesWithDevice(_ context.Context, arg repository.ListUnnotifiedAlertHistoriesWithDeviceParams) ([]repository.ListUnnotifiedAlertHistoriesWithDeviceRow, error) {
+	f.gotAlertsUserID = arg.UserID
+	if f.alertsErr != nil {
+		return nil, f.alertsErr
+	}
+	return f.alerts, nil
 }
 
 // newAuthApp は LoadAndSave + SessionLoad + 認証ルートを備えた http.Handler を返す。
@@ -285,6 +328,88 @@ func TestDashboard_未認証は302でlogin(t *testing.T) {
 	w := getWithCookies(app, "/dashboard", nil)
 	if w.Code != http.StatusFound || w.Header().Get("Location") != "/login" {
 		t.Errorf("未認証 /dashboard = %d Location=%q, want 302 /login", w.Code, w.Header().Get("Location"))
+	}
+}
+
+// --- ダッシュボード用 DB ポート拡張 (fakeAuthRepo の注入セマンティクス) ---
+
+// errInjected はクエリのエラー注入用センチネル。
+var errInjected = errors.New("injected db error")
+
+// 拡張後の AuthRepo を fakeAuthRepo が満たすことをコンパイル時に保証する。
+var _ AuthRepo = (*fakeAuthRepo)(nil)
+
+func TestFakeAuthRepo_既定は空スライスと未受信(t *testing.T) {
+	repo := &fakeAuthRepo{}
+	ctx := context.Background()
+
+	devs, err := repo.ListDevicesByUser(ctx, 1)
+	if err != nil {
+		t.Fatalf("ListDevicesByUser err = %v", err)
+	}
+	if len(devs) != 0 {
+		t.Errorf("既定デバイス len = %d, want 0", len(devs))
+	}
+
+	alerts, err := repo.ListUnnotifiedAlertHistoriesWithDevice(ctx,
+		repository.ListUnnotifiedAlertHistoriesWithDeviceParams{UserID: 1, Limit: 50})
+	if err != nil {
+		t.Fatalf("ListUnnotified err = %v", err)
+	}
+	if len(alerts) != 0 {
+		t.Errorf("既定アラート len = %d, want 0", len(alerts))
+	}
+
+	// 計測未注入は未受信 (:one → pgx.ErrNoRows) として扱う
+	if _, err := repo.GetLatestSensorReading(ctx, 1); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("未注入の最新計測 err = %v, want pgx.ErrNoRows", err)
+	}
+}
+
+func TestFakeAuthRepo_最新計測はper_deviceで値とエラーを注入できる(t *testing.T) {
+	repo := &fakeAuthRepo{
+		devices:     []repository.Device{{ID: 1, Name: "A"}, {ID: 2, Name: "B"}},
+		readings:    map[int64]repository.SensorReading{1: {ID: 11, DeviceID: 1}},
+		readingErrs: map[int64]error{2: errInjected},
+	}
+	ctx := context.Background()
+
+	if devs, _ := repo.ListDevicesByUser(ctx, 1); len(devs) != 2 {
+		t.Fatalf("デバイス len = %d, want 2", len(devs))
+	}
+
+	// device 1: 値あり
+	r, err := repo.GetLatestSensorReading(ctx, 1)
+	if err != nil {
+		t.Fatalf("device1 計測 err = %v", err)
+	}
+	if r.ID != 11 {
+		t.Errorf("device1 計測 ID = %d, want 11", r.ID)
+	}
+
+	// device 2: エラー注入
+	if _, err := repo.GetLatestSensorReading(ctx, 2); !errors.Is(err, errInjected) {
+		t.Errorf("device2 計測 err = %v, want errInjected", err)
+	}
+
+	// device 3: 未設定 → 未受信
+	if _, err := repo.GetLatestSensorReading(ctx, 3); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("device3 計測 err = %v, want pgx.ErrNoRows", err)
+	}
+}
+
+func TestFakeAuthRepo_各クエリのエラーを注入できる(t *testing.T) {
+	ctx := context.Background()
+
+	dRepo := &fakeAuthRepo{devicesErr: errInjected}
+	if _, err := dRepo.ListDevicesByUser(ctx, 1); !errors.Is(err, errInjected) {
+		t.Errorf("ListDevicesByUser err = %v, want errInjected", err)
+	}
+
+	aRepo := &fakeAuthRepo{alertsErr: errInjected}
+	if _, err := aRepo.ListUnnotifiedAlertHistoriesWithDevice(ctx,
+		repository.ListUnnotifiedAlertHistoriesWithDeviceParams{UserID: 1, Limit: 50}); !errors.Is(err, errInjected) {
+		t.Errorf("ListUnnotified err = %v, want errInjected", err)
 	}
 }
 

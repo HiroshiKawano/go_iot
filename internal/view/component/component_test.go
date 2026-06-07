@@ -54,3 +54,78 @@ func TestFlashMessage_メッセージを表示(t *testing.T) {
 	assertContains(t, html, `id="flash-message"`)
 	assertContains(t, html, "保存しました")
 }
+
+func TestDeviceCard_稼働中デバイスの全要素を描画(t *testing.T) {
+	d := DashboardDevice{
+		ID:           7,
+		Name:         "ハウスA温湿度計",
+		Location:     "ビニールハウスA",
+		IsActive:     true,
+		TempText:     "28.50℃",
+		HumidityText: "65.30%",
+		LastCommText: "2分前",
+	}
+	html := render(t, DeviceCard(d))
+
+	assertContains(t, html, `id="device-card-7"`) // 個別カード id (将来 OOB ターゲット)
+	assertContains(t, html, "device-card")
+	assertContains(t, html, "ハウスA温湿度計") // 名前
+	assertContains(t, html, "場所:")
+	assertContains(t, html, "ビニールハウスA") // 設置場所
+	assertContains(t, html, "status-active")
+	assertContains(t, html, "● 稼働中")
+	assertContains(t, html, "28.50℃") // 温度表示値
+	assertContains(t, html, "65.30%") // 湿度表示値
+	assertContains(t, html, "最終通信:")
+	assertContains(t, html, "2分前")
+	assertContains(t, html, `href="/devices/7"`) // 詳細遷移先
+	assertContains(t, html, "詳細を見る")
+}
+
+func TestDeviceCard_停止中はstatus_inactiveと停止中表記(t *testing.T) {
+	d := DashboardDevice{
+		ID:           8,
+		Name:         "停止デバイス",
+		Location:     "",
+		IsActive:     false,
+		TempText:     "ー",
+		HumidityText: "ー",
+		LastCommText: "通信実績なし",
+	}
+	html := render(t, DeviceCard(d))
+
+	assertContains(t, html, `id="device-card-8"`)
+	assertContains(t, html, "status-inactive")
+	assertContains(t, html, "○ 停止中")
+	assertContains(t, html, "通信実績なし")
+	if strings.Contains(html, "● 稼働中") {
+		t.Error("停止中デバイスに「● 稼働中」が描画されている")
+	}
+}
+
+func TestUnhandledAlertBanner_件数ありで見出しと各メッセージ(t *testing.T) {
+	alerts := []DashboardAlert{
+		{Message: "ハウスA温湿度計: 温度が35℃を超えました（38.50℃）"},
+		{Message: "ハウスB温湿度計: 湿度が30%を下回りました（25.00%）"},
+	}
+	html := render(t, UnhandledAlertBanner(alerts))
+
+	assertContains(t, html, `id="unhandled-alert-banner"`) // OOB ターゲット用 id
+	assertContains(t, html, "alert-banner")
+	assertContains(t, html, "⚠ 未対応アラート")
+	assertContains(t, html, "ハウスA温湿度計: 温度が35℃を超えました（38.50℃）")
+	assertContains(t, html, "ハウスB温湿度計: 湿度が30%を下回りました（25.00%）")
+	if strings.Contains(html, "未対応のアラートはありません。") {
+		t.Error("件数ありで空メッセージが描画されている")
+	}
+}
+
+func TestUnhandledAlertBanner_0件で空メッセージ(t *testing.T) {
+	html := render(t, UnhandledAlertBanner(nil))
+
+	assertContains(t, html, `id="unhandled-alert-banner"`) // ラッパーは0件でも残す
+	assertContains(t, html, "未対応のアラートはありません。")
+	if strings.Contains(html, "⚠ 未対応アラート") {
+		t.Error("0件で未対応アラート見出しが描画されている")
+	}
+}

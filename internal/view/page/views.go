@@ -3,6 +3,20 @@
 // (binding 構造体は handler 側に置き、view → handler の循環依存を避ける)。
 package page
 
+import (
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
+	"github.com/HiroshiKawano/go_iot/internal/view/layout"
+)
+
+// DashboardView はダッシュボード全体の描画データ (表示用 primitive のみ)。
+// pgtype やリポジトリ型は持ち込まず、整形は handler 側で完結させる (view 純粋性)。
+// デバイス/アラートの1件分 DTO は component が所有する (page ↔ component の循環回避)。
+type DashboardView struct {
+	Layout  layout.AppLayoutData // Title/UserName/CSRFToken/CSSURL/Flash
+	Devices []component.DashboardDevice
+	Alerts  []component.DashboardAlert
+}
+
 // LoginView はログイン画面の描画に必要なデータ。
 // Email は再描画時の入力値再表示用。Errors は field 名 → 日本語メッセージ
 // ("form" キーはフォーム全体に対する汎用エラー = 認証失敗の共通メッセージ)。
@@ -20,4 +34,15 @@ type RegisterView struct {
 	Name      string
 	Email     string
 	Errors    map[string]string
+}
+
+// DeviceFormView はデバイス登録/編集ページ (DeviceCreatePage/DeviceEditPage) の描画データ。
+// 登録/編集で単一の View を共有する (画面差分は Form.IsEdit/Action/CancelURL と DeviceName のみ)。
+// 認証後レイアウト用の Layout と、編集見出し「デバイス編集: {DeviceName}」用の DeviceName、
+// 共有フォーム本体へ渡す Form を束ねる。Form はフォーム部品が所有する component 側 DTO で、
+// レイアウトを内包しない (layout → component の import 方向を保ち循環を避ける)。
+type DeviceFormView struct {
+	Layout     layout.AppLayoutData     // App レイアウト (Title/UserName/CSRFToken/CSSURL)
+	DeviceName string                   // 編集見出し用 (登録時は未使用)
+	Form       component.DeviceFormView // 共有フォーム描画パラメータ
 }
