@@ -25,10 +25,18 @@ type SensorRepo interface {
 	UpdateDeviceLastCommunicated(ctx context.Context, id int64) error
 }
 
+// AlertEvaluator は SensorAPI が受信時のアラート判定を委譲する consumer interface。
+// *service.AlertEvaluator がこれを満たす。SensorRepo にアラート用メソッドを足さず
+// 別フィールドで受けることで、受信の関心事とアラート判定の関心事を分離する。
+type AlertEvaluator interface {
+	EvaluateAndNotify(ctx context.Context, reading *repository.SensorReading) ([]repository.AlertHistory, error)
+}
+
 // SensorAPI は ESP8266 等のデバイスから呼ばれる REST API ハンドラ。
 // 認証は auth.DeviceAuth ミドルウェアで済んでいる前提。
 type SensorAPI struct {
-	Repo SensorRepo
+	Repo      SensorRepo
+	Evaluator AlertEvaluator
 }
 
 // CreateSensorReadingRequest は POST /api/sensor-data のリクエストボディ。
@@ -49,6 +57,8 @@ type CreateSensorReadingResponse struct {
 	Humidity    float64   `json:"humidity"`
 	RecordedAt  time.Time `json:"recorded_at"`
 	CreatedAt   time.Time `json:"created_at"`
+	// AlertsFired は当該受信で発火・記録されたアラート履歴の件数。
+	AlertsFired int `json:"alerts_fired"`
 }
 
 // Create はセンサーデータを保存する。
@@ -58,16 +68,15 @@ type CreateSensorReadingResponse struct {
 //  2. device_id の存在確認 + 所有者確認
 //  3. sensor_readings INSERT
 //  4. devices.last_communicated_at 更新 (失敗しても続行)
+//  5. アラート判定を同期実行 (失敗しても 201 を妨げない / ベストエフォート)
 //
 // HTTP ステータス:
-//   - 201: 作成成功
+//   - 201: 作成成功 (アラート判定の成否に関わらず)
 //   - 400: JSON 形式エラー
 //   - 401: 未認証 (多重防御。通常は DeviceAuth が先に 401 を返す)
 //   - 403: 他ユーザーのデバイスに書き込もうとした
 //   - 422: バリデーションエラー / 存在しない device_id
-//   - 500: DB エラー
-//
-// アラート判定は DB設計書.md の方針に従い Step 18 (フェーズ7) で同期追加予定。
+//   - 500: DB エラー (保存まで。アラート判定の失敗は 500 にしない)
 func (h *SensorAPI) Create(c *gin.Context) {
 	var req CreateSensorReadingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -116,6 +125,11 @@ func (h *SensorAPI) Create(c *gin.Context) {
 
 	_ = h.Repo.UpdateDeviceLastCommunicated(ctx, device.ID)
 
+	// アラート判定を同期実行する (DB設計書 §アラート判定の実行タイミング)。
+	// ベストエフォート: 判定・履歴作成が失敗しても受信成功 (201) を妨げない。
+	// エラーは service 側でログ済みのため、ここでは件数のみ利用する。
+	alerts, _ := h.Evaluator.EvaluateAndNotify(ctx, &reading)
+
 	c.JSON(http.StatusCreated, CreateSensorReadingResponse{
 		ID:          reading.ID,
 		DeviceID:    reading.DeviceID,
@@ -123,5 +137,6 @@ func (h *SensorAPI) Create(c *gin.Context) {
 		Humidity:    pgconv.NumericToFloat(reading.Humidity),
 		RecordedAt:  pgconv.TimestamptzToTime(reading.RecordedAt),
 		CreatedAt:   pgconv.TimestamptzToTime(reading.CreatedAt),
+		AlertsFired: len(alerts),
 	})
 }

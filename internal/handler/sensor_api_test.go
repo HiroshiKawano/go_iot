@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -126,6 +127,20 @@ func (f *fakeSensorRepo) UpdateDeviceLastCommunicated(_ context.Context, _ int64
 	return nil
 }
 
+// spyEvaluator は AlertEvaluator (consumer interface) の最小スタブ。
+// 評価結果・エラーを差し替え、呼び出しを記録する。判定ロジック自体は service 側でテスト済みのため、
+// ここではハンドラが「評価を呼ぶ」「結果件数を返す」「失敗しても 201」を検証するためだけに使う。
+type spyEvaluator struct {
+	alerts []repository.AlertHistory
+	err    error
+	called bool
+}
+
+func (s *spyEvaluator) EvaluateAndNotify(_ context.Context, _ *repository.SensorReading) ([]repository.AlertHistory, error) {
+	s.called = true
+	return s.alerts, s.err
+}
+
 // newRouterWithUser は user_id を注入したうえで SensorAPI.Create を呼ぶルータ。
 // DeviceAuth 成功後 (auth.SetUserID 済み) の状態を再現する。
 func newRouterWithUser(h *SensorAPI, userID int64) *gin.Engine {
@@ -151,7 +166,8 @@ func postSensorData(t *testing.T, r *gin.Engine) *httptest.ResponseRecorder {
 
 func TestSensorAPI_Create_所有者一致なら201(t *testing.T) {
 	repo := &fakeSensorRepo{device: repository.Device{ID: 10, UserID: 7}}
-	w := postSensorData(t, newRouterWithUser(&SensorAPI{Repo: repo}, 7))
+	api := &SensorAPI{Repo: repo, Evaluator: &spyEvaluator{}}
+	w := postSensorData(t, newRouterWithUser(api, 7))
 
 	if got, want := w.Code, http.StatusCreated; got != want {
 		t.Errorf("status: got %d, want %d, body=%s", got, want, w.Body.String())
@@ -213,5 +229,64 @@ func TestSensorAPI_Create_保存失敗は500(t *testing.T) {
 
 	if got, want := w.Code, http.StatusInternalServerError; got != want {
 		t.Errorf("status: got %d, want %d, body=%s", got, want, w.Body.String())
+	}
+}
+
+// --- 2.1 アラート評価の同期接続とレスポンス拡張 ---
+
+func TestSensorAPI_Create_保存後にアラート評価が呼ばれ発火件数を返す(t *testing.T) {
+	repo := &fakeSensorRepo{device: repository.Device{ID: 10, UserID: 7}}
+	spy := &spyEvaluator{alerts: []repository.AlertHistory{{ID: 1}, {ID: 2}}}
+	api := &SensorAPI{Repo: repo, Evaluator: spy}
+	w := postSensorData(t, newRouterWithUser(api, 7))
+
+	if got, want := w.Code, http.StatusCreated; got != want {
+		t.Fatalf("status: got %d, want %d, body=%s", got, want, w.Body.String())
+	}
+	if !spy.called {
+		t.Error("保存後にアラート評価が呼ばれていない")
+	}
+	var resp struct {
+		AlertsFired int `json:"alerts_fired"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("レスポンス JSON のパースに失敗: %v body=%s", err, w.Body.String())
+	}
+	if resp.AlertsFired != 2 {
+		t.Errorf("alerts_fired: got %d, want 2", resp.AlertsFired)
+	}
+}
+
+func TestSensorAPI_Create_発火0件なら件数0(t *testing.T) {
+	repo := &fakeSensorRepo{device: repository.Device{ID: 10, UserID: 7}}
+	api := &SensorAPI{Repo: repo, Evaluator: &spyEvaluator{}} // alerts=nil
+	w := postSensorData(t, newRouterWithUser(api, 7))
+
+	if got, want := w.Code, http.StatusCreated; got != want {
+		t.Fatalf("status: got %d, want %d", got, want)
+	}
+	var resp struct {
+		AlertsFired int `json:"alerts_fired"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("レスポンス JSON のパースに失敗: %v", err)
+	}
+	if resp.AlertsFired != 0 {
+		t.Errorf("alerts_fired: got %d, want 0", resp.AlertsFired)
+	}
+}
+
+func TestSensorAPI_Create_評価失敗でも201を維持(t *testing.T) {
+	repo := &fakeSensorRepo{device: repository.Device{ID: 10, UserID: 7}}
+	spy := &spyEvaluator{err: errors.New("eval failed")}
+	api := &SensorAPI{Repo: repo, Evaluator: spy}
+	w := postSensorData(t, newRouterWithUser(api, 7))
+
+	// ベストエフォート: 評価が失敗しても受信成功 (201) を妨げない
+	if got, want := w.Code, http.StatusCreated; got != want {
+		t.Errorf("評価失敗でも 201 を返すべき: got %d, want %d, body=%s", got, want, w.Body.String())
+	}
+	if !spy.called {
+		t.Error("評価が呼ばれていない")
 	}
 }

@@ -18,6 +18,7 @@ import (
 	infradb "github.com/HiroshiKawano/go_iot/internal/infra/db"
 	"github.com/HiroshiKawano/go_iot/internal/middleware"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
+	"github.com/HiroshiKawano/go_iot/internal/service"
 	"github.com/HiroshiKawano/go_iot/internal/view"
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
@@ -121,7 +122,8 @@ func newHTTPHandler(cfg *config.Config, sm *scs.SessionManager, q repository.Que
 	view.MountStatic(engine)
 
 	// デバイス API (Bearer トークン認証・CSRF 対象外)
-	sensorAPI := &handler.SensorAPI{Repo: q}
+	// アラート判定サービスを注入 (受信時に同期評価)。q (Querier) が AlertEvaluatorRepo を満たす。
+	sensorAPI := &handler.SensorAPI{Repo: q, Evaluator: &service.AlertEvaluator{Repo: q}}
 	deviceAuth := auth.DeviceAuth(auth.DeviceAuthConfig{Repo: q})
 	apiGroup := engine.Group("/api", deviceAuth)
 	apiGroup.POST("/sensor-data", sensorAPI.Create)
