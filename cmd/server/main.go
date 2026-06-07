@@ -148,6 +148,15 @@ func newHTTPHandler(cfg *config.Config, sm *scs.SessionManager, q repository.Que
 	web.GET("/devices/:device/edit", middleware.RequireAuth(), deviceH.ShowEditForm)
 	web.PUT("/devices/:device", middleware.RequireAuth(), deviceH.Update)
 
+	// デバイス詳細 (device-detail): 詳細表示・期間切替フラグメント・論理削除。
+	// 静的 /devices/create と同じ階層のパラメータ node ":device" に GET/DELETE ハンドラを追加する
+	// (:device は /edit・PUT で既存のため node は既存。Gin は静的 create を優先解決)。
+	// 削除は HTMX の真の DELETE と、非 HTMX フォーム (_method=delete → 外側 MethodOverride) の
+	// 両経路が同一 deviceH.Delete に到達する。
+	web.GET("/devices/:device", middleware.RequireAuth(), deviceH.Show)
+	web.GET("/devices/:device/chart", middleware.RequireAuth(), deviceH.Chart)
+	web.DELETE("/devices/:device", middleware.RequireAuth(), deviceH.Delete)
+
 	// 合成: メソッド上書き (ルーティング前) → セッション load/save → engine
 	return middleware.MethodOverride(sm.LoadAndSave(engine))
 }

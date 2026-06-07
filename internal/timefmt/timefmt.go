@@ -26,3 +26,16 @@ func RelativeJP(t, now time.Time) string {
 		return fmt.Sprintf("%d日前", int(diff/(24*time.Hour)))
 	}
 }
+
+// DateTimeJP は t を「YYYY-MM-DD HH:MM:SS」形式の絶対表記で返す（最終通信日時用）。
+// t の所在地（time.Location）をそのまま用いる純粋関数であり、TZ 変換は行わない。
+// 表示したいタイムゾーンへの変換は呼び出し側（handler 等）の責務とする。
+func DateTimeJP(t time.Time) string {
+	return t.Format("2006-01-02 15:04:05")
+}
+
+// DateTimeMinuteJP は t を「YYYY-MM-DD HH:MM」形式（分まで）の絶対表記で返す
+// （最新計測テーブルの計測日時用）。秒は表示せず切り捨てる。TZ 変換は行わない。
+func DateTimeMinuteJP(t time.Time) string {
+	return t.Format("2006-01-02 15:04")
+}

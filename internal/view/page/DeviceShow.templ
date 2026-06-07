@@ -1,0 +1,46 @@
+package page
+
+import (
+	"strconv"
+
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
+	"github.com/HiroshiKawano/go_iot/internal/view/layout"
+)
+
+// DeviceShowPage はデバイス詳細フルページ (mocks/html/device-show.html を写経)。
+// 共通レイアウト App を継承し、情報パネル・グラフ領域・最新計測テーブル・削除確認モーダルを 1 ページに統合する。
+//
+// グラフ領域は #device-chart-area ラッパーを**ここで**提供し、内側に DeviceChartArea を置く
+// (期間切替は #device-chart-area を innerHTML swap するため、フラグメント側は wrapper を持たない)。
+//
+// 削除ボタン (情報パネル内) とモーダルは、レイアウト body (x-data="{ navOpen }") とは別の
+// ネスト x-data="{ deleteModalOpen: false }" の div の**内側**に両方を置く (§62 スコープ外回避)。
+// 確認ボタンは hx-delete (CSRF は App の htmx:configRequest が自動付与)。独自 CSS クラスは新設しない (§31)。
+templ DeviceShowPage(v DeviceShowView) {
+	@layout.App(v.Layout) {
+		<div class="main-inner" x-data="{ deleteModalOpen: false }">
+			<div class="page-header">
+				<h1>デバイス詳細: { v.Info.Name }</h1>
+			</div>
+			@component.DeviceInfoPanel(v.Info)
+			<section class="card">
+				<h2>期間選択</h2>
+				<div id="device-chart-area">
+					@component.DeviceChartArea(v.ChartArea)
+				</div>
+			</section>
+			@component.LatestReadingsTable(v.Latest)
+			<div class="modal-overlay" x-show="deleteModalOpen" x-cloak>
+				<div class="modal-content">
+					<h2>デバイスを削除しますか？</h2>
+					<p>{ v.DeleteName }</p>
+					<p class="u-mb-4">※この操作は取り消せません。計測データも削除されます。</p>
+					<div class="form-actions">
+						<button type="button" class="btn btn-secondary" @click="deleteModalOpen = false">キャンセル</button>
+						<button type="button" class="btn btn-danger" hx-delete={ "/devices/" + strconv.FormatInt(v.DeviceID, 10) }>削除する</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

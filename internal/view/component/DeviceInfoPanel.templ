@@ -1,0 +1,34 @@
+package component
+
+// DeviceInfoPanel はデバイス詳細の情報パネルを描画する (mocks/html/device-show.html 行43-56 を写経)。
+// 稼働状態は StatusActive で status-active「● 稼働中」/ status-inactive「○ 停止中」を出し分ける
+// (DeviceCard と同方針)。編集は <a> でフルページ遷移、削除は Alpine の deleteModalOpen を立てて
+// 確認モーダルを開く (モーダル本体と同一 x-data スコープに置くのは DeviceShow 側の責務、§62)。
+// 独自 CSS クラスは新設しない (§31)。
+templ DeviceInfoPanel(v DeviceInfoView) {
+	<section class="card device-info">
+		<h2>デバイス情報</h2>
+		<dl>
+			<dt>名前</dt>
+			<dd>{ v.Name }</dd>
+			<dt>MAC</dt>
+			<dd>{ v.MacAddress }</dd>
+			<dt>場所</dt>
+			<dd>{ v.Location }</dd>
+			<dt>状態</dt>
+			<dd>
+				if v.StatusActive {
+					<span class="status-active">● 稼働中</span>
+				} else {
+					<span class="status-inactive">○ 停止中</span>
+				}
+			</dd>
+			<dt>最終通信</dt>
+			<dd>{ v.LastCommText }</dd>
+		</dl>
+		<div class="form-actions">
+			<a href={ templ.URL(v.EditURL) } class="btn btn-secondary">編集</a>
+			<button type="button" class="btn btn-danger" @click="deleteModalOpen = true">削除</button>
+		</div>
+	</section>
+}

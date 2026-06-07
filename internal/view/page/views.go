@@ -17,6 +17,20 @@ type DashboardView struct {
 	Alerts  []component.DashboardAlert
 }
 
+// DeviceShowView はデバイス詳細フルページ (DeviceShowPage) の描画データ。
+// 認証後レイアウト Layout に、情報パネル・グラフ領域・最新計測テーブルの各 component DTO を束ねる。
+// 整形済み primitive のみを保持し pgtype/repository 型は持ち込まない (view 純粋性)。
+// DeviceID は削除 (hx-delete) URL、DeleteName は削除確認モーダルに表示するデバイス名。
+// ページ見出しのデバイス名は Info.Name を流用する。
+type DeviceShowView struct {
+	Layout     layout.AppLayoutData
+	DeviceID   int64
+	Info       component.DeviceInfoView
+	ChartArea  component.DeviceChartAreaView
+	Latest     component.LatestReadingsView
+	DeleteName string
+}
+
 // LoginView はログイン画面の描画に必要なデータ。
 // Email は再描画時の入力値再表示用。Errors は field 名 → 日本語メッセージ
 // ("form" キーはフォーム全体に対する汎用エラー = 認証失敗の共通メッセージ)。

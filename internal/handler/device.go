@@ -30,15 +30,22 @@ const (
 	macDuplicateMessage = "このMACアドレスは既に登録されています"
 )
 
-// DeviceRepo はデバイス登録・編集ハンドラが必要とする最小の DB ポート。
-// repository.Querier が満たす (main.go は repository.New(pool) をそのまま渡す)。
+// DeviceRepo はデバイス登録・編集・詳細・削除ハンドラが必要とする最小の DB ポート。
+// repository.Querier が満たす (main.go は repository.New(pool) をそのまま渡すため無改修)。
 // GetDevice を含むため authz.RequireDeviceOwner の DeviceGetter も満たす。
+// 詳細画面 (device_show.go) 向けに最新10件取得・24h生データ・日次集計・論理削除を宣言追加する
+// (クエリは sqlc 生成済み。本 interface はその consumer 最小 interface への宣言追加のみ)。
 type DeviceRepo interface {
 	GetUser(ctx context.Context, id int64) (repository.User, error)
 	GetDevice(ctx context.Context, id int64) (repository.Device, error)
 	GetDeviceByMacAddress(ctx context.Context, macAddress string) (repository.Device, error)
 	CreateDevice(ctx context.Context, arg repository.CreateDeviceParams) (repository.Device, error)
 	UpdateDevice(ctx context.Context, arg repository.UpdateDeviceParams) (repository.Device, error)
+	// --- デバイス詳細画面 (device-detail) で追加 ---
+	ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]repository.SensorReading, error)
+	ListRecentSensorReadings(ctx context.Context, arg repository.ListRecentSensorReadingsParams) ([]repository.SensorReading, error)
+	ListDailySensorAggregates(ctx context.Context, arg repository.ListDailySensorAggregatesParams) ([]repository.ListDailySensorAggregatesRow, error)
+	SoftDeleteDevice(ctx context.Context, id int64) error
 }
 
 // DeviceHandler はデバイス登録・編集の 4 ルートを提供する。

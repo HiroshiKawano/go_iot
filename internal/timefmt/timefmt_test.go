@@ -45,3 +45,50 @@ func TestRelativeJP(t *testing.T) {
 		})
 	}
 }
+
+// TestDateTimeJP は最終通信日時用の絶対整形「YYYY-MM-DD HH:MM:SS」を検証する。
+// 引数の時刻をそのまま整形する純粋関数（TZ 変換は行わない=呼び出し側責務）であり、
+// 機種 TZ に依存せず決定的に検証するため入力を UTC 固定で構成する。
+func TestDateTimeJP(t *testing.T) {
+	tests := []struct {
+		name string
+		in   time.Time
+		want string
+	}{
+		{"通常の日時", time.Date(2026, 4, 20, 14, 30, 5, 0, time.UTC), "2026-04-20 14:30:05"},
+		{"月日時分秒すべて1桁（ゼロ埋め確認）", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), "2026-01-02 03:04:05"},
+		{"真夜中 00:00:00", time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), "2026-12-31 00:00:00"},
+		{"ナノ秒は切り捨て（秒までで止まる）", time.Date(2026, 6, 8, 23, 59, 59, 999_999_999, time.UTC), "2026-06-08 23:59:59"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DateTimeJP(tt.in); got != tt.want {
+				t.Errorf("DateTimeJP() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDateTimeMinuteJP は計測テーブル用の絶対整形「YYYY-MM-DD HH:MM」を検証する。
+// 秒を含めず分までで切る点が DateTimeJP との差分。入力は同様に UTC 固定で決定的に検証する。
+func TestDateTimeMinuteJP(t *testing.T) {
+	tests := []struct {
+		name string
+		in   time.Time
+		want string
+	}{
+		{"通常の日時（秒は表示しない）", time.Date(2026, 4, 20, 14, 30, 5, 0, time.UTC), "2026-04-20 14:30"},
+		{"月日時分すべて1桁（ゼロ埋め確認）", time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC), "2026-01-02 03:04"},
+		{"真夜中 00:00", time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), "2026-12-31 00:00"},
+		{"秒が大きくても分は繰り上げない（切り捨て）", time.Date(2026, 6, 8, 23, 59, 59, 0, time.UTC), "2026-06-08 23:59"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DateTimeMinuteJP(tt.in); got != tt.want {
+				t.Errorf("DateTimeMinuteJP() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

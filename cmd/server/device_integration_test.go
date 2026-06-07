@@ -64,6 +64,24 @@ func (f fakeDeviceQuerier) UpdateDevice(_ context.Context, _ repository.UpdateDe
 	return f.updated, nil
 }
 
+// --- デバイス詳細 (device-detail) で DeviceHandler が呼ぶ新メソッドの安全スタブ (§54)。
+// 埋め込み Querier(nil) のままだと実行時に nil 参照で panic するため、空データで明示実装する。
+func (f fakeDeviceQuerier) ListLatestSensorReadings(_ context.Context, _ int64) ([]repository.SensorReading, error) {
+	return nil, nil
+}
+
+func (f fakeDeviceQuerier) ListRecentSensorReadings(_ context.Context, _ repository.ListRecentSensorReadingsParams) ([]repository.SensorReading, error) {
+	return nil, nil
+}
+
+func (f fakeDeviceQuerier) ListDailySensorAggregates(_ context.Context, _ repository.ListDailySensorAggregatesParams) ([]repository.ListDailySensorAggregatesRow, error) {
+	return nil, nil
+}
+
+func (f fakeDeviceQuerier) SoftDeleteDevice(_ context.Context, _ int64) error {
+	return nil
+}
+
 // deviceApp は user(id=1) と任意のデバイスを備えた合成ハンドラを返す。
 func deviceApp(devices map[int64]repository.Device, created, updated repository.Device) http.Handler {
 	gin.SetMode(gin.TestMode)

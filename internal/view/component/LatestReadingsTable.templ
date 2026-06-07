@@ -1,0 +1,39 @@
+package component
+
+import "strconv"
+
+// LatestReadingsTable は最新計測データテーブルを描画する (mocks/html/device-show.html 行78-101 を写経)。
+// tbody に HTMX 差し替え専用 id (latest-readings-table) を付与する (スタイリングには使わない)。
+// 行は handler が新しい順・最大10件で整形済み。0 件時は tbody を空のまま残し (HTMX ターゲット維持)、
+// 兄弟に空メッセージを表示する。独自 CSS クラスは新設しない (§31)。
+templ LatestReadingsTable(v LatestReadingsView) {
+	<section class="card">
+		<h2>最新計測データ</h2>
+		<div class="table-wrapper">
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th>計測日時</th>
+						<th>温度(℃)</th>
+						<th>湿度(%)</th>
+					</tr>
+				</thead>
+				<tbody id="latest-readings-table">
+					for _, r := range v.Rows {
+						<tr>
+							<td>{ r.RecordedAt }</td>
+							<td>{ r.Temp }</td>
+							<td>{ r.Humidity }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+			if len(v.Rows) == 0 {
+				<p class="empty-message">計測データはまだありません。</p>
+			}
+		</div>
+		<div class="u-ta-right u-mbs-2">
+			<a href={ templ.URL("/devices/" + strconv.FormatInt(v.DeviceID, 10) + "/readings") }>もっと見る →</a>
+		</div>
+	</section>
+}

@@ -41,6 +41,9 @@ type Querier interface {
 	ListDevicesByUser(ctx context.Context, userID int64) ([]Device, error)
 	// アラート判定ロジック (センサー受信時の同期処理) で使用
 	ListEnabledAlertRulesByDevice(ctx context.Context, deviceID int64) ([]AlertRule, error)
+	// デバイス詳細の最新計測テーブル用: 最新10件を降順で取得 (期間に非連動・固定10件)
+	// 既存 ListRecentSensorReadings (時刻以降・昇順=24hグラフ用) とは役割が異なるため Latest で命名分離
+	ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]SensorReading, error)
 	// 24時間グラフ用: 指定時刻以降の生データを昇順で取得
 	ListRecentSensorReadings(ctx context.Context, arg ListRecentSensorReadingsParams) ([]SensorReading, error)
 	// センサーデータ履歴画面のテーブル用 (期間指定 + ページング)

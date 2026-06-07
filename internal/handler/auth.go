@@ -199,6 +199,14 @@ func renderPage(c *gin.Context, status int, comp templ.Component) {
 	_ = comp.Render(c.Request.Context(), c.Writer)
 }
 
+// renderComponent は HTMX フラグメント (レイアウトを含まない単一 component) を 200 で描画する。
+// 既存の renderPage (フルページ) と対をなし、グラフ領域の部分更新返却 (Chart ハンドラ) に使う。
+func renderComponent(c *gin.Context, comp templ.Component) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Status(http.StatusOK)
+	_ = comp.Render(c.Request.Context(), c.Writer)
+}
+
 // renderError は機密情報を含まない簡潔なエラー応答を返す。
 func renderError(c *gin.Context, status int) {
 	c.String(status, "エラーが発生しました。時間をおいて再度お試しください。")

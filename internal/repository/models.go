@@ -92,6 +92,13 @@ type SensorReading struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
+// Web UI の Session 認証データ (scs/pgxstore が管理。sqlc 対象外)
+type Session struct {
+	Token  string             `json:"token"`
+	Data   []byte             `json:"data"`
+	Expiry pgtype.Timestamptz `json:"expiry"`
+}
+
 // ユーザー (Web UI の Session 認証対象)
 type User struct {
 	ID    int64  `json:"id"`

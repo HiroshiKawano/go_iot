@@ -10,6 +10,14 @@ SELECT * FROM sensor_readings
  ORDER BY recorded_at DESC
  LIMIT 1;
 
+-- name: ListLatestSensorReadings :many
+-- デバイス詳細の最新計測テーブル用: 最新10件を降順で取得 (期間に非連動・固定10件)
+-- 既存 ListRecentSensorReadings (時刻以降・昇順=24hグラフ用) とは役割が異なるため Latest で命名分離
+SELECT * FROM sensor_readings
+ WHERE device_id = $1 AND deleted_at IS NULL
+ ORDER BY recorded_at DESC
+ LIMIT 10;
+
 -- name: ListRecentSensorReadings :many
 -- 24時間グラフ用: 指定時刻以降の生データを昇順で取得
 SELECT * FROM sensor_readings

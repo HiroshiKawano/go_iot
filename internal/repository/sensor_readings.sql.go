@@ -201,6 +201,44 @@ func (q *Queries) ListDailySensorAggregates(ctx context.Context, arg ListDailySe
 	return items, nil
 }
 
+const listLatestSensorReadings = `-- name: ListLatestSensorReadings :many
+SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
+ WHERE device_id = $1 AND deleted_at IS NULL
+ ORDER BY recorded_at DESC
+ LIMIT 10
+`
+
+// デバイス詳細の最新計測テーブル用: 最新10件を降順で取得 (期間に非連動・固定10件)
+// 既存 ListRecentSensorReadings (時刻以降・昇順=24hグラフ用) とは役割が異なるため Latest で命名分離
+func (q *Queries) ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]SensorReading, error) {
+	rows, err := q.db.Query(ctx, listLatestSensorReadings, deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SensorReading
+	for rows.Next() {
+		var i SensorReading
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeviceID,
+			&i.Temperature,
+			&i.Humidity,
+			&i.RecordedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentSensorReadings = `-- name: ListRecentSensorReadings :many
 SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
  WHERE device_id   = $1
