@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"database/sql"
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 func TestMain(m *testing.M) {
@@ -203,7 +203,7 @@ func TestSensorAPI_Create_未認証userID0は401かつ保存しない(t *testing
 }
 
 func TestSensorAPI_Create_存在しないデバイスは422(t *testing.T) {
-	repo := &fakeSensorRepo{getErr: pgx.ErrNoRows}
+	repo := &fakeSensorRepo{getErr: sql.ErrNoRows}
 	w := postSensorData(t, newRouterWithUser(&SensorAPI{Repo: repo}, 7))
 
 	if got, want := w.Code, http.StatusUnprocessableEntity; got != want {

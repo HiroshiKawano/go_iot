@@ -6,9 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/HiroshiKawano/go_iot/internal/domain"
-	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // AlertEvaluatorRepo は AlertEvaluator が必要とする最小 DB ポート (consumer interface)。
@@ -77,9 +75,9 @@ func (e *AlertEvaluator) EvaluateAndNotify(
 			continue
 		}
 
-		// 比較のときだけ float へ変換する。保存値 (actual / threshold) は
-		// pgtype.Numeric のまま渡して float 往復による精度劣化を避ける。
-		if !op.Evaluate(pgconv.NumericToFloat(actual), pgconv.NumericToFloat(rule.Threshold)) {
+		// SQLite 移行後は実測値・閾値とも float64 (REAL) で直接得られるため
+		// 変換を介さず比較する。発火履歴には actual をそのまま非正規化保持する。
+		if !op.Evaluate(actual, rule.Threshold) {
 			continue
 		}
 
@@ -110,13 +108,14 @@ func (e *AlertEvaluator) EvaluateAndNotify(
 
 // actualValueFor はルールの指標 (metric) に対応する実測値を reading から選ぶ。
 // 既知の指標 (temperature / humidity) でない場合は ok=false を返す。
-func actualValueFor(metric string, reading *repository.SensorReading) (pgtype.Numeric, bool) {
+// SQLite 移行後は計測値が float64 (REAL) で得られるため戻り値も float64 とする。
+func actualValueFor(metric string, reading *repository.SensorReading) (float64, bool) {
 	switch domain.Metric(metric) {
 	case domain.MetricTemperature:
 		return reading.Temperature, true
 	case domain.MetricHumidity:
 		return reading.Humidity, true
 	default:
-		return pgtype.Numeric{}, false
+		return 0, false
 	}
 }

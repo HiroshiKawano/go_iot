@@ -11,7 +11,7 @@ import (
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash)
-VALUES ($1, $2, $3)
+VALUES (?, ?, ?)
 RETURNING id, name, email, password_hash, email_verified_at, created_at, updated_at
 `
 
@@ -22,7 +22,7 @@ type CreateUserParams struct {
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.Name, arg.Email, arg.PasswordHash)
+	row := q.db.QueryRowContext(ctx, createUser, arg.Name, arg.Email, arg.PasswordHash)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -37,20 +37,20 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const deleteUser = `-- name: DeleteUser :exec
-DELETE FROM users WHERE id = $1
+DELETE FROM users WHERE id = ?
 `
 
 func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteUser, id)
+	_, err := q.db.ExecContext(ctx, deleteUser, id)
 	return err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, name, email, password_hash, email_verified_at, created_at, updated_at FROM users WHERE id = $1
+SELECT id, name, email, password_hash, email_verified_at, created_at, updated_at FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
-	row := q.db.QueryRow(ctx, getUser, id)
+	row := q.db.QueryRowContext(ctx, getUser, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -65,11 +65,11 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, email_verified_at, created_at, updated_at FROM users WHERE email = $1
+SELECT id, name, email, password_hash, email_verified_at, created_at, updated_at FROM users WHERE email = ?
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -85,39 +85,39 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 
 const markUserEmailVerified = `-- name: MarkUserEmailVerified :exec
 UPDATE users
-   SET email_verified_at = NOW(),
-       updated_at        = NOW()
- WHERE id = $1
+   SET email_verified_at = datetime('now'),
+       updated_at        = datetime('now')
+ WHERE id = ?
 `
 
 func (q *Queries) MarkUserEmailVerified(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, markUserEmailVerified, id)
+	_, err := q.db.ExecContext(ctx, markUserEmailVerified, id)
 	return err
 }
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-   SET name          = $2,
-       email         = $3,
-       password_hash = $4,
-       updated_at    = NOW()
- WHERE id = $1
+   SET name          = ?,
+       email         = ?,
+       password_hash = ?,
+       updated_at    = datetime('now')
+ WHERE id = ?
 RETURNING id, name, email, password_hash, email_verified_at, created_at, updated_at
 `
 
 type UpdateUserParams struct {
-	ID           int64  `json:"id"`
 	Name         string `json:"name"`
 	Email        string `json:"email"`
 	PasswordHash string `json:"password_hash"`
+	ID           int64  `json:"id"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUser,
-		arg.ID,
+	row := q.db.QueryRowContext(ctx, updateUser,
 		arg.Name,
 		arg.Email,
 		arg.PasswordHash,
+		arg.ID,
 	)
 	var i User
 	err := row.Scan(

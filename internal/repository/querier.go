@@ -11,7 +11,6 @@ import (
 type Querier interface {
 	CountAlertHistoriesInRange(ctx context.Context, arg CountAlertHistoriesInRangeParams) (int64, error)
 	CountSensorReadingsInRange(ctx context.Context, arg CountSensorReadingsInRangeParams) (int64, error)
-	// アラート発火時に metric / operator / threshold を alert_rules から非正規化して保存
 	CreateAlertHistory(ctx context.Context, arg CreateAlertHistoryParams) (AlertHistory, error)
 	CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
@@ -23,33 +22,20 @@ type Querier interface {
 	GetAlertRule(ctx context.Context, id int64) (AlertRule, error)
 	GetDevice(ctx context.Context, id int64) (Device, error)
 	GetDeviceByMacAddress(ctx context.Context, macAddress string) (Device, error)
-	// デバイスからの Bearer リクエスト受信時に token_hash で検索し認証に使用
 	GetDeviceTokenByHash(ctx context.Context, tokenHash string) (DeviceToken, error)
-	// ダッシュボードでデバイスごとの最新値表示に使用
 	GetLatestSensorReading(ctx context.Context, deviceID int64) (SensorReading, error)
-	// センサーデータ履歴画面の集計ボックス用
 	GetSensorReadingsSummary(ctx context.Context, arg GetSensorReadingsSummaryParams) (GetSensorReadingsSummaryRow, error)
 	GetUser(ctx context.Context, id int64) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
-	// アラート履歴画面の一覧用 (デバイスフィルタ + 期間フィルタ + ページング)
-	// device_id が NULL の場合は全デバイス対象
 	ListAlertHistoriesPaginated(ctx context.Context, arg ListAlertHistoriesPaginatedParams) ([]ListAlertHistoriesPaginatedRow, error)
 	ListAlertRulesByDevice(ctx context.Context, deviceID int64) ([]AlertRule, error)
-	// 7日/30日グラフ用: 日別の平均/最大/最小を集計
 	ListDailySensorAggregates(ctx context.Context, arg ListDailySensorAggregatesParams) ([]ListDailySensorAggregatesRow, error)
 	ListDeviceTokensByUser(ctx context.Context, userID int64) ([]ListDeviceTokensByUserRow, error)
 	ListDevicesByUser(ctx context.Context, userID int64) ([]Device, error)
-	// アラート判定ロジック (センサー受信時の同期処理) で使用
 	ListEnabledAlertRulesByDevice(ctx context.Context, deviceID int64) ([]AlertRule, error)
-	// デバイス詳細の最新計測テーブル用: 最新10件を降順で取得 (期間に非連動・固定10件)
-	// 既存 ListRecentSensorReadings (時刻以降・昇順=24hグラフ用) とは役割が異なるため Latest で命名分離
 	ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]SensorReading, error)
-	// 24時間グラフ用: 指定時刻以降の生データを昇順で取得
 	ListRecentSensorReadings(ctx context.Context, arg ListRecentSensorReadingsParams) ([]SensorReading, error)
-	// センサーデータ履歴画面のテーブル用 (期間指定 + ページング)
 	ListSensorReadingsPaginated(ctx context.Context, arg ListSensorReadingsPaginatedParams) ([]SensorReading, error)
-	// ダッシュボードのアラート通知バナー表示用
-	// alert_histories → alert_rules → devices の JOIN で devices.name も取得
 	ListUnnotifiedAlertHistoriesWithDevice(ctx context.Context, arg ListUnnotifiedAlertHistoriesWithDeviceParams) ([]ListUnnotifiedAlertHistoriesWithDeviceRow, error)
 	MarkAlertHistoryNotified(ctx context.Context, id int64) error
 	MarkUserEmailVerified(ctx context.Context, id int64) error

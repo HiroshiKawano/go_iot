@@ -6,6 +6,7 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,8 +24,6 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/view/page"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // readingPlaceholder は計測未受信時に温度・湿度欄へ入れる代替表記。
@@ -32,12 +31,12 @@ const readingPlaceholder = "ー"
 
 // dashboardAlertLimit は未対応アラートバナーの表示上限 (新しい順)。
 // 超過時は最新 N 件のみ表示する (明示的キャップ)。
-const dashboardAlertLimit int32 = 50
+const dashboardAlertLimit int64 = 50
 
 // Dashboard は認証後のトップ画面を表示する (RequireAuth 適用前提)。
 // 本人のユーザー名・デバイス一覧・未通知アラートを取得し、デバイス別に最新計測を
 // 取得して表示用 View-model へ整形し、フルページを描画する。
-// エラー振り分け: GetLatestSensorReading の pgx.ErrNoRows のみ未受信 (正常・温湿度「ー」)、
+// エラー振り分け: GetLatestSensorReading の sql.ErrNoRows のみ未受信 (正常・温湿度「ー」)、
 // それ以外の取得エラー (ユーザー・デバイス一覧・アラート一覧・想定外の計測エラー) は 500。
 func (h *AuthHandler) Dashboard(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -70,7 +69,7 @@ func (h *AuthHandler) Dashboard(c *gin.Context) {
 	for _, d := range devices {
 		r, err := h.Repo.GetLatestSensorReading(ctx, d.ID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				readings[d.ID] = nil // 未受信
 				continue
 			}
@@ -138,18 +137,18 @@ func buildDashboardDevice(d repository.Device, reading *repository.SensorReading
 }
 
 // formatReadingText は計測値を「小数2桁＋単位」で整形する (例: 28.50℃)。
-func formatReadingText(n pgtype.Numeric, unit string) string {
-	return fmt.Sprintf("%.2f%s", pgconv.NumericToFloat(n), unit)
+func formatReadingText(n float64, unit string) string {
+	return pgconv.Format2(n) + unit
 }
 
 // lastCommText は最終通信時刻の表示文字列を返す。
 // 通信実績なし(LastCommunicatedAt が未設定)なら「通信実績なし」、
 // あれば now を基準とした日本語相対時間を返す。
 func lastCommText(d repository.Device, now time.Time) string {
-	if !d.LastCommunicatedAt.Valid {
+	if d.LastCommunicatedAt == nil {
 		return "通信実績なし"
 	}
-	return timefmt.RelativeJP(pgconv.TimestamptzToTime(d.LastCommunicatedAt), now)
+	return timefmt.RelativeJP(*d.LastCommunicatedAt, now)
 }
 
 // deviceLocation は設置場所 (*string) を表示用文字列へ変換する (未設定 nil は "")。
@@ -190,11 +189,11 @@ func exceedanceVerb(op domain.ComparisonOperator) string {
 }
 
 // formatThreshold は閾値を末尾ゼロ除去で整形する (35.00→35 / 35.50→35.5)。
-func formatThreshold(n pgtype.Numeric) string {
-	return strconv.FormatFloat(pgconv.NumericToFloat(n), 'f', -1, 64)
+func formatThreshold(n float64) string {
+	return strconv.FormatFloat(n, 'f', -1, 64)
 }
 
 // formatActual は実測値を小数2桁固定で整形する (38.5→38.50)。
-func formatActual(n pgtype.Numeric) string {
-	return fmt.Sprintf("%.2f", pgconv.NumericToFloat(n))
+func formatActual(n float64) string {
+	return pgconv.Format2(n)
 }

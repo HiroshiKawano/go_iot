@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 )
 
@@ -209,8 +208,8 @@ func TestFormatDelay(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			recorded := pgconv.Timestamptz(base)
-			created := pgconv.Timestamptz(base.Add(tc.delay))
+			recorded := base
+			created := base.Add(tc.delay)
 			if got := formatDelay(recorded, created); got != tc.want {
 				t.Errorf("formatDelay(delay=%v) = %q, want %q", tc.delay, got, tc.want)
 			}
@@ -224,15 +223,18 @@ func TestFormatDelay(t *testing.T) {
 // 6項目 (小数第2位+単位) へ整形することを検証する。
 func TestBuildSummary_データ有は小数2桁単位付き(t *testing.T) {
 	row := repository.GetSensorReadingsSummaryRow{
-		AvgTemperature: pgconv.Numeric2(28.30),
-		MaxTemperature: pgconv.Numeric2(31.20), // interface{} に pgtype.Numeric をボックス (本番 pgx 同等)
-		MinTemperature: pgconv.Numeric2(25.10),
-		AvgHumidity:    pgconv.Numeric2(65.30),
-		MaxHumidity:    pgconv.Numeric2(70.00),
-		MinHumidity:    pgconv.Numeric2(60.50),
+		AvgTemperature: 28.30,
+		MaxTemperature: 31.20, // 集計列は CAST(... AS REAL) で float64 (silent 平坦化防止)
+		MinTemperature: 25.10,
+		AvgHumidity:    65.30,
+		MaxHumidity:    70.00,
+		MinHumidity:    60.50,
 		SampleCount:    5,
 	}
-	got := buildSummary(row)
+	got, err := buildSummary(row)
+	if err != nil {
+		t.Fatalf("buildSummary で予期しないエラー: %v", err)
+	}
 	checks := []struct {
 		name string
 		got  string
@@ -255,9 +257,12 @@ func TestBuildSummary_データ有は小数2桁単位付き(t *testing.T) {
 // TestBuildSummary_0件は全項目ダッシュ は、サンプル数0のとき6項目すべてを「—」にして
 // 0.00 と誤表示しないことを検証する。
 func TestBuildSummary_0件は全項目ダッシュ(t *testing.T) {
-	// 0件時は AVG/MAX/MIN が NULL (Numeric invalid / interface nil)、SampleCount=0。
+	// 0件時は SampleCount=0 (集計クエリ空集合は handler 側で sql.ErrNoRows をゼロ値行へ写す)。
 	row := repository.GetSensorReadingsSummaryRow{SampleCount: 0}
-	got := buildSummary(row)
+	got, err := buildSummary(row)
+	if err != nil {
+		t.Fatalf("buildSummary で予期しないエラー: %v", err)
+	}
 	fields := map[string]string{
 		"AvgTemp": got.AvgTemp, "MaxTemp": got.MaxTemp, "MinTemp": got.MinTemp,
 		"AvgHum": got.AvgHum, "MaxHum": got.MaxHum, "MinHum": got.MinHum,

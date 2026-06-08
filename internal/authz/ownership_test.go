@@ -2,11 +2,11 @@ package authz
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
 	"github.com/HiroshiKawano/go_iot/internal/repository"
-	"github.com/jackc/pgx/v5"
 )
 
 // fakeDeviceGetter は DeviceGetter の最小モック。
@@ -41,11 +41,11 @@ func TestRequireDeviceOwner_他ユーザー所有ならErrNotOwner(t *testing.T)
 }
 
 func TestRequireDeviceOwner_存在しなければErrNoRowsを透過(t *testing.T) {
-	q := fakeDeviceGetter{err: pgx.ErrNoRows}
+	q := fakeDeviceGetter{err: sql.ErrNoRows}
 
 	_, err := RequireDeviceOwner(context.Background(), q, 10, 7)
-	if !errors.Is(err, pgx.ErrNoRows) {
-		t.Errorf("存在しない: got %v, want pgx.ErrNoRows", err)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("存在しない: got %v, want sql.ErrNoRows", err)
 	}
 	if errors.Is(err, ErrNotOwner) {
 		t.Errorf("存在しないエラーを ErrNotOwner に誤分類してはならない")
@@ -116,11 +116,11 @@ func TestRequireAlertRuleOwner_本人所有ならruleとdeviceを返す(t *testi
 }
 
 func TestRequireAlertRuleOwner_ルール不在ならErrNoRowsを透過(t *testing.T) {
-	q := &fakeAlertRuleDeviceGetter{ruleErr: pgx.ErrNoRows}
+	q := &fakeAlertRuleDeviceGetter{ruleErr: sql.ErrNoRows}
 
 	rule, _, err := RequireAlertRuleOwner(context.Background(), q, 5, 7)
-	if !errors.Is(err, pgx.ErrNoRows) {
-		t.Errorf("ルール不在: got %v, want pgx.ErrNoRows", err)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("ルール不在: got %v, want sql.ErrNoRows", err)
 	}
 	if errors.Is(err, ErrNotOwner) {
 		t.Errorf("不在(論理削除済み含む)を ErrNotOwner に誤分類してはならない")

@@ -1,39 +1,39 @@
 -- name: GetDevice :one
 SELECT * FROM devices
- WHERE id = $1 AND deleted_at IS NULL;
+ WHERE id = ? AND deleted_at IS NULL;
 
 -- name: GetDeviceByMacAddress :one
 SELECT * FROM devices
- WHERE mac_address = $1 AND deleted_at IS NULL;
+ WHERE mac_address = ? AND deleted_at IS NULL;
 
 -- name: ListDevicesByUser :many
 SELECT * FROM devices
- WHERE user_id = $1 AND deleted_at IS NULL
+ WHERE user_id = ? AND deleted_at IS NULL
  ORDER BY created_at DESC;
 
 -- name: CreateDevice :one
 INSERT INTO devices (user_id, name, mac_address, location, is_active)
-VALUES ($1, $2, $3, $4, $5)
+VALUES (?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: UpdateDevice :one
 UPDATE devices
-   SET name        = $2,
-       mac_address = $3,
-       location    = $4,
-       is_active   = $5,
-       updated_at  = NOW()
- WHERE id = $1 AND deleted_at IS NULL
+   SET name        = ?,
+       mac_address = ?,
+       location    = ?,
+       is_active   = ?,
+       updated_at  = datetime('now')
+ WHERE id = ? AND deleted_at IS NULL
 RETURNING *;
 
 -- name: UpdateDeviceLastCommunicated :exec
 UPDATE devices
-   SET last_communicated_at = NOW(),
-       updated_at           = NOW()
- WHERE id = $1 AND deleted_at IS NULL;
+   SET last_communicated_at = datetime('now'),
+       updated_at           = datetime('now')
+ WHERE id = ? AND deleted_at IS NULL;
 
 -- name: SoftDeleteDevice :exec
 UPDATE devices
-   SET deleted_at = NOW(),
-       updated_at = NOW()
- WHERE id = $1 AND deleted_at IS NULL;
+   SET deleted_at = datetime('now'),
+       updated_at = datetime('now')
+ WHERE id = ? AND deleted_at IS NULL;

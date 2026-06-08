@@ -33,7 +33,7 @@ type DeviceGetter interface {
 // 返却:
 //   - (device, nil)             : 所有者一致。device をそのまま利用してよい
 //   - (zero, ErrUnauthenticated): userID が未設定 (<=0)。認証前 / ミドルウェア欠落の fail-closed
-//   - (zero, pgx.ErrNoRows)     : デバイスが存在しない / 論理削除済み (GetDevice のエラーを透過)
+//   - (zero, sql.ErrNoRows)     : デバイスが存在しない / 論理削除済み (GetDevice のエラーを透過)
 //   - (zero, ErrNotOwner)       : 他ユーザーのデバイス
 //   - (zero, その他 err)         : DB エラー (そのまま透過)
 //
@@ -69,7 +69,7 @@ type AlertRuleDeviceGetter interface {
 // 返却:
 //   - (rule, device, nil)              : 所有者一致。rule / device をそのまま利用してよい
 //   - (zero, zero, ErrUnauthenticated) : userID が未設定 (<=0)。GetAlertRule 前の fail-closed
-//   - (zero, zero, pgx.ErrNoRows)      : ルールが存在しない / 論理削除済み (GetAlertRule のエラーを透過)
+//   - (zero, zero, sql.ErrNoRows)      : ルールが存在しない / 論理削除済み (GetAlertRule のエラーを透過)
 //   - (rule, zero, ErrNotOwner)        : 他ユーザーのデバイスに属するルール (取得済み rule は返す)
 //   - (rule, zero, その他 err)          : デバイス取得時の DB エラー等 (そのまま透過)
 //
@@ -80,7 +80,7 @@ func RequireAlertRuleOwner(ctx context.Context, q AlertRuleDeviceGetter, ruleID,
 	if userID <= 0 {
 		return repository.AlertRule{}, repository.Device{}, ErrUnauthenticated
 	}
-	// GetAlertRule は deleted_at IS NULL 条件付き。論理削除済み / 不在は pgx.ErrNoRows として透過する。
+	// GetAlertRule は deleted_at IS NULL 条件付き。論理削除済み / 不在は sql.ErrNoRows として透過する。
 	rule, err := q.GetAlertRule(ctx, ruleID)
 	if err != nil {
 		return repository.AlertRule{}, repository.Device{}, err

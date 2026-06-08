@@ -12,7 +12,7 @@ import (
 type Config struct {
 	AppEnv        string
 	AppPort       int
-	DatabaseURL   string
+	DatabaseURL   string // SQLite ファイル DSN (file: 形式)。PRAGMA は接続層(infra/db)が付与
 	SessionSecret string
 }
 

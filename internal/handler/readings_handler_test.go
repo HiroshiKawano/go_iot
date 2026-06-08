@@ -8,15 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"database/sql"
 	"github.com/HiroshiKawano/go_iot/internal/auth"
-	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 // fakeReadingsRepo は ReadingsRepo の手書きモック (DB 非依存)。
-// GetUser/GetDevice は map で引き未登録は pgx.ErrNoRows。Count/List/Summary は
+// GetUser/GetDevice は map で引き未登録は sql.ErrNoRows。Count/List/Summary は
 // 戻り値・エラー注入と、引数 captor (last*) ・呼び出し記録 (*Called) に対応する。
 type fakeReadingsRepo struct {
 	users   map[int64]repository.User
@@ -48,7 +47,7 @@ func (f *fakeReadingsRepo) GetUser(_ context.Context, id int64) (repository.User
 	if u, ok := f.users[id]; ok {
 		return u, nil
 	}
-	return repository.User{}, pgx.ErrNoRows
+	return repository.User{}, sql.ErrNoRows
 }
 
 func (f *fakeReadingsRepo) GetDevice(_ context.Context, id int64) (repository.Device, error) {
@@ -58,7 +57,7 @@ func (f *fakeReadingsRepo) GetDevice(_ context.Context, id int64) (repository.De
 	if d, ok := f.devices[id]; ok {
 		return d, nil
 	}
-	return repository.Device{}, pgx.ErrNoRows
+	return repository.Device{}, sql.ErrNoRows
 }
 
 func (f *fakeReadingsRepo) CountSensorReadingsInRange(_ context.Context, arg repository.CountSensorReadingsInRangeParams) (int64, error) {
@@ -98,10 +97,10 @@ func ownerReadingsRepo() *fakeReadingsRepo {
 func historyRow(recordedAt, createdAt time.Time, temp, hum float64) repository.SensorReading {
 	return repository.SensorReading{
 		DeviceID:    1,
-		RecordedAt:  pgconv.Timestamptz(recordedAt),
-		CreatedAt:   pgconv.Timestamptz(createdAt),
-		Temperature: pgconv.Numeric2(temp),
-		Humidity:    pgconv.Numeric2(hum),
+		RecordedAt:  recordedAt,
+		CreatedAt:   createdAt,
+		Temperature: temp,
+		Humidity:    hum,
 	}
 }
 
@@ -126,8 +125,8 @@ func assertHistoryBodyHas(t *testing.T, body string, wants ...string) {
 // fullSummaryRow はデータ有の集計行 (SampleCount>0) を作る。
 func fullSummaryRow() repository.GetSensorReadingsSummaryRow {
 	return repository.GetSensorReadingsSummaryRow{
-		AvgTemperature: pgconv.Numeric2(28.30), MaxTemperature: pgconv.Numeric2(35.20), MinTemperature: pgconv.Numeric2(18.50),
-		AvgHumidity: pgconv.Numeric2(62.50), MaxHumidity: pgconv.Numeric2(85.00), MinHumidity: pgconv.Numeric2(30.20),
+		AvgTemperature: 28.30, MaxTemperature: 35.20, MinTemperature: 18.50,
+		AvgHumidity: 62.50, MaxHumidity: 85.00, MinHumidity: 30.20,
 		SampleCount: 5,
 	}
 }
@@ -168,10 +167,10 @@ func TestReadingsIndex_初期表示は200でフルページに集計一覧デバ
 	if !repo.listCalled {
 		t.Fatal("ListSensorReadingsPaginated が呼ばれていない")
 	}
-	if y := repo.lastList.RecordedAt.Time.Year(); y != 1970 {
+	if y := repo.lastList.RecordedAt.Year(); y != 1970 {
 		t.Errorf("from センチネル year=%d, want 1970", y)
 	}
-	if y := repo.lastList.RecordedAt_2.Time.Year(); y != 9999 {
+	if y := repo.lastList.RecordedAt_2.Year(); y != 9999 {
 		t.Errorf("to センチネル year=%d, want 9999", y)
 	}
 	if repo.lastList.Limit != 20 {
@@ -243,8 +242,8 @@ func TestReadingsIndex_HTMX期間検索はフラグメントのみでend_of_day(
 	}
 
 	// from=当日始端、to=end-of-day がモックへ渡る (同一区間を List/Summary/Count が共有)。
-	fromT := repo.lastList.RecordedAt.Time
-	toT := repo.lastList.RecordedAt_2.Time
+	fromT := repo.lastList.RecordedAt
+	toT := repo.lastList.RecordedAt_2
 	if !fromT.Equal(time.Date(2026, 4, 13, 0, 0, 0, 0, jst)) {
 		t.Errorf("from=%v, want 2026-04-13 始端 JST", fromT)
 	}
@@ -254,12 +253,12 @@ func TestReadingsIndex_HTMX期間検索はフラグメントのみでend_of_day(
 		t.Errorf("to=%v, want end-of-day (2026-04-20 23:59 含む・翌日未満)", toT)
 	}
 	// 集計も同一区間を使う (ページ非依存・フィルタ連動)。
-	if !repo.lastSummary.RecordedAt.Time.Equal(fromT) || !repo.lastSummary.RecordedAt_2.Time.Equal(toT) {
-		t.Errorf("Summary 区間=(%v,%v) が List 区間=(%v,%v) と不一致", repo.lastSummary.RecordedAt.Time, repo.lastSummary.RecordedAt_2.Time, fromT, toT)
+	if !repo.lastSummary.RecordedAt.Equal(fromT) || !repo.lastSummary.RecordedAt_2.Equal(toT) {
+		t.Errorf("Summary 区間=(%v,%v) が List 区間=(%v,%v) と不一致", repo.lastSummary.RecordedAt, repo.lastSummary.RecordedAt_2, fromT, toT)
 	}
 	// 件数も同一区間を共有する (総ページ数算出が同条件・design 不変条件「List/Summary/Count は同一区間」)。
-	if !repo.lastCount.RecordedAt.Time.Equal(fromT) || !repo.lastCount.RecordedAt_2.Time.Equal(toT) {
-		t.Errorf("Count 区間=(%v,%v) が List 区間=(%v,%v) と不一致", repo.lastCount.RecordedAt.Time, repo.lastCount.RecordedAt_2.Time, fromT, toT)
+	if !repo.lastCount.RecordedAt.Equal(fromT) || !repo.lastCount.RecordedAt_2.Equal(toT) {
+		t.Errorf("Count 区間=(%v,%v) が List 区間=(%v,%v) と不一致", repo.lastCount.RecordedAt, repo.lastCount.RecordedAt_2, fromT, toT)
 	}
 	// 3クエリとも同一デバイスにスコープされる (BOLA・device 限定)。
 	if repo.lastList.DeviceID != 1 || repo.lastSummary.DeviceID != 1 || repo.lastCount.DeviceID != 1 {
@@ -286,8 +285,8 @@ func TestReadingsIndex_開始日が終了日より後は0件扱い(t *testing.T)
 		t.Errorf("from>to で通常検索が実行されていない: count=%v list=%v", repo.countCalled, repo.listCalled)
 	}
 	// 反転区間（from=2026-04-20 始端）がそのまま渡る（BETWEEN が自然に空を返す）。
-	if !repo.lastList.RecordedAt.Time.Equal(time.Date(2026, 4, 20, 0, 0, 0, 0, jst)) {
-		t.Errorf("from=%v, want 2026-04-20 始端", repo.lastList.RecordedAt.Time)
+	if !repo.lastList.RecordedAt.Equal(time.Date(2026, 4, 20, 0, 0, 0, 0, jst)) {
+		t.Errorf("from=%v, want 2026-04-20 始端", repo.lastList.RecordedAt)
 	}
 }
 
@@ -385,4 +384,21 @@ func TestReadingsIndex_DBエラーは500(t *testing.T) {
 			t.Errorf("Summary エラー status=%d, want 500", w.Code)
 		}
 	})
+}
+
+// TestReadingsIndex_集計空集合のErrNoRowsは200で空サマリ表示 は、SQLite 移行で
+// GetSensorReadingsSummary が GROUP BY device_id 化され空集合期間に sql.ErrNoRows を返すように
+// なったことへの回帰ガード(task1-codegen-notes の申し送り/R5)。集計の sql.ErrNoRows は
+// 一般 DB エラー(500)と区別し、200 + 空サマリ("—")へ写像して移行前(SampleCount==0 空表示)と
+// 観測等価に保つ。この分岐(!errors.Is(err, sql.ErrNoRows))を誤って外すと空集合期間が 500 へ回帰する。
+func TestReadingsIndex_集計空集合のErrNoRowsは200で空サマリ表示(t *testing.T) {
+	repo := ownerReadingsRepo()
+	repo.countVal = 5 // 件数は非0でも集計のみ空集合という極端ケースでも 500 にしない
+	repo.summaryErr = sql.ErrNoRows
+	r := newReadingsRouterWithUser(&ReadingsHandler{Repo: repo}, 7)
+	w := getPath(r, "/devices/1/readings")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (集計空集合の sql.ErrNoRows は 500 にしない)", w.Code)
+	}
+	assertHistoryBodyHas(t, w.Body.String(), "—")
 }

@@ -1,0 +1,120 @@
+# 実装計画 — sqlite-migration
+
+> 本移行は sqlc を engine=sqlite へ切替えると `internal/repository/` の生成型が pgtype 系→database/sql 系へ一斉変化するため、Task 1.2 以降〜Task 6.1 の間は `go build ./...`（全体）が一時的に赤になる。**全体ビルド green は Task 6.1 のマイルストーン**とし、中間タスクは各パッケージ/ドメイン単位のテスト（`go test ./internal/<pkg>/`）で検証する。view/page・component・chart 層は AST テストで pgtype 非流入が保証されているため**変更しない**。
+
+- [x] 1. Foundation: SQLite codegen ゲート（生成型の実機確定）
+- [x] 1.1 migrations 7本を SQLite 方言へ書換
+  - BIGSERIAL→INTEGER PK、TIMESTAMPTZ→DATETIME（datetime affinity 維持・TEXT 不可）、NUMERIC(5,2)→REAL、JSONB→json affinity、BYTEA→BLOB、NOW()→CURRENT_TIMESTAMP、COMMENT ON 全削除
+  - devices の正規表現 CHECK（mac_address ~ '...'）を削除しアプリ層検証へ委譲（既存 isValidMacFormat 流用）
+  - 部分INDEX（WHERE deleted_at IS NULL 等）・DESC 複合INDEX・BETWEEN/IN CHECK は維持
+  - 00007 sessions を `token TEXT PRIMARY KEY / data BLOB NOT NULL / expiry REAL NOT NULL` + expiry 索引へ作り替え
+  - 観測可能完了: goose（dialect sqlite3）で空 SQLite ファイルへ全7本が適用でき、全テーブル・索引が作成される
+  - _Requirements: 1.1, 4.1, 4.3, 6.1_
+- [x] 1.2 queries 6本の方言書換 + sqlc.yaml 切替 + sqlc generate 実走・生成型確定
+  - `::NUMERIC`/`::BIGINT` → CAST(... AS REAL)/CAST(... AS INTEGER) または除去、NOW()→datetime('now')、`sqlc.narg('device_id')::BIGINT IS NULL`→`CAST(sqlc.narg('device_id') AS INTEGER) IS NULL`
+  - 日次集計 `DATE(recorded_at)` → `date(recorded_at, '+9 hours')` を SELECT/GROUP BY/ORDER BY の3箇所で同一式に統一
+  - MAX/MIN/AVG 集計列に明示 `CAST(... AS REAL)` を付与、RETURNING は維持
+  - sqlc.yaml: engine postgresql→sqlite、`sql_package: pgx/v5` 行削除、emit_interface/emit_pointers_for_null_types/emit_json_tags 維持
+  - 観測可能完了: `go tool sqlc generate` が exit 0、再生成された internal/repository に pgtype が一切残らない（grep 0件）、NUMERIC/集計/DATE/RETURNING の生成型を実装メモに記録
+  - _Requirements: 2.1, 4.1, 5.1, 5.2, 9.1_
+
+- [x] 2. Foundation: 接続層を database/sql + modernc へ
+- [x] 2.1 SQLite 接続生成・PRAGMA・接続数方針・DSN 解釈
+  - pgxpool.Pool → `sql.Open("sqlite", dsn)`、PRAGMA journal_mode=WAL / busy_timeout / foreign_keys=ON、SQLite 単一 writer 前提で SetMaxOpenConns を絞る、health は PingContext
+  - go.mod の modernc.org/sqlite を indirect→direct 格上げ + `_ "modernc.org/sqlite"` blank import、config の DATABASE_URL を SQLite ファイル DSN（file:）として解釈（最小変更・既定パス/env 緩和は S10）
+  - 観測可能完了: 接続生成のスモークテストで WAL が実効し PingContext が成功する（infra/db パッケージ単体で検証）
+  - _Requirements: 1.1, 1.2, 1.3, 1.4_
+  - _Boundary: DBConnection_
+
+- [x] 3. Foundation: 型変換ハブ（pgconv）を新型前提に再実装
+- [x] 3.1 NULL 合体 + 表示整形の最小ヘルパへ再実装
+  - 旧 Numeric2/NumericToFloat/Timestamptz/TimestamptzToTime（pgtype 往復）を撤去し、NULL 許容列（deleted_at/last_communicated_at/expires_at/email_verified_at/last_used_at）の合体と `%.2f`・JST ラベル整形を集約。最終シグネチャ（`*T` か `sql.NullT`）は Task 1.2 の生成型に合わせる
+  - 観測可能完了: pgconv パッケージが新 repository 型でコンパイルし、NULL/ゼロ値・`%.2f` の table-driven テストが green
+  - _Requirements: 4.1, 4.2, 4.3, 4.4_
+  - _Boundary: ConversionHub_
+  - _Depends: 1.2_
+
+- [x] 4. Core: handler/service の型追従とエラー写像
+  - handler パッケージは全ドメイン移行完了（4.6）まで `go test ./internal/handler/` が通らない。各サブタスクはドメインの振る舞いを記述し、handler パッケージ全体の green は 4.6 のマイルストーンとする。
+- [x] 4.1 デバイス取込 API とアラート同期判定の型追従
+  - sensor_api の pgconv 呼び出し7箇所を新型へ、service/alert_evaluator の actualValueFor を float64 戻りへ、ErrNoRows（sensor_api:105 / device_auth:63）を sql.ErrNoRows へ、関連 fixtures を primitive 直値へ
+  - 観測可能完了: service（alert_evaluator）パッケージのテストが green、閾値超過でアラート履歴生成・有効 Bearer で 201・無効 Bearer で 401 が移行前と等価
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 2.7, 7.4_
+  - _Boundary: 取込API handler, alert_evaluator_
+  - _Depends: 1.2, 3.1_
+- [x] 4.2 ダッシュボード表示の型追従
+  - dashboard の pgconv 4箇所、formatReadingText/formatThreshold のシグネチャ、ErrNoRows:73、fixtures（dashboard_format_test / dashboard_test）を新型へ
+  - 観測可能完了: 最新計測値・期間別グラフ・オフライン表示が移行前と等価な HTML を描画（dashboard テスト群が新型で green）
+  - _Requirements: 2.2, 4.1, 4.2, 4.3, 4.4, 5.1, 2.7_
+  - _Boundary: dashboard handler_
+- [x] 4.3 デバイス詳細表示と集計の明示型化（silent 平坦化封じ）
+  - device_show の pgconv 8箇所を新型へ、**共有関数 aggregateToFloat（device_show.go 定義・readings からも利用）の default 0 フォールバックを廃止し期待型のみ受理・未知型は明示エラー化＝本タスクが単独所有**（4.4 は本関数を消費するのみ）、monthDayLabel を date 列の string 入力へ、ErrNoRows:344（pgx.ErrNoRows と authz.ErrNotOwner の OR 写像なので ErrNotOwner 側を壊さず置換）、fixtures（device_show_test）を新型へ
+  - 観測可能完了: MAX/MIN/AVG が正値を返し未知型で明示エラー（0 平坦化しないことを assert）、日次バケットが JST 日付でグルーピングされる
+  - _Requirements: 2.4, 4.3, 4.4, 5.1, 5.2, 5.3, 2.7_
+  - _Boundary: device_show handler, AggregateGuard_
+- [x] 4.4 センサーデータ履歴の型追従
+  - readings の pgconv 4箇所、formatDelay のシグネチャ、readings 固有の集計表示（formatAggregate）は **4.3 で変更済みの aggregateToFloat を消費するのみで関数定義は触らない**、fixtures（readings_test / readings_handler_test）を新型へ
+  - 観測可能完了: 期間・ページング・集計付き履歴の並び順・件数・集計値・ページング挙動が移行前と等価
+  - _Requirements: 2.4, 4.1, 4.2_
+  - _Boundary: readings handler_
+  - _Depends: 4.3_
+- [x] 4.5 アラートルール・アラート履歴の型追従
+  - alert_rule の pgconv 4箇所 + ErrNoRows:382、alert_history の pgconv 3箇所、fixtures（alert_rule_test / alert_history_test / alert_history_handler_test）を新型へ
+  - 観測可能完了: アラートルール CRUD の結果・バリデーション、アラート履歴のフィルタ/ページング/件数/並び順が移行前と等価
+  - _Requirements: 2.5, 2.6, 2.7_
+  - _Boundary: alert_rule handler, alert_history handler_
+- [x] 4.6 認証・デバイス CRUD のエラー写像と handler パッケージ green
+  - auth.go の ErrNoRows:86/139、device.go:92/183/279 を sql.ErrNoRows へ、authz/ownership.go の doc コメント文言を sql.ErrNoRows へ更新、fixtures（auth_test / device_test / ownership_test / device_auth_test）を新型・sql.ErrNoRows へ
+  - 観測可能完了: `go test ./internal/handler/` と `./internal/authz/` `./internal/auth/` が全 green、ログイン成立/失敗・デバイス CRUD・所有者違反 403・未検出 404・ユーザー列挙防止が移行前と等価
+  - _Requirements: 2.1, 2.3, 2.7, 7.1, 7.2_
+  - _Boundary: auth handler, device handler, authz_
+
+- [x] 5. Core: セッションストアを sqlite3store へ
+- [x] 5.1 scs/pgxstore → scs/sqlite3store 差替
+  - go.mod に scs/sqlite3store を追加（go get）、pgxstore.New(pool)→sqlite3store.New(sqlDB)、NewSessionManager の引数を *sql.DB へ。Login/Logout/UserIDFromSession のロジックは無変更
+  - 観測可能完了: 実 SQLite でログイン保持→ログアウト→保護ページがログインへ誘導され、cleanup goroutine が SQLITE_BUSY を起こさない。$1+julianday の INSERT/SELECT/DELETE が modernc で通ることを実機確認
+  - _Requirements: 6.1, 6.2, 6.3_
+  - _Boundary: SessionStore_
+  - _Depends: 2.1_
+
+- [x] 6. Integration: 本番配線と全体ビルド green
+- [x] 6.1 main.go 配線の追従と go build 全体 green
+  - repository.New を *sql.DB へ（DBTX が database/sql 形式のため pool 直渡しで適合・無変更）、health を pool.Ping→PingContext へ、NewSessionManager へ *sql.DB を渡す（Task 5.1 済）、modernc blank import の最終結線（infra/db.pool.go に結線済）
+  - 観測可能完了: `go build ./...` が成功、サーバ起動後 /health が 200、CSRF/Bearer/middleware を無変更で起動する
+  - 実績: cmd/server は build/test green、実 SQLite 起動スモークで /health 200・DB 切断時 503 を検証。`go build ./...` 完全 green は残る cmd ツール（gen-token/seed=7.3, db-snapshot=8.2）の型追従完了時点で到達（db-snapshot は 8.2 の introspect 書換なしにコンパイル不能なため構造上 6.1 単独では未達）。internal/... と cmd/server は green。
+  - _Requirements: 1.1, 7.3, 9.1_
+  - _Boundary: ServerWiring_
+  - _Depends: 2.1, 3.1, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1_
+
+- [x] 7. Validation: 移行固有の回帰・統合テスト
+- [x] 7.1 Web UI 等価の統合テスト（httptest + 新型 fake）
+  - fake の戻り型・sentinel を新型・sql.ErrNoRows へ、ログイン→ダッシュボード/デバイス CRUD/履歴/アラートルール・履歴の HTML・HTMX partial を移行前と等価アサート、CSRF GET→トークン往復、302/303 使い分けを維持
+  - 観測可能完了: cmd/server の全統合テストが green、CSRF 保護が有効に機能する
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 7.3_
+  - _Depends: 6.1_
+- [x] 7.2 日次 JST バケットと集計正当性の回帰テスト
+  - 実績: 回帰テストで **Task 1.2 由来の本番バグを発見・修正**。modernc は time.Time を Go String() 形式で格納し SQLite の date() が NULL を返すため、日次集計(7日/30日グラフ)が壊れていた。`date(recorded_at,'+9 hours')`→`date(substr(recorded_at,1,19),'+9 hours')` に修正(3箇所統一・sqlc 再生成)。aggregateToFloat 未知型エラーは Task 4.3 で既存テスト済み。詳細は task1-codegen-notes.md 落とし穴#7。
+  - 既知の UTC 計測群を投入し date(recorded_at,'+9 hours') のバケット日付・グルーピングが期待 JST 日付になること、MAX/MIN/AVG が正値、aggregateToFloat が未知型で明示エラーになることを検証
+  - 観測可能完了: 日次バケットが JST 日境界で一致し、集計が非平坦（silent 0 でない）
+  - _Requirements: 5.1, 5.2, 5.3_
+  - _Depends: 6.1_
+- [x] 7.3 現場 CLI（gen-token）とシード投入の SQLite 対応
+  - 実績: gen-token を *time.Time へ(buildExpiresAt 抽出・単体テスト)、seed を *sql.DB・float64(pgconv.Quantize2)・time.Time 直渡しへ、truncateAll を DELETE FROM 方式へ(AUTOINCREMENT 不使用ゆえ sqlite_sequence 不要・DELETE で id 振り直し)。seedAll を抽出し実 SQLite 投入+冪等を検証。トークン→POST /api/sensor-data→201+保存(Quantize2)を end-to-end 検証。`go build ./...` 残赤は db-snapshot(8.2)のみ。
+  - gen-token を *sql.DB・time.Time へ、seed の TRUNCATE...RESTART IDENTITY CASCADE を DELETE FROM + DELETE FROM sqlite_sequence へ、pgtype ヘルパを新型へ
+  - 観測可能完了: gen-token で発行したトークンで POST /api/sensor-data が 201 を返し計測が保存される、seed が SQLite に開発データを投入できる
+  - _Requirements: 8.1, 8.2, 8.3_
+  - _Depends: 6.1_
+
+- [x] 8. Validation: 品質ゲートと開発ツール
+- [x] 8.1 カバレッジ計測の配線と goose dialect 切替・80%維持
+  - Makefile に test/cover ターゲット（go test -cover ./...）を新設、goose dialect postgres→sqlite3、DATABASE_URL を file: へ、up/down（docker-compose）は本セッションでは整理せず据置き（S10）
+  - 観測可能完了: `make cover` が 80%以上を報告し全テストが green
+  - 実績: `make cover` は生成コード(sqlc=repository/templ=*_templ.go)・CLI(cmd)・docs を除外した業務ロジック総合 **93.3%** を報告し 80%未満なら exit 1。`make test` 全 green。goose CLI sqlite3 で全7マイグレーション適用可(modernc・実機確認)。
+  - _Requirements: 9.1, 9.2, 9.3_
+  - _Depends: 7.1, 7.2, 7.3_
+- [x] 8.2 dbsnapshot を sqlite_master+PRAGMA へ最小移植
+  - introspect.go の pg_catalog 内省を sqlite_master + PRAGMA table_info/index_list へ最小移植（コメント等は機能縮退許容）、make db-snapshot を SQLite 対応
+  - 観測可能完了: `make db-snapshot` が SQLite から table_definitions.md を再生成できる
+  - 実績: Querier を *sql.DB 化、sqlite_master+pragma_table_info(?)+CHECK パースへ全面移植。実機 e2e で docs/database_snapshot/{table_definitions.md,er_diagram.mmd} を SQLite から再生成(型 INTEGER/REAL/VARCHAR・部分索引 WHERE・CHECK enum 値を正しく出力)。コメントは SQLite 非対応で機能縮退(許容)。**これにより `go build ./...` が完全 green に到達。**
+  - _Requirements: 9.4_
+  - _Depends: 6.1_

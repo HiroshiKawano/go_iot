@@ -7,26 +7,26 @@ package repository
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"encoding/json"
+	"time"
 )
 
 const createDeviceToken = `-- name: CreateDeviceToken :one
 INSERT INTO device_tokens (user_id, name, token_hash, abilities, expires_at)
-VALUES ($1, $2, $3, $4, $5)
+VALUES (?, ?, ?, ?, ?)
 RETURNING id, user_id, name, token_hash, abilities, last_used_at, expires_at, created_at, updated_at
 `
 
 type CreateDeviceTokenParams struct {
-	UserID    int64              `json:"user_id"`
-	Name      string             `json:"name"`
-	TokenHash string             `json:"token_hash"`
-	Abilities []byte             `json:"abilities"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UserID    int64           `json:"user_id"`
+	Name      string          `json:"name"`
+	TokenHash string          `json:"token_hash"`
+	Abilities json.RawMessage `json:"abilities"`
+	ExpiresAt *time.Time      `json:"expires_at"`
 }
 
 func (q *Queries) CreateDeviceToken(ctx context.Context, arg CreateDeviceTokenParams) (DeviceToken, error) {
-	row := q.db.QueryRow(ctx, createDeviceToken,
+	row := q.db.QueryRowContext(ctx, createDeviceToken,
 		arg.UserID,
 		arg.Name,
 		arg.TokenHash,
@@ -49,23 +49,22 @@ func (q *Queries) CreateDeviceToken(ctx context.Context, arg CreateDeviceTokenPa
 }
 
 const deleteDeviceToken = `-- name: DeleteDeviceToken :exec
-DELETE FROM device_tokens WHERE id = $1
+DELETE FROM device_tokens WHERE id = ?
 `
 
 func (q *Queries) DeleteDeviceToken(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteDeviceToken, id)
+	_, err := q.db.ExecContext(ctx, deleteDeviceToken, id)
 	return err
 }
 
 const getDeviceTokenByHash = `-- name: GetDeviceTokenByHash :one
 SELECT id, user_id, name, token_hash, abilities, last_used_at, expires_at, created_at, updated_at FROM device_tokens
- WHERE token_hash = $1
-   AND (expires_at IS NULL OR expires_at > NOW())
+ WHERE token_hash = ?
+   AND (expires_at IS NULL OR expires_at > datetime('now'))
 `
 
-// デバイスからの Bearer リクエスト受信時に token_hash で検索し認証に使用
 func (q *Queries) GetDeviceTokenByHash(ctx context.Context, tokenHash string) (DeviceToken, error) {
-	row := q.db.QueryRow(ctx, getDeviceTokenByHash, tokenHash)
+	row := q.db.QueryRowContext(ctx, getDeviceTokenByHash, tokenHash)
 	var i DeviceToken
 	err := row.Scan(
 		&i.ID,
@@ -84,22 +83,22 @@ func (q *Queries) GetDeviceTokenByHash(ctx context.Context, tokenHash string) (D
 const listDeviceTokensByUser = `-- name: ListDeviceTokensByUser :many
 SELECT id, user_id, name, abilities, last_used_at, expires_at, created_at
   FROM device_tokens
- WHERE user_id = $1
+ WHERE user_id = ?
  ORDER BY created_at DESC
 `
 
 type ListDeviceTokensByUserRow struct {
-	ID         int64              `json:"id"`
-	UserID     int64              `json:"user_id"`
-	Name       string             `json:"name"`
-	Abilities  []byte             `json:"abilities"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ID         int64           `json:"id"`
+	UserID     int64           `json:"user_id"`
+	Name       string          `json:"name"`
+	Abilities  json.RawMessage `json:"abilities"`
+	LastUsedAt *time.Time      `json:"last_used_at"`
+	ExpiresAt  *time.Time      `json:"expires_at"`
+	CreatedAt  time.Time       `json:"created_at"`
 }
 
 func (q *Queries) ListDeviceTokensByUser(ctx context.Context, userID int64) ([]ListDeviceTokensByUserRow, error) {
-	rows, err := q.db.Query(ctx, listDeviceTokensByUser, userID)
+	rows, err := q.db.QueryContext(ctx, listDeviceTokensByUser, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +119,9 @@ func (q *Queries) ListDeviceTokensByUser(ctx context.Context, userID int64) ([]L
 		}
 		items = append(items, i)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -128,12 +130,12 @@ func (q *Queries) ListDeviceTokensByUser(ctx context.Context, userID int64) ([]L
 
 const updateDeviceTokenLastUsed = `-- name: UpdateDeviceTokenLastUsed :exec
 UPDATE device_tokens
-   SET last_used_at = NOW(),
-       updated_at   = NOW()
- WHERE id = $1
+   SET last_used_at = datetime('now'),
+       updated_at   = datetime('now')
+ WHERE id = ?
 `
 
 func (q *Queries) UpdateDeviceTokenLastUsed(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, updateDeviceTokenLastUsed, id)
+	_, err := q.db.ExecContext(ctx, updateDeviceTokenLastUsed, id)
 	return err
 }

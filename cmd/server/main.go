@@ -66,7 +66,9 @@ func run() error {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	httpHandler := newHTTPHandler(cfg, sm, q, pool.Ping)
+	// health は DB 疎通を ctx 付きで確認するため PingContext を渡す
+	// (*sql.DB.Ping は func() error で newHTTPHandler の func(ctx) error と非互換)。
+	httpHandler := newHTTPHandler(cfg, sm, q, pool.PingContext)
 
 	// --- サーバ起動 / Graceful shutdown ---
 	addr := fmt.Sprintf(":%d", cfg.AppPort)

@@ -5,6 +5,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -83,7 +83,7 @@ func (h *AuthHandler) LoginPost(c *gin.Context) {
 
 	user, err := h.Repo.GetUserByEmail(c.Request.Context(), form.Email)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			h.renderLoginFailed(c, form.Email)
 			return
 		}
@@ -136,7 +136,7 @@ func (h *AuthHandler) RegisterPost(c *gin.Context) {
 	if _, err := h.Repo.GetUserByEmail(c.Request.Context(), form.Email); err == nil {
 		h.renderRegister(c, form, map[string]string{"email": "このメールアドレスは既に登録されています"})
 		return
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		renderError(c, http.StatusInternalServerError)
 		return
 	}

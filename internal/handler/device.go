@@ -6,6 +6,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"strconv"
@@ -19,7 +20,6 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/view/page"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
-	"github.com/jackc/pgx/v5"
 )
 
 const (
@@ -89,7 +89,7 @@ func (h *DeviceHandler) Create(c *gin.Context) {
 	if _, err := h.Repo.GetDeviceByMacAddress(ctx, mac); err == nil {
 		h.reRenderCreate(c, form, map[string]string{"mac_address": macDuplicateMessage})
 		return
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		renderError(c, http.StatusInternalServerError)
 		return
 	}
@@ -180,7 +180,7 @@ func (h *DeviceHandler) Update(c *gin.Context) {
 			h.reRenderEdit(c, id, device.Name, form, map[string]string{"mac_address": macDuplicateMessage})
 			return
 		}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		renderError(c, http.StatusInternalServerError)
 		return
 	}
@@ -276,7 +276,7 @@ func buildEditView(token, userName string, id int64, deviceName string, form dev
 // 不在/論理削除→404、非所有→403、未認証 (前置 RequireAuth で通常発生しない) と想定外→500。
 func renderDeviceOwnerError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		renderError(c, http.StatusNotFound)
 	case errors.Is(err, authz.ErrNotOwner):
 		renderError(c, http.StatusForbidden)

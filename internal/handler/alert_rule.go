@@ -7,8 +7,8 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -23,7 +23,6 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/view/page"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
-	"github.com/jackc/pgx/v5"
 )
 
 const alertRulesTitle = "アラートルール管理 - 農業IoTシステム"
@@ -140,10 +139,11 @@ func (h *AlertRuleHandler) Add(c *gin.Context) {
 	}
 
 	if _, err := h.Repo.CreateAlertRule(ctx, repository.CreateAlertRuleParams{
-		DeviceID:  device.ID,
-		Metric:    form.Metric,
-		Operator:  form.Operator,
-		Threshold: pgconv.Numeric2(threshold),
+		DeviceID: device.ID,
+		Metric:   form.Metric,
+		Operator: form.Operator,
+		// SQLite REAL は丸めないため、移行前の NUMERIC(5,2) 保存と等価にするよう保存直前に量子化する (R4.1)。
+		Threshold: pgconv.Quantize2(threshold),
 		IsEnabled: true, // 新規は有効状態で作成 (要件 3.1)
 	}); err != nil {
 		renderError(c, http.StatusInternalServerError)
@@ -177,7 +177,7 @@ func (h *AlertRuleHandler) Edit(c *gin.Context) {
 		EditingRuleID: rule.ID,
 		Metric:        rule.Metric,
 		Operator:      rule.Operator,
-		Threshold:     fmt.Sprintf("%.2f", pgconv.NumericToFloat(rule.Threshold)),
+		Threshold:     pgconv.Format2(rule.Threshold),
 	}))
 }
 
@@ -212,10 +212,11 @@ func (h *AlertRuleHandler) Update(c *gin.Context) {
 	}
 
 	if _, err := h.Repo.UpdateAlertRule(ctx, repository.UpdateAlertRuleParams{
-		ID:        rule.ID,
-		Metric:    form.Metric,
-		Operator:  form.Operator,
-		Threshold: pgconv.Numeric2(threshold),
+		ID:       rule.ID,
+		Metric:   form.Metric,
+		Operator: form.Operator,
+		// 保存直前に量子化し移行前の NUMERIC(5,2) 保存と等価にする (R4.1)。
+		Threshold: pgconv.Quantize2(threshold),
 		IsEnabled: rule.IsEnabled, // 現在値を保全 (要件 5.1)
 	}); err != nil {
 		renderError(c, http.StatusInternalServerError)
@@ -354,7 +355,7 @@ func toRowView(r repository.AlertRule) component.AlertRuleRowView {
 		ID:        r.ID,
 		Metric:    domain.Metric(r.Metric),
 		Operator:  domain.ComparisonOperator(r.Operator),
-		Threshold: pgconv.NumericToFloat(r.Threshold),
+		Threshold: r.Threshold,
 		IsEnabled: r.IsEnabled,
 	}
 }
@@ -379,7 +380,7 @@ func renderAlertRuleOwnerError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, authz.ErrUnauthenticated):
 		renderError(c, http.StatusUnauthorized)
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		renderError(c, http.StatusNotFound)
 	case errors.Is(err, authz.ErrNotOwner):
 		renderError(c, http.StatusForbidden)

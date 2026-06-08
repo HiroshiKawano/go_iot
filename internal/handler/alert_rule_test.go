@@ -9,15 +9,14 @@ import (
 	"strings"
 	"testing"
 
+	"database/sql"
 	"github.com/HiroshiKawano/go_iot/internal/auth"
-	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 // fakeAlertRuleRepo は AlertRuleRepo の手書きモック (DB 非依存)。
-// map で引き、未登録は pgx.ErrNoRows。各ミューテーションは呼び出し記録と戻り値/エラー注入に対応する。
+// map で引き、未登録は sql.ErrNoRows。各ミューテーションは呼び出し記録と戻り値/エラー注入に対応する。
 type fakeAlertRuleRepo struct {
 	users    map[int64]repository.User
 	devices  map[int64]repository.Device      // GetDevice 用
@@ -58,7 +57,7 @@ func (f *fakeAlertRuleRepo) GetUser(_ context.Context, id int64) (repository.Use
 	if u, ok := f.users[id]; ok {
 		return u, nil
 	}
-	return repository.User{}, pgx.ErrNoRows
+	return repository.User{}, sql.ErrNoRows
 }
 
 func (f *fakeAlertRuleRepo) ListDevicesByUser(_ context.Context, _ int64) ([]repository.Device, error) {
@@ -75,7 +74,7 @@ func (f *fakeAlertRuleRepo) GetDevice(_ context.Context, id int64) (repository.D
 	if d, ok := f.devices[id]; ok {
 		return d, nil
 	}
-	return repository.Device{}, pgx.ErrNoRows
+	return repository.Device{}, sql.ErrNoRows
 }
 
 func (f *fakeAlertRuleRepo) GetAlertRule(_ context.Context, id int64) (repository.AlertRule, error) {
@@ -85,7 +84,7 @@ func (f *fakeAlertRuleRepo) GetAlertRule(_ context.Context, id int64) (repositor
 	if r, ok := f.rules[id]; ok {
 		return r, nil
 	}
-	return repository.AlertRule{}, pgx.ErrNoRows
+	return repository.AlertRule{}, sql.ErrNoRows
 }
 
 func (f *fakeAlertRuleRepo) ListAlertRulesByDevice(_ context.Context, deviceID int64) ([]repository.AlertRule, error) {
@@ -146,11 +145,11 @@ func alertRuleOwnerRepo() *fakeAlertRuleRepo {
 			0: {{ID: 200, UserID: ruleTestUID, Name: "ハウスA温湿度計"}},
 		},
 		rules: map[int64]repository.AlertRule{
-			10: {ID: 10, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: pgconv.Numeric2(35.00), IsEnabled: true},
-			20: {ID: 20, DeviceID: 300, Metric: "humidity", Operator: "<", Threshold: pgconv.Numeric2(30.00), IsEnabled: true},
+			10: {ID: 10, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: 35.00, IsEnabled: true},
+			20: {ID: 20, DeviceID: 300, Metric: "humidity", Operator: "<", Threshold: 30.00, IsEnabled: true},
 		},
 		byDevice: map[int64][]repository.AlertRule{
-			200: {{ID: 10, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: pgconv.Numeric2(35.00), IsEnabled: true}},
+			200: {{ID: 10, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: 35.00, IsEnabled: true}},
 		},
 	}
 }
@@ -274,11 +273,11 @@ func TestAlertRuleIndex_HXでセクション部分返却(t *testing.T) {
 
 func TestAlertRuleAdd_成功で新ルールとフォーム空(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.createResult = repository.AlertRule{ID: 11, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: pgconv.Numeric2(35.00), IsEnabled: true}
+	repo.createResult = repository.AlertRule{ID: 11, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: 35.00, IsEnabled: true}
 	// 作成後の一覧 (既存10 + 新規11)
 	repo.byDevice[200] = []repository.AlertRule{
-		{ID: 10, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: pgconv.Numeric2(35.00), IsEnabled: true},
-		{ID: 11, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: pgconv.Numeric2(35.00), IsEnabled: true},
+		{ID: 10, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: 35.00, IsEnabled: true},
+		{ID: 11, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: 35.00, IsEnabled: true},
 	}
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
@@ -351,7 +350,7 @@ func TestAlertRuleAdd_非所有デバイスは403(t *testing.T) {
 
 func TestAlertRuleAdd_DBエラーは500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.createErr = pgx.ErrTxClosed // 任意の DB エラー
+	repo.createErr = sql.ErrConnDone // 任意の DB エラー
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := formRequest(r, http.MethodPost, "/alerts/rules", validRuleVals(200))
@@ -413,7 +412,7 @@ func TestAlertRuleEdit_非所有は403(t *testing.T) {
 func TestAlertRuleUpdate_成功で値反映とis_enabled保全(t *testing.T) {
 	repo := alertRuleOwnerRepo()
 	// rule 10 は is_enabled=true。更新では有効状態を保全する。
-	repo.updateResult = repository.AlertRule{ID: 10, DeviceID: 200, Metric: "humidity", Operator: "<", Threshold: pgconv.Numeric2(40.00), IsEnabled: true}
+	repo.updateResult = repository.AlertRule{ID: 10, DeviceID: 200, Metric: "humidity", Operator: "<", Threshold: 40.00, IsEnabled: true}
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	vals := url.Values{"metric": {"humidity"}, "operator": {"<"}, "threshold": {"40.00"}}
@@ -479,7 +478,7 @@ func TestAlertRuleUpdate_非所有は403(t *testing.T) {
 func TestAlertRuleToggle_反転後の行を返す(t *testing.T) {
 	repo := alertRuleOwnerRepo()
 	// rule 10 (is_enabled=true) を反転 → false
-	repo.toggleResult = repository.AlertRule{ID: 10, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: pgconv.Numeric2(35.00), IsEnabled: false}
+	repo.toggleResult = repository.AlertRule{ID: 10, DeviceID: 200, Metric: "temperature", Operator: ">", Threshold: 35.00, IsEnabled: false}
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := methodRequest(r, http.MethodPatch, "/alerts/rules/10/toggle")
@@ -530,9 +529,9 @@ func TestAlertRuleToggle_非所有は403(t *testing.T) {
 func TestAlertRuleDelete_論理削除と残一覧(t *testing.T) {
 	repo := alertRuleOwnerRepo()
 	// device 200 にルール 10, 12 がある状態。10 を削除すると残り 12。
-	repo.rules[12] = repository.AlertRule{ID: 12, DeviceID: 200, Metric: "humidity", Operator: "<", Threshold: pgconv.Numeric2(20.00), IsEnabled: true}
+	repo.rules[12] = repository.AlertRule{ID: 12, DeviceID: 200, Metric: "humidity", Operator: "<", Threshold: 20.00, IsEnabled: true}
 	repo.byDevice[200] = []repository.AlertRule{
-		{ID: 12, DeviceID: 200, Metric: "humidity", Operator: "<", Threshold: pgconv.Numeric2(20.00), IsEnabled: true},
+		{ID: 12, DeviceID: 200, Metric: "humidity", Operator: "<", Threshold: 20.00, IsEnabled: true},
 	} // 削除後の一覧 (10 は除外済み)
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
@@ -602,7 +601,7 @@ func TestAlertRuleDelete_非所有は403(t *testing.T) {
 
 func TestAlertRuleIndex_デバイス一覧取得失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.listDevErr = pgx.ErrTxClosed
+	repo.listDevErr = sql.ErrConnDone
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := getPath(r, "/alerts/rules")
@@ -613,7 +612,7 @@ func TestAlertRuleIndex_デバイス一覧取得失敗は500(t *testing.T) {
 
 func TestAlertRuleIndex_ユーザー取得失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.getUserErr = pgx.ErrTxClosed
+	repo.getUserErr = sql.ErrConnDone
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	// 非 HX フルページ経路で GetUser を呼ぶ。
@@ -626,7 +625,7 @@ func TestAlertRuleIndex_ユーザー取得失敗は500(t *testing.T) {
 func TestAlertRuleIndex_0件案内のユーザー取得失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
 	repo.byUser = map[int64][]repository.Device{0: {}} // 0件
-	repo.getUserErr = pgx.ErrTxClosed
+	repo.getUserErr = sql.ErrConnDone
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := getPath(r, "/alerts/rules")
@@ -638,7 +637,7 @@ func TestAlertRuleIndex_0件案内のユーザー取得失敗は500(t *testing.T
 func TestAlertRuleAdd_成功後の一覧取得失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
 	repo.createResult = repository.AlertRule{ID: 11, DeviceID: 200}
-	repo.listRuleErr = pgx.ErrTxClosed // renderSection の ListAlertRulesByDevice で失敗
+	repo.listRuleErr = sql.ErrConnDone // renderSection の ListAlertRulesByDevice で失敗
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := formRequest(r, http.MethodPost, "/alerts/rules", validRuleVals(200))
@@ -672,7 +671,7 @@ func TestAlertRule_非数値ルールIDは404(t *testing.T) {
 
 func TestAlertRuleUpdate_DB更新失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.updateErr = pgx.ErrTxClosed
+	repo.updateErr = sql.ErrConnDone
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	vals := url.Values{"metric": {"humidity"}, "operator": {"<"}, "threshold": {"40.00"}}
@@ -684,7 +683,7 @@ func TestAlertRuleUpdate_DB更新失敗は500(t *testing.T) {
 
 func TestAlertRuleToggle_DB失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.toggleErr = pgx.ErrTxClosed
+	repo.toggleErr = sql.ErrConnDone
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := methodRequest(r, http.MethodPatch, "/alerts/rules/10/toggle")
@@ -695,7 +694,7 @@ func TestAlertRuleToggle_DB失敗は500(t *testing.T) {
 
 func TestAlertRuleDelete_DB削除失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.softDeleteErr = pgx.ErrTxClosed
+	repo.softDeleteErr = sql.ErrConnDone
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := methodRequest(r, http.MethodDelete, "/alerts/rules/10")
@@ -717,7 +716,7 @@ func TestAlertRule_未認証uidはfail_closedで401(t *testing.T) {
 
 func TestAlertRuleAdd_422時の一覧取得失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.listRuleErr = pgx.ErrTxClosed // 422 再描画の ListAlertRulesByDevice で失敗
+	repo.listRuleErr = sql.ErrConnDone // 422 再描画の ListAlertRulesByDevice で失敗
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	vals := validRuleVals(200)
@@ -730,7 +729,7 @@ func TestAlertRuleAdd_422時の一覧取得失敗は500(t *testing.T) {
 
 func TestAlertRuleDelete_削除後の一覧取得失敗は500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.listRuleErr = pgx.ErrTxClosed // SoftDelete 成功後の ListAlertRulesByDevice で失敗
+	repo.listRuleErr = sql.ErrConnDone // SoftDelete 成功後の ListAlertRulesByDevice で失敗
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := methodRequest(r, http.MethodDelete, "/alerts/rules/10")
@@ -744,7 +743,7 @@ func TestAlertRuleDelete_削除後の一覧取得失敗は500(t *testing.T) {
 
 func TestAlertRuleEdit_認可のDBエラーは500(t *testing.T) {
 	repo := alertRuleOwnerRepo()
-	repo.getRuleErr = pgx.ErrTxClosed // GetAlertRule が DB エラー (ErrNoRows/ErrNotOwner でない)
+	repo.getRuleErr = sql.ErrConnDone // GetAlertRule が DB エラー (ErrNoRows/ErrNotOwner でない)
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
 
 	w := getPath(r, "/alerts/rules/10/edit")

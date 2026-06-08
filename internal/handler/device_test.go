@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"database/sql"
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 // fakeDeviceRepo は DeviceRepo の手書きモック (DB 非依存)。
-// GetDevice/GetDeviceByMacAddress は map で引き、未登録は pgx.ErrNoRows を返す。
+// GetDevice/GetDeviceByMacAddress は map で引き、未登録は sql.ErrNoRows を返す。
 // Create/Update は呼び出し記録 (Called/last*) と戻り値・エラー注入に対応する。
 type fakeDeviceRepo struct {
 	users   map[int64]repository.User
@@ -74,7 +74,7 @@ func (f *fakeDeviceRepo) GetUser(_ context.Context, id int64) (repository.User, 
 	if u, ok := f.users[id]; ok {
 		return u, nil
 	}
-	return repository.User{}, pgx.ErrNoRows
+	return repository.User{}, sql.ErrNoRows
 }
 
 func (f *fakeDeviceRepo) GetDevice(_ context.Context, id int64) (repository.Device, error) {
@@ -84,7 +84,7 @@ func (f *fakeDeviceRepo) GetDevice(_ context.Context, id int64) (repository.Devi
 	if d, ok := f.devices[id]; ok {
 		return d, nil
 	}
-	return repository.Device{}, pgx.ErrNoRows
+	return repository.Device{}, sql.ErrNoRows
 }
 
 func (f *fakeDeviceRepo) GetDeviceByMacAddress(_ context.Context, mac string) (repository.Device, error) {
@@ -94,7 +94,7 @@ func (f *fakeDeviceRepo) GetDeviceByMacAddress(_ context.Context, mac string) (r
 	if d, ok := f.byMac[mac]; ok {
 		return d, nil
 	}
-	return repository.Device{}, pgx.ErrNoRows
+	return repository.Device{}, sql.ErrNoRows
 }
 
 func (f *fakeDeviceRepo) CreateDevice(_ context.Context, arg repository.CreateDeviceParams) (repository.Device, error) {

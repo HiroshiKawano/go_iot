@@ -1,4 +1,4 @@
-// session_auth.go は Web UI 用の Session 認証 (scs + PostgreSQL ストア) を提供する。
+// session_auth.go は Web UI 用の Session 認証 (scs + SQLite ストア) を提供する。
 // device_auth.go (デバイス Bearer 認証) と対になる authN 実装で、
 // ログイン後の user_id は Gin コンテキストへは middleware.SessionLoad が橋渡しし、
 // ダウンストリームは認証方式に依らず UserID(c) で取得する。
@@ -6,27 +6,29 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/HiroshiKawano/go_iot/internal/config"
-	"github.com/alexedwards/scs/pgxstore"
+	"github.com/alexedwards/scs/sqlite3store"
 	"github.com/alexedwards/scs/v2"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // sessionKeyUserID はセッションに格納するログインユーザー ID のキー。
 const sessionKeyUserID = "user_id"
 
-// NewSessionManager は scs の SessionManager を PostgreSQL ストア (pgxstore) で構築する。
-// セッションテーブル sessions は migration で作成済みであることを前提とする。
+// NewSessionManager は scs の SessionManager を SQLite ストア (sqlite3store) で構築する。
+// セッションテーブル sessions は migration (00007) で作成済みであることを前提とする
+// (sqlite3store はテーブルを自動生成しない)。背景の cleanup goroutine が既定 5 分間隔で
+// 期限切れセッションを削除する (WAL+busy_timeout 前提で SQLITE_BUSY を起こさない)。
 //
 // scs は不透明なランダムトークンを cookie に用い、cookie 自体は署名しない
 // (SESSION_SECRET は scs では使用しない。CSRF 側で利用する)。
-func NewSessionManager(pool *pgxpool.Pool, cfg *config.Config) *scs.SessionManager {
+func NewSessionManager(db *sql.DB, cfg *config.Config) *scs.SessionManager {
 	sm := scs.New()
-	sm.Store = pgxstore.New(pool)
+	sm.Store = sqlite3store.New(db)
 	applySessionPolicy(sm, cfg)
 	return sm
 }

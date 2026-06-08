@@ -8,15 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"database/sql"
 	"github.com/HiroshiKawano/go_iot/internal/auth"
-	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 // fakeAlertHistoryRepo は AlertHistoryRepo の手書きモック (DB 非依存)。
-// GetUser は map で引き未登録は pgx.ErrNoRows。Count/List/Devices は戻り値・エラー注入と、
+// GetUser は map で引き未登録は sql.ErrNoRows。Count/List/Devices は戻り値・エラー注入と、
 // 引数 captor (last*)・呼び出し記録 (*Called) に対応する。
 type fakeAlertHistoryRepo struct {
 	users   map[int64]repository.User
@@ -43,7 +42,7 @@ func (f *fakeAlertHistoryRepo) GetUser(_ context.Context, id int64) (repository.
 	if u, ok := f.users[id]; ok {
 		return u, nil
 	}
-	return repository.User{}, pgx.ErrNoRows
+	return repository.User{}, sql.ErrNoRows
 }
 
 func (f *fakeAlertHistoryRepo) ListDevicesByUser(_ context.Context, _ int64) ([]repository.Device, error) {
@@ -85,10 +84,10 @@ func alertHistoryTestRow(triggeredAt time.Time, metric, op string, threshold, ac
 	return repository.ListAlertHistoriesPaginatedRow{
 		Metric:      metric,
 		Operator:    op,
-		Threshold:   pgconv.Numeric2(threshold),
-		ActualValue: pgconv.Numeric2(actual),
+		Threshold:   threshold,
+		ActualValue: actual,
 		IsNotified:  notified,
-		TriggeredAt: pgconv.Timestamptz(triggeredAt),
+		TriggeredAt: triggeredAt,
 		DeviceName:  deviceName,
 	}
 }
@@ -144,10 +143,10 @@ func TestAlertHistoryIndex_初期表示は200フルページで全デバイス�
 	if repo.lastList.OffsetN != 0 {
 		t.Errorf("OffsetN=%d, want 0", repo.lastList.OffsetN)
 	}
-	if y := repo.lastList.FromAt.Time.Year(); y != 1970 {
+	if y := repo.lastList.FromAt.Year(); y != 1970 {
 		t.Errorf("from センチネル year=%d, want 1970", y)
 	}
-	if y := repo.lastList.ToAt.Time.Year(); y != 9999 {
+	if y := repo.lastList.ToAt.Year(); y != 9999 {
 		t.Errorf("to センチネル year=%d, want 9999", y)
 	}
 }
@@ -200,16 +199,16 @@ func TestAlertHistoryIndex_HTMX検索はフラグメントのみでデバイス�
 		t.Errorf("UserID list=%d count=%d, want ともに 7 (テナント分離)", repo.lastList.UserID, repo.lastCount.UserID)
 	}
 	// from=当日始端、to=end-of-day。
-	if !repo.lastList.FromAt.Time.Equal(time.Date(2026, 4, 13, 0, 0, 0, 0, jst)) {
-		t.Errorf("from=%v, want 2026-04-13 始端 JST", repo.lastList.FromAt.Time)
+	if !repo.lastList.FromAt.Equal(time.Date(2026, 4, 13, 0, 0, 0, 0, jst)) {
+		t.Errorf("from=%v, want 2026-04-13 始端 JST", repo.lastList.FromAt)
 	}
 	reading2359 := time.Date(2026, 4, 20, 23, 59, 0, 0, jst)
 	nextDay := time.Date(2026, 4, 21, 0, 0, 0, 0, jst)
-	if repo.lastList.ToAt.Time.Before(reading2359) || !repo.lastList.ToAt.Time.Before(nextDay) {
-		t.Errorf("to=%v, want end-of-day (2026-04-20 23:59 含む・翌日未満)", repo.lastList.ToAt.Time)
+	if repo.lastList.ToAt.Before(reading2359) || !repo.lastList.ToAt.Before(nextDay) {
+		t.Errorf("to=%v, want end-of-day (2026-04-20 23:59 含む・翌日未満)", repo.lastList.ToAt)
 	}
 	// Count と List は同一区間を共有する (総ページ算出が同条件)。
-	if !repo.lastCount.FromAt.Time.Equal(repo.lastList.FromAt.Time) || !repo.lastCount.ToAt.Time.Equal(repo.lastList.ToAt.Time) {
+	if !repo.lastCount.FromAt.Equal(repo.lastList.FromAt) || !repo.lastCount.ToAt.Equal(repo.lastList.ToAt) {
 		t.Errorf("Count 区間が List 区間と不一致")
 	}
 }

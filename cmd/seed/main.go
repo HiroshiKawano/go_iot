@@ -16,19 +16,19 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"math"
-	"math/big"
 	"math/rand/v2"
 	"time"
 
 	"github.com/HiroshiKawano/go_iot/internal/config"
 	"github.com/HiroshiKawano/go_iot/internal/domain"
 	infradb "github.com/HiroshiKawano/go_iot/internal/infra/db"
+	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -44,6 +44,12 @@ func run() error {
 		return err
 	}
 
+	// 本番環境での誤実行 (全テーブル DELETE) を fail-closed で防止する。
+	// 誤って本番の DATABASE_URL を指したまま seed すると全データを失うため。
+	if cfg.AppEnv == "production" {
+		return errors.New("seed は本番環境 (APP_ENV=production) では実行できません")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -53,11 +59,17 @@ func run() error {
 	}
 	defer pool.Close()
 
-	if err := truncateAll(ctx, pool); err != nil {
+	return seedAll(ctx, pool)
+}
+
+// seedAll は truncate→各テーブル投入の一連を *sql.DB 上で実行する。
+// テストから実 SQLite を直接渡せるよう run() から分離した(config/NewPool 非依存で検証可能)。
+func seedAll(ctx context.Context, db *sql.DB) error {
+	if err := truncateAll(ctx, db); err != nil {
 		return fmt.Errorf("truncate: %w", err)
 	}
 
-	q := repository.New(pool)
+	q := repository.New(db)
 
 	user, err := seedUser(ctx, q)
 	if err != nil {
@@ -99,20 +111,27 @@ func run() error {
 	return nil
 }
 
-func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
-	// RESTART IDENTITY で BIGSERIAL も 1 から振り直す。
-	// goose_db_version は対象外 (マイグレーション履歴を保持)。
-	_, err := pool.Exec(ctx, `
-		TRUNCATE TABLE
-		  alert_histories,
-		  alert_rules,
-		  sensor_readings,
-		  device_tokens,
-		  devices,
-		  users
-		RESTART IDENTITY CASCADE
-	`)
-	return err
+// truncateAll はアプリケーションテーブルを空にする (goose_db_version は温存)。
+// SQLite には TRUNCATE が無いため DELETE FROM で空化する。本スキーマの id は
+// INTEGER PRIMARY KEY (AUTOINCREMENT なし) のため、空化すれば次の INSERT が
+// 1 から振り直され PostgreSQL の RESTART IDENTITY と等価になる
+// (AUTOINCREMENT 不使用ゆえ sqlite_sequence テーブルは存在せず、操作不要)。
+// FK 制約は張らない方針 (structure.md) のため削除順は任意だが、参照向きに合わせ子→親で消す。
+func truncateAll(ctx context.Context, db *sql.DB) error {
+	tables := []string{
+		"alert_histories",
+		"alert_rules",
+		"sensor_readings",
+		"device_tokens",
+		"devices",
+		"users",
+	}
+	for _, t := range tables {
+		if _, err := db.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+			return fmt.Errorf("delete %s: %w", t, err)
+		}
+	}
+	return nil
 }
 
 func seedUser(ctx context.Context, q *repository.Queries) (repository.User, error) {
@@ -179,7 +198,7 @@ func seedSensorReadings(ctx context.Context, q *repository.Queries, deviceID int
 			DeviceID:    deviceID,
 			Temperature: numeric2(temp),
 			Humidity:    numeric2(clamp(hum, 0, 100)),
-			RecordedAt:  timestamptz(recordedAt),
+			RecordedAt:  recordedAt,
 		})
 		if err != nil {
 			return 0, err
@@ -245,7 +264,7 @@ func seedAlertHistories(ctx context.Context, q *repository.Queries, rules []repo
 			Operator:    s.rule.Operator,
 			Threshold:   s.rule.Threshold,
 			ActualValue: numeric2(s.actual),
-			TriggeredAt: timestamptz(s.at),
+			TriggeredAt: s.at,
 		})
 		if err != nil {
 			return 0, err
@@ -259,18 +278,11 @@ func seedAlertHistories(ctx context.Context, q *repository.Queries, rules []repo
 	return len(specs), nil
 }
 
-// numeric2 は float を NUMERIC(5,2) 相当に変換する。
-// 小数 2 桁に丸め (Exp=-2) て pgtype.Numeric を構築する。
-func numeric2(f float64) pgtype.Numeric {
-	return pgtype.Numeric{
-		Int:   big.NewInt(int64(math.Round(f * 100))),
-		Exp:   -2,
-		Valid: true,
-	}
-}
-
-func timestamptz(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: t, Valid: true}
+// numeric2 は float を NUMERIC(5,2) 相当 (小数 2 桁) に量子化する。
+// SQLite の REAL は丸めないため、保存前に本番 (sensor_api) と同じ pgconv.Quantize2 で
+// 2 桁へ量子化し「移行前と同一の値」で投入する (R4.1)。
+func numeric2(f float64) float64 {
+	return pgconv.Quantize2(f)
 }
 
 func clamp(v, lo, hi float64) float64 {

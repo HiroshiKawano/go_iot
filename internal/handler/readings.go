@@ -8,6 +8,8 @@ package handler
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -18,7 +20,6 @@ import (
 
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/authz"
-	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/timefmt"
 	"github.com/HiroshiKawano/go_iot/internal/view"
@@ -27,7 +28,6 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/view/page"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // readingsPageTitle はフルページ <title> (モック readings.html の <title> に一致)。
@@ -86,7 +86,7 @@ func (h *ReadingsHandler) Index(c *gin.Context) {
 	if len(errs) > 0 {
 		// 形式エラー: 区間が確定できないため検索/集計クエリは呼ばず、空一覧+インラインエラーで 200。
 		list = component.DeviceReadingsListView{
-			Summary:    buildSummary(repository.GetSensorReadingsSummaryRow{}),
+			Summary:    emptySummary(),
 			HasData:    false,
 			Pagination: buildReadingsPagination(id, from, to, 1, 1),
 			Errors:     errs,
@@ -122,11 +122,8 @@ func (h *ReadingsHandler) Index(c *gin.Context) {
 // fetchResults は区間確定後に件数→ページクランプ→一覧+集計を取得し結果領域 View を組み立てる。
 // 件数・一覧・集計は同一 (fromTS,toTS) 境界を共有する (R3 連動・ページ非依存)。
 func (h *ReadingsHandler) fetchResults(ctx context.Context, id int64, from, to string, fromTS, toTS time.Time, pageQuery string) (component.DeviceReadingsListView, error) {
-	fromParam := pgconv.Timestamptz(fromTS)
-	toParam := pgconv.Timestamptz(toTS)
-
 	total, err := h.Repo.CountSensorReadingsInRange(ctx, repository.CountSensorReadingsInRangeParams{
-		DeviceID: id, RecordedAt: fromParam, RecordedAt_2: toParam,
+		DeviceID: id, RecordedAt: fromTS, RecordedAt_2: toTS,
 	})
 	if err != nil {
 		return component.DeviceReadingsListView{}, err
@@ -137,26 +134,34 @@ func (h *ReadingsHandler) fetchResults(ctx context.Context, id int64, from, to s
 	if pageNo > totalPages {
 		pageNo = totalPages // 過大ページは最終ページへクランプ
 	}
-	offset := int32((pageNo - 1) * pageSize)
+	offset := int64((pageNo - 1) * pageSize)
 
 	rows, err := h.Repo.ListSensorReadingsPaginated(ctx, repository.ListSensorReadingsPaginatedParams{
-		DeviceID: id, RecordedAt: fromParam, RecordedAt_2: toParam,
+		DeviceID: id, RecordedAt: fromTS, RecordedAt_2: toTS,
 		Limit: pageSize, Offset: offset,
 	})
 	if err != nil {
 		return component.DeviceReadingsListView{}, err
 	}
 
+	// 集計クエリは GROUP BY device_id 化により対象期間が空集合のとき行を返さず sql.ErrNoRows となる。
+	// これは「データなし」の正常系であり 500 にしてはいけない (移行前の SampleCount==0 と等価)。
+	// ErrNoRows はゼロ値サマリ (SampleCount==0) を buildSummary へ渡し「—」表示に写す。
 	summary, err := h.Repo.GetSensorReadingsSummary(ctx, repository.GetSensorReadingsSummaryParams{
-		DeviceID: id, RecordedAt: fromParam, RecordedAt_2: toParam,
+		DeviceID: id, RecordedAt: fromTS, RecordedAt_2: toTS,
 	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return component.DeviceReadingsListView{}, err
+	}
+
+	summaryView, err := buildSummary(summary)
 	if err != nil {
 		return component.DeviceReadingsListView{}, err
 	}
 
 	historyRows := buildReadingHistoryRows(rows)
 	return component.DeviceReadingsListView{
-		Summary:    buildSummary(summary),
+		Summary:    summaryView,
 		Rows:       historyRows,
 		HasData:    len(historyRows) > 0,
 		Pagination: buildReadingsPagination(id, from, to, pageNo, totalPages),
@@ -170,7 +175,7 @@ func buildReadingHistoryRows(rows []repository.SensorReading) []component.Readin
 	out := make([]component.ReadingHistoryRow, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, component.ReadingHistoryRow{
-			RecordedAt: timefmt.DateTimeMinuteJP(pgconv.TimestamptzToTime(r.RecordedAt).In(jst)),
+			RecordedAt: timefmt.DateTimeMinuteJP(r.RecordedAt.In(jst)),
 			Temp:       formatActual(r.Temperature),
 			Humidity:   formatActual(r.Humidity),
 			Delay:      formatDelay(r.RecordedAt, r.CreatedAt),
@@ -261,8 +266,8 @@ func totalPagesOf(total int64) int {
 // formatDelay は計測時刻 (recordedAt) とサーバ受信時刻 (createdAt) の差を
 // 四捨五入した整数秒「N秒」へ整形する (R5.1/5.2)。
 // クロックずれによる負値は「0秒」にクランプする。
-func formatDelay(recordedAt, createdAt pgtype.Timestamptz) string {
-	diff := pgconv.TimestamptzToTime(createdAt).Sub(pgconv.TimestamptzToTime(recordedAt))
+func formatDelay(recordedAt, createdAt time.Time) string {
+	diff := createdAt.Sub(recordedAt)
 	secs := diff.Seconds()
 	if secs < 0 {
 		secs = 0
@@ -272,28 +277,56 @@ func formatDelay(recordedAt, createdAt pgtype.Timestamptz) string {
 
 // buildSummary は集計行を表示用 SummaryView (整形済み6項目) へ写す。
 // sample_count==0 (該当データ0件) のときは全項目を「—」にし 0.00 の誤表示を避ける (R3.1/3.2)。
-// 平均は numeric (formatActual)、最高/最低は sqlc が interface{} で生成するため
-// aggregateToFloat 経由で安全に float 化する。
-func buildSummary(row repository.GetSensorReadingsSummaryRow) component.SummaryView {
+// 集計クエリ空集合は呼び出し側で sql.ErrNoRows をゼロ値行に写すため SampleCount==0 として届く。
+// 平均は formatActual、最高/最低は aggregateToFloat 経由で float 化する。集計値が想定外の型なら
+// silent に 0 へ落とさず error を返す (R5.3・device_show.go の AggregateGuard を共有)。
+func buildSummary(row repository.GetSensorReadingsSummaryRow) (component.SummaryView, error) {
 	if row.SampleCount == 0 {
-		return component.SummaryView{
-			AvgTemp: summaryEmptyMark, MaxTemp: summaryEmptyMark, MinTemp: summaryEmptyMark,
-			AvgHum: summaryEmptyMark, MaxHum: summaryEmptyMark, MinHum: summaryEmptyMark,
-		}
+		return emptySummary(), nil
+	}
+	maxTemp, err := formatAggregate(row.MaxTemperature)
+	if err != nil {
+		return component.SummaryView{}, err
+	}
+	minTemp, err := formatAggregate(row.MinTemperature)
+	if err != nil {
+		return component.SummaryView{}, err
+	}
+	maxHum, err := formatAggregate(row.MaxHumidity)
+	if err != nil {
+		return component.SummaryView{}, err
+	}
+	minHum, err := formatAggregate(row.MinHumidity)
+	if err != nil {
+		return component.SummaryView{}, err
 	}
 	return component.SummaryView{
 		AvgTemp: formatActual(row.AvgTemperature) + "℃",
-		MaxTemp: formatAggregate(row.MaxTemperature) + "℃",
-		MinTemp: formatAggregate(row.MinTemperature) + "℃",
+		MaxTemp: maxTemp + "℃",
+		MinTemp: minTemp + "℃",
 		AvgHum:  formatActual(row.AvgHumidity) + "%",
-		MaxHum:  formatAggregate(row.MaxHumidity) + "%",
-		MinHum:  formatAggregate(row.MinHumidity) + "%",
+		MaxHum:  maxHum + "%",
+		MinHum:  minHum + "%",
+	}, nil
+}
+
+// emptySummary は集計対象0件のときの SummaryView (全項目「—」) を返す。
+// 形式エラー時・集計クエリ空集合 (sql.ErrNoRows) 時の両方で 0.00 誤表示を避ける (R3.1/3.2)。
+func emptySummary() component.SummaryView {
+	return component.SummaryView{
+		AvgTemp: summaryEmptyMark, MaxTemp: summaryEmptyMark, MinTemp: summaryEmptyMark,
+		AvgHum: summaryEmptyMark, MaxHum: summaryEmptyMark, MinHum: summaryEmptyMark,
 	}
 }
 
-// formatAggregate は集計の最高/最低 (interface{}) を小数2桁の数値文字列へ整形する (単位は呼び出し側)。
-func formatAggregate(v interface{}) string {
-	return fmt.Sprintf("%.2f", aggregateToFloat(v))
+// formatAggregate は集計の最高/最低を小数2桁の数値文字列へ整形する (単位は呼び出し側)。
+// 集計値が想定外の型のときは 0 へ落とさず error を返す (4.3 の aggregateToFloat を消費)。
+func formatAggregate(v interface{}) (string, error) {
+	f, err := aggregateToFloat(v)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%.2f", f), nil
 }
 
 // readingsURL は現在の開始日・終了日を保持したまま page を差し替えた相対 URL を返す (ページャ用・R8.2)。

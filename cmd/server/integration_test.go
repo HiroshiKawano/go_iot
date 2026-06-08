@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,7 +13,6 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -27,14 +27,14 @@ func (f fakeUserQuerier) GetUserByEmail(_ context.Context, email string) (reposi
 	if u, ok := f.byEmail[email]; ok {
 		return u, nil
 	}
-	return repository.User{}, pgx.ErrNoRows
+	return repository.User{}, sql.ErrNoRows
 }
 
 func (f fakeUserQuerier) GetUser(_ context.Context, id int64) (repository.User, error) {
 	if u, ok := f.byID[id]; ok {
 		return u, nil
 	}
-	return repository.User{}, pgx.ErrNoRows
+	return repository.User{}, sql.ErrNoRows
 }
 
 // ダッシュボード表示用クエリ (本統合テストはログインフロー検証が目的のため空データを返す。
@@ -44,7 +44,7 @@ func (f fakeUserQuerier) ListDevicesByUser(_ context.Context, _ int64) ([]reposi
 }
 
 func (f fakeUserQuerier) GetLatestSensorReading(_ context.Context, _ int64) (repository.SensorReading, error) {
-	return repository.SensorReading{}, pgx.ErrNoRows
+	return repository.SensorReading{}, sql.ErrNoRows
 }
 
 func (f fakeUserQuerier) ListUnnotifiedAlertHistoriesWithDevice(_ context.Context, _ repository.ListUnnotifiedAlertHistoriesWithDeviceParams) ([]repository.ListUnnotifiedAlertHistoriesWithDeviceRow, error) {
