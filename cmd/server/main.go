@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/HiroshiKawano/go_iot/internal/applog"
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/config"
 	"github.com/HiroshiKawano/go_iot/internal/docs"
@@ -31,6 +32,19 @@ func main() {
 }
 
 func run() error {
+	// ログ出力先を決定し、標準ロガーと gin の出力を差し替える。
+	// Windows GUI ビルド (ldflags で applog.Mode=file) や LOG_FILE 指定時はファイルへ、
+	// 既定 (console) では標準出力へ出力する。gin.Logger() は生成時に gin.DefaultWriter を
+	// 取り込むため、newHTTPHandler より前に設定する必要がある。
+	logWriter, closeLog, err := applog.Setup(applog.Destination(applog.Mode, os.Getenv("LOG_FILE"), applog.DefaultPath))
+	if err != nil {
+		return fmt.Errorf("setup logging: %w", err)
+	}
+	defer func() { _ = closeLog() }()
+	log.SetOutput(logWriter)
+	gin.DefaultWriter = logWriter
+	gin.DefaultErrorWriter = logWriter
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)

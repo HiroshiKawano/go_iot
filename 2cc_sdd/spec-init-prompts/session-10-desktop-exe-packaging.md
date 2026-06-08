@@ -60,11 +60,11 @@ S9（sqlite-migration）で永続化層を SQLite に差し替えた本プロジ
 - `db.SetMaxOpenConns` を SQLite 単一 writer 前提で適正化（書込は実質1接続に絞る）。
 - 競合対策の検証: ESP32 複数台の `POST /api/sensor-data` + アラート同期評価（書込）× Web UI 読取 × scs cleanup goroutine の定期 DELETE が SQLITE_BUSY を起こさないこと。
 
-**5. Windows ビルドターゲット:**
-- `Makefile` に `build-windows` 追加: `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X github.com/HiroshiKawano/go_iot/internal/view.Version=$(SHA)" -o dist/go_iot.exe ./cmd/server`（`-s -w` でサイズ削減、Version 注入は static.go の既存 ldflags 機構を流用）。
-- コンソール窓を消す場合は `-ldflags "-H windowsgui"` を追加 → ただし `log.Printf` 出力先が失われるため、ログを `%LOCALAPPDATA%\go_iot\` 配下のファイルへリダイレクトする処理を併設（要確認）。
-- `make build`（既存）は `sync-css` + `templ generate` を前段に持つ。build-windows も同様に templ/CSS 生成を前提にする。
-- `.gitignore` は既に `*.exe` を無視済み（`dist/` も無視対象に追加）。
+**5. Windows ビルドターゲット 〔★一部 先行実装済み 2026-06-08〕:**
+- **【済】** `Makefile` に `build-windows`（コンソールあり）/ `build-windows-gui`（コンソール窓なし）を追加済み。GUI 版は `-ldflags "-s -w -H windowsgui -X github.com/HiroshiKawano/go_iot/internal/applog.Mode=file"`。両者とも `CGO_ENABLED=0 GOOS=windows GOARCH=amd64` でクロスコンパイル成功を確認済み（GUI=`PE32+ (GUI)`、console=`PE32+ (console)`。`-X` 注入対象 `applog.Mode` シンボルの妥当性も nm で確認済み）。
+- **【済】** コンソール窓非表示時に `log.Printf` 出力が失われる問題に対応するログのファイル出力基盤 `internal/applog`（`Destination`/`DefaultPath`/`Setup`、lumberjack ローテーション、カバレッジ88.2%）を TDD 実装済み。`cmd/server/main.go` の `run()` 冒頭で `applog.Setup` を呼び `log.SetOutput`/`gin.DefaultWriter`/`gin.DefaultErrorWriter` を差し替え済み（console ビルドは標準出力のまま、`LOG_FILE` env でも上書き可）。GUI ビルドは `%LOCALAPPDATA%\go_iot\app.log` へ出力。
+- **【S10 で残作業】** Version 注入（`-X internal/view.Version=$(SHA)`）の付加は任意で本セッションに統合。`make build`（既存）同様 `sync-css` + `templ generate` を前段に持つ点は両ターゲットとも対応済み。`.gitignore` は `*.exe` で `dist/go_iot.exe` を無視済み。
+- **【S10 で残作業=実機検証】** GUI ビルドが実 Windows でコンソール窓を出さず `app.log` に正しく書き出すかは .exe 完成後（SQLite 配線後）に実機確認する（クロスコンパイル成功はビルドまでの保証）。
 
 **6. docker / PostgreSQL 残滓の撤去:**
 - `docker-compose.yml` 削除。`Makefile` の `up`/`down`（docker compose）ターゲット削除、`migrate-*` の goose dialect が sqlite3 になっていることを確認（S9 で済の想定。漏れがあれば本セッションで整理）。
@@ -107,7 +107,7 @@ S9（sqlite-migration）で永続化層を SQLite に差し替えた本プロジ
 
 ## 未確定事項・要確認（あれば）
 
-1. **コンソール窓の扱い**: `-H windowsgui` でコンソールを隠すか（その場合ログのファイルリダイレクトが必須）、コンソール表示のまま運用するか。**要オーナー確認**。
+1. ~~**コンソール窓の扱い**~~ → **【決定済み 2026-06-08・先行実装済み】コンソール窓非表示（`-H windowsgui`）を採用**。前提となるログのファイル出力基盤 `internal/applog` と `build-windows-gui` ターゲットは TDD で先行実装・クロスコンパイル確認済み（上記スコープ5）。本セッションでは実 Windows での GUI モード実機検証（コンソールが出ないこと・`app.log` に書き出されること）のみ残る。
 2. **SESSION_SECRET 自動生成の保存**: 初回生成した秘密鍵の保存先・平文ファイル可否（圃場単一ユーザー前提なら許容か）。**要オーナー確認**。
 3. **DB ファイル配置**: `%LOCALAPPDATA%\go_iot\app.db` を既定とするか、exe 隣を選べるようにするか（可搬性 vs UAC 書込制約）。
 4. ~~**systray 常駐の要否**~~ → **【決定済み 2026-06-08】初版はブラウザ自動オープンのみ**。systray 常駐トレイは初版スコープ外（将来拡張）。

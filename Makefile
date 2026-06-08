@@ -1,4 +1,4 @@
-.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status sqlc templ sync-css db-snapshot clean
+.PHONY: help setup up down dev build build-windows build-windows-gui run tidy migrate-up migrate-down migrate-create migrate-status sqlc templ sync-css db-snapshot clean
 
 # .env を読み込む (存在すれば)
 ifneq (,$(wildcard .env))
@@ -32,6 +32,15 @@ build: sync-css ## 本番用バイナリをビルド
 
 run: build ## バイナリを実行
 	./tmp/main
+
+## --- Windows 単一 .exe クロスビルド (S10 desktop-exe-packaging の先行追加。CGO不要・pure-Go) ---
+build-windows: sync-css ## Windows用 .exe をクロスビルド (コンソールあり・ログは標準出力)
+	go tool templ generate
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o dist/go_iot.exe ./cmd/server
+
+build-windows-gui: sync-css ## Windows用 .exe をクロスビルド (コンソール窓なし・ログは %LOCALAPPDATA%\go_iot\app.log へ出力)
+	go tool templ generate
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H windowsgui -X github.com/HiroshiKawano/go_iot/internal/applog.Mode=file" -o dist/go_iot.exe ./cmd/server
 
 ## --- Go 関連 ---
 tidy: ## go.mod / go.sum を整理
