@@ -31,6 +31,20 @@ type DeviceShowView struct {
 	DeleteName string
 }
 
+// ReadingsView はセンサーデータ履歴フルページ (ReadingsPage) の描画データ。
+// 認証後レイアウト Layout に、見出し用デバイス名・フィルタフォームの echo 値 (From/To)・
+// 結果領域 component DTO (List) を束ねる。整形済み primitive のみを保持し
+// pgtype/repository 型は持ち込まない (view 純粋性)。
+// From/To は未指定時 "" (入力欄の value 復元用)、List は HTMX 部分更新で差し替える結果領域。
+type ReadingsView struct {
+	Layout     layout.AppLayoutData             // Title/UserName/CSRFToken/CSSURL
+	DeviceID   int64                            // フィルタフォーム・ページャの URL 構築用
+	DeviceName string                           // page-header 見出し「センサーデータ履歴: {DeviceName}」用
+	From       string                           // フィルタフォーム echo (未指定は "")
+	To         string                           // フィルタフォーム echo (未指定は "")
+	List       component.DeviceReadingsListView // フィルタ結果領域 (集計+一覧+ページャ)
+}
+
 // LoginView はログイン画面の描画に必要なデータ。
 // Email は再描画時の入力値再表示用。Errors は field 名 → 日本語メッセージ
 // ("form" キーはフォーム全体に対する汎用エラー = 認証失敗の共通メッセージ)。

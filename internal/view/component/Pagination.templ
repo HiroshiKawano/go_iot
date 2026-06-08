@@ -1,0 +1,20 @@
+package component
+
+import "fmt"
+
+// Pagination は簡易ページャ (前へ / 現在・総ページ / 次へ) を描画する (HTMX実装ガイド C05・§10 canonical)。
+// 番号ウィンドウは持たず、前後送りのみ (design Decision「簡易ページャ採用」)。
+// nav に hx-boost を付与し内側リンクを HTMX 化、結果領域 #device-readings-list を innerHTML で
+// 差し替える。リンクは handler 生成の信頼できる URL のため templ.SafeURL で埋める。
+// 既存の .pagination / .btn クラスのみ使用し独自クラスは新設しない (§31)。
+templ Pagination(v PaginationView) {
+	<nav class="pagination" hx-boost="true" hx-target="#device-readings-list" hx-swap="innerHTML">
+		if v.HasPrev {
+			<a href={ templ.SafeURL(v.PrevURL) } class="btn btn-small btn-secondary">前へ</a>
+		}
+		<span>{ fmt.Sprintf("%d / %d ページ", v.Current, v.Last) }</span>
+		if v.HasNext {
+			<a href={ templ.SafeURL(v.NextURL) } class="btn btn-small btn-secondary">次へ</a>
+		}
+	</nav>
+}

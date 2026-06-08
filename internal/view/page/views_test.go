@@ -65,6 +65,63 @@ func TestDashboardView_表示用フィールドを保持する(t *testing.T) {
 	}
 }
 
+// TestReadingsView_表示用フィールドを保持する は、センサーデータ履歴フルページの
+// View-model が レイアウト・デバイスID・デバイス名・フォーム echo 値(from/to)・
+// 結果領域 component DTO を整形済み primitive のみで保持できることを検証する。
+func TestReadingsView_表示用フィールドを保持する(t *testing.T) {
+	v := ReadingsView{
+		Layout:     layout.AppLayoutData{Title: "センサーデータ履歴", UserName: "山田太郎"},
+		DeviceID:   42,
+		DeviceName: "ハウスA温湿度計",
+		From:       "2026-04-01",
+		To:         "2026-04-20",
+		List: component.DeviceReadingsListView{
+			Summary: component.SummaryView{AvgTemp: "28.30℃", AvgHum: "65.30%"},
+			Rows: []component.ReadingHistoryRow{
+				{RecordedAt: "2026-04-20 14:30", Temp: "28.50", Humidity: "65.30", Delay: "2秒"},
+			},
+			HasData:    true,
+			Pagination: component.PaginationView{Current: 1, Last: 3, HasNext: true},
+			Errors:     map[string]string{},
+		},
+	}
+
+	if v.Layout.UserName != "山田太郎" {
+		t.Errorf("Layout.UserName = %q, want 山田太郎", v.Layout.UserName)
+	}
+	if v.DeviceID != 42 {
+		t.Errorf("DeviceID = %d, want 42", v.DeviceID)
+	}
+	checks := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"DeviceName", v.DeviceName, "ハウスA温湿度計"},
+		{"From", v.From, "2026-04-01"},
+		{"To", v.To, "2026-04-20"},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
+		}
+	}
+
+	// 結果領域 DTO を内包し、行・集計・ページャへ辿れる。
+	if !v.List.HasData {
+		t.Error("List.HasData = false, want true")
+	}
+	if got := v.List.Rows[0].Delay; got != "2秒" {
+		t.Errorf("List.Rows[0].Delay = %q, want 2秒", got)
+	}
+	if got := v.List.Summary.AvgTemp; got != "28.30℃" {
+		t.Errorf("List.Summary.AvgTemp = %q, want 28.30℃", got)
+	}
+	if v.List.Pagination.Last != 3 {
+		t.Errorf("List.Pagination.Last = %d, want 3", v.List.Pagination.Last)
+	}
+}
+
 // TestPageパッケージはrepositoryとpgtypeをimportしない は view 純粋性
 // （依存方向ルール: view は repository/pgtype を import しない）を AST 走査で守る。
 // テストファイルを除く page パッケージの全 .go ファイルの直接 import を検査する。

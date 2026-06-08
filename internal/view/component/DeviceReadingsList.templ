@@ -1,0 +1,80 @@
+package component
+
+// DeviceReadingsList はセンサーデータ履歴のフィルタ結果領域 fragment を描画する
+// (mocks/html/readings.html 行60-116 を写経・HTMX化)。
+// ルート <div id="device-readings-list"> が HTMX ターゲット (id はスタイリング非使用・§3.5)。
+// 期間検索・ページ送り時にこの領域全体 (エラー→集計→一覧→ページャ) を innerHTML で差し替える。
+//
+// エラーマップ非空時はフラグメント内へインラインエラーを表示する (フルページのレイアウト
+// バナーは部分応答に含まれないため・§7 GET 検索バリデーション)。errors は handler が引数で
+// 明示的に渡す (Go に共有バッグは無い)。行0件時はテーブルを描画せず空状態メッセージを出す
+// (R7.1)。Alpine の x-show ではなく Go 条件分岐で写経。独自 CSS クラスは新設しない (§31)。
+templ DeviceReadingsList(v DeviceReadingsListView) {
+	<div id="device-readings-list">
+		if len(v.Errors) > 0 {
+			<div class="error-message">
+				if v.Errors["from"] != "" {
+					<p>{ v.Errors["from"] }</p>
+				}
+				if v.Errors["to"] != "" {
+					<p>{ v.Errors["to"] }</p>
+				}
+			</div>
+		}
+		<h2 class="u-mbe-3">集計情報</h2>
+		<div class="summary-grid">
+			<div class="summary-box">
+				<div class="label">平均温度</div>
+				<div class="value">{ v.Summary.AvgTemp }</div>
+			</div>
+			<div class="summary-box">
+				<div class="label">最高温度</div>
+				<div class="value">{ v.Summary.MaxTemp }</div>
+			</div>
+			<div class="summary-box">
+				<div class="label">最低温度</div>
+				<div class="value">{ v.Summary.MinTemp }</div>
+			</div>
+			<div class="summary-box">
+				<div class="label">平均湿度</div>
+				<div class="value">{ v.Summary.AvgHum }</div>
+			</div>
+			<div class="summary-box">
+				<div class="label">最高湿度</div>
+				<div class="value">{ v.Summary.MaxHum }</div>
+			</div>
+			<div class="summary-box">
+				<div class="label">最低湿度</div>
+				<div class="value">{ v.Summary.MinHum }</div>
+			</div>
+		</div>
+		<h2 class="u-mbe-3">データ一覧</h2>
+		if v.HasData {
+			<div class="table-wrapper">
+				<table class="data-table">
+					<thead>
+						<tr>
+							<th>計測日時</th>
+							<th>温度(℃)</th>
+							<th>湿度(%)</th>
+							<th>通信遅延</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, r := range v.Rows {
+							<tr>
+								<td>{ r.RecordedAt }</td>
+								<td>{ r.Temp }</td>
+								<td>{ r.Humidity }</td>
+								<td>{ r.Delay }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		} else {
+			<p class="empty-message">指定期間の計測データはありません。</p>
+		}
+		@Pagination(v.Pagination)
+	</div>
+}

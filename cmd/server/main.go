@@ -157,6 +157,13 @@ func newHTTPHandler(cfg *config.Config, sm *scs.SessionManager, q repository.Que
 	web.GET("/devices/:device/chart", middleware.RequireAuth(), deviceH.Chart)
 	web.DELETE("/devices/:device", middleware.RequireAuth(), deviceH.Delete)
 
+	// センサーデータ履歴 (sensor-readings-history): 期間フィルタ + 集計 + 一覧 (20件/ページ)。
+	// :device 配下の子経路 (/edit・/chart と同階層) のため既存 node を共有し競合しない。
+	// デバイス詳細の「もっと見る」(/devices/{id}/readings) からの遷移先。検索/ページ送りは
+	// HTMX 部分更新 (フラグメント #device-readings-list)。GET のみのため CSRF 検証対象外。
+	readingsH := &handler.ReadingsHandler{Repo: q}
+	web.GET("/devices/:device/readings", middleware.RequireAuth(), readingsH.Index)
+
 	// 合成: メソッド上書き (ルーティング前) → セッション load/save → engine
 	return middleware.MethodOverride(sm.LoadAndSave(engine))
 }

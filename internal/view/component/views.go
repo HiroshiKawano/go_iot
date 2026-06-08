@@ -76,6 +76,46 @@ type LatestReadingsView struct {
 	Rows     []ReadingRow
 }
 
+// DeviceReadingsListView はセンサーデータ履歴のフィルタ結果領域 fragment
+// (DeviceReadingsList, id=device-readings-list) の表示データ。
+// 集計6項目・履歴行・データ有無・簡易ページャ・形式エラーマップを束ねる。
+// HTMX 部分更新でこの DTO のみを差し替えるため、集計・一覧・ページャを内包する。
+type DeviceReadingsListView struct {
+	Summary    SummaryView         // 整形済み集計6項目 (期間全体・ページ非依存)
+	Rows       []ReadingHistoryRow // 履歴一覧 (新しい順・最大20件)
+	HasData    bool                // len(Rows) > 0。false でテーブル非表示+空状態メッセージ
+	Pagination PaginationView      // 簡易ページャ (前へ / N・M / 次へ)
+	Errors     map[string]string   // 日付形式エラー (field → 日本語メッセージ。空なら非表示)
+}
+
+// SummaryView は集計情報 (.summary-grid) の表示データ (整形済み)。
+// 平均/最高/最低 × 温度/湿度 の6項目を、小数第2位+単位 (℃/%) 付き文字列で保持する。
+// 該当データ0件 (sample_count==0) のときは全項目を "—" にして 0.00 の誤表示を避ける。
+type SummaryView struct {
+	AvgTemp, MaxTemp, MinTemp string // 例 "28.30℃" / "—"
+	AvgHum, MaxHum, MinHum    string // 例 "65.30%" / "—"
+}
+
+// ReadingHistoryRow は履歴一覧テーブル1行分の表示データ (整形済み)。
+// 既存の ReadingRow (3列) とは別型で、通信遅延 Delay を第4列に加える。
+// RecordedAt は "YYYY-MM-DD HH:MM"、Temp/Humidity は小数2桁の数値文字列 (単位は列見出し側)、
+// Delay は計測時刻とサーバ受信時刻の差を四捨五入した整数秒 ("N秒"、負値は "0秒")。
+type ReadingHistoryRow struct {
+	RecordedAt string // "2026-04-20 14:30"
+	Temp       string // "28.50"
+	Humidity   string // "65.30"
+	Delay      string // "2秒"
+}
+
+// PaginationView は簡易ページャ (Pagination) の表示データ。
+// 現在/総ページ番号と前後ページの有無、前後ページへの相対 URL を保持する。
+// 番号ウィンドウは持たず「前へ / N・M ページ / 次へ」のみ (design Decision)。
+type PaginationView struct {
+	Current, Last    int    // 現在ページ / 総ページ数 (ともに 1 以上)
+	HasPrev, HasNext bool   // 前へ/次へリンクの表示可否
+	PrevURL, NextURL string // from/to を保持し page を差し替えた相対 URL
+}
+
 // DeviceFormView は登録/編集で共有するデバイスフォーム (DeviceForm) の描画パラメータ。
 // 認証後レイアウト (layout.AppLayoutData) は持たない —— layout が component を import する
 // ため逆向きの import は循環になる。レイアウトは page 側のラッパ (page.DeviceFormView) が担い、

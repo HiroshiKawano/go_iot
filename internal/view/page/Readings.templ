@@ -1,0 +1,49 @@
+package page
+
+import (
+	"fmt"
+
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
+	"github.com/HiroshiKawano/go_iot/internal/view/layout"
+)
+
+// ReadingsPage はセンサーデータ履歴フルページ (mocks/html/readings.html を写経)。
+// 共通レイアウト App を継承し、見出し・フィルタフォーム・結果領域フラグメントを 1 ページに統合する。
+//
+// フィルタフォームは method="GET" (R17) を HTMX 部分更新へ昇華する: hx-get で結果領域
+// #device-readings-list のみを innerHTML 差し替えし、hx-push-url="true" で URL に検索条件を反映する。
+// フォームは結果領域 (@DeviceReadingsList) の**外**に配置し、swap 時に入力状態を保持する (§3.5)。
+// per-field の .error-message span はモックから採用せず、エラー表示は fragment 内へ集約する
+// (form が swap 外のため HTMX 応答で更新できない)。独自 CSS クラスは新設しない (§31)。
+templ ReadingsPage(v ReadingsView) {
+	@layout.App(v.Layout) {
+		<div class="main-inner">
+			<div class="page-header">
+				<h1>センサーデータ履歴: { v.DeviceName }</h1>
+			</div>
+			<section class="card">
+				<h2>フィルター</h2>
+				<form
+					action={ templ.URL(fmt.Sprintf("/devices/%d/readings", v.DeviceID)) }
+					method="get"
+					class="filter-form"
+					hx-get={ fmt.Sprintf("/devices/%d/readings", v.DeviceID) }
+					hx-target="#device-readings-list"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+				>
+					<div class="form-group">
+						<label>開始日</label>
+						<input type="date" name="from" value={ v.From }/>
+					</div>
+					<div class="form-group">
+						<label>終了日</label>
+						<input type="date" name="to" value={ v.To }/>
+					</div>
+					<button type="submit" class="btn btn-primary">検索</button>
+				</form>
+			</section>
+			@component.DeviceReadingsList(v.List)
+		</div>
+	}
+}

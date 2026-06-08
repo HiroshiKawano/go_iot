@@ -82,6 +82,20 @@ func (f fakeDeviceQuerier) SoftDeleteDevice(_ context.Context, _ int64) error {
 	return nil
 }
 
+// --- センサーデータ履歴 (sensor-readings-history) で ReadingsHandler が呼ぶ新メソッドの
+// 安全スタブ。埋め込み Querier(nil) のままだと実行時に nil 参照で panic するため空データで明示実装する。
+func (f fakeDeviceQuerier) CountSensorReadingsInRange(_ context.Context, _ repository.CountSensorReadingsInRangeParams) (int64, error) {
+	return 0, nil
+}
+
+func (f fakeDeviceQuerier) ListSensorReadingsPaginated(_ context.Context, _ repository.ListSensorReadingsPaginatedParams) ([]repository.SensorReading, error) {
+	return nil, nil
+}
+
+func (f fakeDeviceQuerier) GetSensorReadingsSummary(_ context.Context, _ repository.GetSensorReadingsSummaryParams) (repository.GetSensorReadingsSummaryRow, error) {
+	return repository.GetSensorReadingsSummaryRow{}, nil
+}
+
 // deviceApp は user(id=1) と任意のデバイスを備えた合成ハンドラを返す。
 func deviceApp(devices map[int64]repository.Device, created, updated repository.Device) http.Handler {
 	gin.SetMode(gin.TestMode)
