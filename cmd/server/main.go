@@ -176,6 +176,13 @@ func newHTTPHandler(cfg *config.Config, sm *scs.SessionManager, q repository.Que
 	web.PATCH("/alerts/rules/:rule/toggle", middleware.RequireAuth(), alertRuleH.Toggle)
 	web.DELETE("/alerts/rules/:rule", middleware.RequireAuth(), alertRuleH.Delete)
 
+	// アラート履歴 (alert-history): 発火済みアラートの時系列一覧 + デバイス/期間フィルタ + ページ送り。
+	// /alerts/rules 群に隣接する静的経路。初期表示=フルページ、検索/ページ送りは HTMX 部分更新
+	// (フラグメント #alert-history-list)。GET のみのため CSRF 検証対象外。テナント分離はクエリの
+	// d.user_id スコープに集約 (authz 非経由・design Decision 4)。
+	alertHistoryH := &handler.AlertHistoryHandler{Repo: q}
+	web.GET("/alerts/history", middleware.RequireAuth(), alertHistoryH.Index)
+
 	// 合成: メソッド上書き (ルーティング前) → セッション load/save → engine
 	return middleware.MethodOverride(sm.LoadAndSave(engine))
 }

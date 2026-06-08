@@ -96,6 +96,28 @@ func (f fakeDeviceQuerier) GetSensorReadingsSummary(_ context.Context, _ reposit
 	return repository.GetSensorReadingsSummaryRow{}, nil
 }
 
+// --- アラート履歴 (alert-history) で AlertHistoryHandler が呼ぶ新メソッドの安全スタブ。
+// 埋め込み Querier(nil) のままだと実行時に nil 参照で panic するため明示実装する。
+// Count/List は空データ (0件)、ListDevicesByUser は当該ユーザー所有のデバイスを返す
+// (フィルタ select の選択肢描画用)。
+func (f fakeDeviceQuerier) CountAlertHistoriesInRange(_ context.Context, _ repository.CountAlertHistoriesInRangeParams) (int64, error) {
+	return 0, nil
+}
+
+func (f fakeDeviceQuerier) ListAlertHistoriesPaginated(_ context.Context, _ repository.ListAlertHistoriesPaginatedParams) ([]repository.ListAlertHistoriesPaginatedRow, error) {
+	return nil, nil
+}
+
+func (f fakeDeviceQuerier) ListDevicesByUser(_ context.Context, userID int64) ([]repository.Device, error) {
+	out := []repository.Device{}
+	for _, d := range f.devices {
+		if d.UserID == userID {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
 // deviceApp は user(id=1) と任意のデバイスを備えた合成ハンドラを返す。
 func deviceApp(devices map[int64]repository.Device, created, updated repository.Device) http.Handler {
 	gin.SetMode(gin.TestMode)

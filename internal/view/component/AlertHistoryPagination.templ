@@ -1,0 +1,34 @@
+package component
+
+import "fmt"
+
+// AlertHistoryPagination は番号付きページャ (前へ / 番号 1,2,3… / 次へ) を描画する
+// (mocks/html/alert-history.html 行116-122 を写経・HTMX化)。
+// 既存の簡易 Pagination (前/次のみ・#device-readings-list 固定) は番号非対応かつ
+// ターゲット固定のため再利用できず、本部品を新規作成する (design Decision「番号付き新規部品」)。
+//
+// nav に hx-boost を付与し内側リンクを HTMX 化、結果領域 #alert-history-list を innerHTML で
+// 差し替える (OOB 不使用・ページャは結果領域に内包・design Decision 1)。前へ/次へは端ページで
+// .disabled の span に退化、現在ページ番号は .current の span (リンクにしない)。
+// リンクは handler 生成の信頼 URL のため templ.SafeURL で埋める。独自 CSS クラスは新設しない (§31)。
+templ AlertHistoryPagination(v AlertHistoryPaginationView) {
+	<nav class="pagination" hx-boost="true" hx-target="#alert-history-list" hx-swap="innerHTML">
+		if v.HasPrev {
+			<a href={ templ.SafeURL(v.PrevURL) }>← 前へ</a>
+		} else {
+			<span class="disabled">← 前へ</span>
+		}
+		for _, p := range v.Pages {
+			if p.Current {
+				<span class="current">{ fmt.Sprintf("%d", p.Num) }</span>
+			} else {
+				<a href={ templ.SafeURL(p.URL) }>{ fmt.Sprintf("%d", p.Num) }</a>
+			}
+		}
+		if v.HasNext {
+			<a href={ templ.SafeURL(v.NextURL) }>次へ →</a>
+		} else {
+			<span class="disabled">次へ →</span>
+		}
+	</nav>
+}

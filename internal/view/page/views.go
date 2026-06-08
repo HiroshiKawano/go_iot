@@ -86,3 +86,20 @@ type DeviceFormView struct {
 	DeviceName string                   // 編集見出し用 (登録時は未使用)
 	Form       component.DeviceFormView // 共有フォーム描画パラメータ
 }
+
+// AlertHistoryView はアラート履歴フルページ (AlertHistory) の描画データ。
+// 認証後レイアウト Layout に、フィルタ select 用デバイス選択肢 Devices (本人所有のみ)・
+// 選択中 device_id (echo)・期間入力の echo 値 From/To・結果領域 component DTO (List) を束ねる。
+//
+// デバイス選択肢は repository.Device ではなく component.DeviceOption を採用する: view は整形済み
+// primitive のみを保持し pgtype/repository 型を持ち込まない (view 純粋性・structure.md)。
+// 全デバイス option (value="") の selected 判定にのみ DeviceID=="" を使い、各デバイス option の
+// 選択状態は handler が DeviceOption.Selected に詰める (兄弟画面 alert-rules と同型)。
+type AlertHistoryView struct {
+	Layout   layout.AppLayoutData           // App レイアウト (Title/UserName/CSRFToken/CSSURL/Flash)
+	Devices  []component.DeviceOption       // フィルタ select 用デバイス選択肢 (本人所有のみ)
+	DeviceID string                         // 選択中 device_id ("" = 全デバイス。全デバイス option の selected 判定用)
+	From     string                         // フィルタフォーム echo (未指定は "")
+	To       string                         // フィルタフォーム echo (未指定は "")
+	List     component.AlertHistoryListView // フィルタ結果領域 (一覧 + 空状態 + ページャ)
+}

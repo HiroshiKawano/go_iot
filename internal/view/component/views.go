@@ -132,3 +132,45 @@ type DeviceFormView struct {
 	IsActive   string            // "1"/"0" の radio checked 復元用
 	Errors     map[string]string // field → 日本語メッセージ
 }
+
+// PageLink は番号付きページネーションのページ番号リンク1個 (AlertHistoryPagination 用)。
+// Num は表示するページ番号、URL は検索条件を保持し page のみ差し替えた相対 URL、
+// Current は現在ページ (true なら <a> ではなく .current の span で描画) を表す。
+type PageLink struct {
+	Num     int    // ページ番号
+	URL     string // そのページへの相対 URL (現在ページは未使用)
+	Current bool   // 現在ページ判定
+}
+
+// AlertHistoryPaginationView は番号付きページャ (AlertHistoryPagination) の表示データ。
+// 既存の簡易 PaginationView (前/次のみ) と異なり、ページ番号リンク配列 Pages を持つ
+// (mocks/html/alert-history.html の番号 1,2,3 + 前/次 を写経・design Decision「番号付き新規部品」)。
+// 前へ/次への有無と相対 URL を保持し、リンクは handler 生成の信頼 URL (templ.SafeURL で埋める)。
+type AlertHistoryPaginationView struct {
+	HasPrev, HasNext bool       // 前へ/次へリンクの表示可否 (端ページで false→.disabled)
+	PrevURL, NextURL string     // 検索条件を保持し page を差し替えた相対 URL
+	Pages            []PageLink // ページ番号リンク (現状 1..Last を列挙・IoT 小規模)
+}
+
+// AlertHistoryRow はアラート履歴一覧テーブル1行分の表示データ (整形済み primitive のみ)。
+// すべて発火時点の非正規化値を handler が整形して詰める (R4.7)。pgtype/repository 型は持ち込まない。
+type AlertHistoryRow struct {
+	TriggeredAt string // 発火日時 "YYYY-MM-DD HH:MM" (JST)
+	DeviceName  string // デバイス名
+	MetricLabel string // 指標ラベル "温度"/"湿度"
+	Condition   string // ルール条件 "> 35.00℃" (演算子記号 + 閾値2桁 + 単位)
+	ActualValue string // 実測値 "38.50℃" (数値2桁 + 単位)
+	Notified    string // 通知状態 "済"/"未"
+}
+
+// AlertHistoryListView はアラート履歴のフィルタ結果領域 fragment
+// (AlertHistoryList, id=alert-history-list) の表示データ。
+// HTMX 部分更新でこの DTO のみを差し替えるため、一覧・空状態・ページャ・エラーを内包する
+// (OOB 不使用・readings 踏襲・design Decision 1)。
+type AlertHistoryListView struct {
+	Rows          []AlertHistoryRow          // 履歴一覧 (発火日時の新しい順・最大20件)
+	HasData       bool                       // len(Rows) > 0。false でテーブル非表示+空状態メッセージ
+	HasPagination bool                       // 0件・1ページのみは false (R6.2 ページャ非表示)
+	Pagination    AlertHistoryPaginationView // 番号付きページャ
+	Errors        map[string]string          // from/to のインラインエラー (空なら非表示)
+}

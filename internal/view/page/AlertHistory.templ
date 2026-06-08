@@ -1,0 +1,61 @@
+package page
+
+import (
+	"fmt"
+
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
+	"github.com/HiroshiKawano/go_iot/internal/view/layout"
+)
+
+// AlertHistory はアラート履歴フルページ (mocks/html/alert-history.html を写経)。
+// 共通レイアウト App 内に、見出し・フィルタフォーム・結果領域フラグメントを 1 ページに統合する
+// (兄弟画面 ReadingsPage と同型)。
+//
+// フィルタフォームは method="GET" を HTMX 部分更新へ昇華する: hx-get で結果領域
+// #alert-history-list のみを innerHTML 差し替えし、hx-push-url="true" で URL に検索条件を反映する。
+// フォームは結果領域 (@AlertHistoryList) の**外**に配置し、swap 時に入力状態を保持する
+// (デバイス select の Tom Select も再初期化不要・§3.5/§16)。デバイス select は js-tom-select で
+// App.templ のグローバル init に委ねる。per-field の .error-message span はモックから採用せず、
+// エラー表示は fragment 内へ集約する (form が swap 外のため HTMX 応答で更新できない)。
+// 独自 CSS クラスは新設しない (§31)。
+templ AlertHistory(v AlertHistoryView) {
+	@layout.App(v.Layout) {
+		<div class="main-inner">
+			<div class="page-header">
+				<h1>アラート履歴</h1>
+			</div>
+			<section class="card">
+				<h2>フィルター</h2>
+				<form
+					action="/alerts/history"
+					method="get"
+					class="filter-form"
+					hx-get="/alerts/history"
+					hx-target="#alert-history-list"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+				>
+					<div class="form-group">
+						<label>デバイス</label>
+						<select name="device_id" class="js-tom-select">
+							<option value="" selected?={ v.DeviceID == "" }>全デバイス</option>
+							for _, d := range v.Devices {
+								<option value={ fmt.Sprintf("%d", d.ID) } selected?={ d.Selected }>{ d.Name }</option>
+							}
+						</select>
+					</div>
+					<div class="form-group">
+						<label>開始日</label>
+						<input type="date" name="from" value={ v.From }/>
+					</div>
+					<div class="form-group">
+						<label>終了日</label>
+						<input type="date" name="to" value={ v.To }/>
+					</div>
+					<button type="submit" class="btn btn-primary">検索</button>
+				</form>
+			</section>
+			@component.AlertHistoryList(v.List)
+		</div>
+	}
+}

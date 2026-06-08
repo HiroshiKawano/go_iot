@@ -1,0 +1,59 @@
+package component
+
+// AlertHistoryList はアラート履歴のフィルタ結果領域 fragment を描画する
+// (mocks/html/alert-history.html 行73-122 を写経・HTMX化、DeviceReadingsList を写経元とする)。
+// ルート <div id="alert-history-list"> が HTMX ターゲット (id はスタイリング非使用・§3.5)。
+// 検索・ページ送り時にこの領域全体 (エラー→一覧→空状態→ページャ) を innerHTML で差し替える。
+//
+// エラーマップ非空時はフラグメント内へインラインエラーを表示する (フルページのレイアウト
+// バナーは部分応答に含まれないため・§7 GET 検索バリデーション)。行0件時はテーブルを描画せず
+// 空状態メッセージを出す (R6.1)。0件・1ページのみは HasPagination=false でページャ非表示 (R6.2)。
+// Alpine の x-show ではなく Go 条件分岐で写経。独自 CSS クラスは新設しない (§31)。
+templ AlertHistoryList(v AlertHistoryListView) {
+	<div id="alert-history-list">
+		if len(v.Errors) > 0 {
+			<div class="error-message">
+				if v.Errors["from"] != "" {
+					<p>{ v.Errors["from"] }</p>
+				}
+				if v.Errors["to"] != "" {
+					<p>{ v.Errors["to"] }</p>
+				}
+			</div>
+		}
+		<h2 class="u-mbe-3">履歴一覧</h2>
+		if v.HasData {
+			<div class="table-wrapper">
+				<table class="data-table">
+					<thead>
+						<tr>
+							<th>発火日時</th>
+							<th>デバイス</th>
+							<th>指標</th>
+							<th>ルール (条件/閾値)</th>
+							<th>実測値</th>
+							<th>通知</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, r := range v.Rows {
+							<tr>
+								<td>{ r.TriggeredAt }</td>
+								<td>{ r.DeviceName }</td>
+								<td>{ r.MetricLabel }</td>
+								<td>{ r.Condition }</td>
+								<td>{ r.ActualValue }</td>
+								<td>{ r.Notified }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		} else {
+			<p class="empty-message">指定期間のアラート履歴はありません。</p>
+		}
+		if v.HasPagination {
+			@AlertHistoryPagination(v.Pagination)
+		}
+	</div>
+}
