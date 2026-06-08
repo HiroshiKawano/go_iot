@@ -37,7 +37,7 @@
 - `db/migrations/*.sql` 全7本を SQLite 方言へ書換:
   - `BIGSERIAL PRIMARY KEY` → `INTEGER PRIMARY KEY`（rowid 別名・int64 互換）
   - `TIMESTAMPTZ` → `DATETIME`（datetime/timestamp affinity。**TEXT 宣言にすると sqlc が string 生成になり time.Time が維持できないため避ける**）
-  - `NUMERIC(5,2)` → `REAL`（sqlc が float64 生成。温湿度値域で2桁は安全表現可能）
+  - `NUMERIC(5,2)` → `REAL`（**【オーナー決定 2026-06-08】REAL 採用で確定**。sqlc が float64 生成。温湿度値域で2桁は安全表現可能。現行 pgconv の float 往復・`%.2f` 表示ロジックを流用＝改修小。スケール済 INTEGER 案は不採用）
   - `JSONB`（device_tokens.abilities）→ `json`/`jsonb` affinity（sqlc が json.RawMessage 生成。gen-token は既に json.RawMessage 使用）
   - `BYTEA`（sessions.data）→ `BLOB`
   - `DEFAULT NOW()` → `DEFAULT CURRENT_TIMESTAMP`（または Go 側で明示セット）
@@ -47,7 +47,7 @@
 - `db/queries/*.sql` を SQLite 方言へ書換:
   - `::NUMERIC(5,2)` / `::BIGINT` キャスト → `CAST(... AS REAL)` / `CAST(... AS INTEGER)` または除去（`COUNT(*)::BIGINT` は SQLite で INTEGER のため単純削除可）
   - `NOW()` → `datetime('now')` / `CURRENT_TIMESTAMP`
-  - `DATE(recorded_at)`（ListDailySensorAggregates の日次バケット）→ `date(recorded_at)`（必要なら JST 補正は下記オーナー確認に従う）
+  - `DATE(recorded_at)`（ListDailySensorAggregates の日次バケット）→ **`date(recorded_at, '+9 hours')`（【オーナー決定 2026-06-08】JST(+9h) で日境界を補正する）**。実装注意: SELECT / GROUP BY / ORDER BY の**3箇所すべて**を同一式 `date(recorded_at, '+9 hours')` に統一すること（不一致だと集計バケットがズレる）。結果列 `reading_date` は既に JST 日付文字列 'YYYY-MM-DD' になるため、消費側の表示関数（`device_show.go` の `monthDayLabel`）では**再度 TZ 変換しない**こと（二重補正防止）。保存自体は引き続き UTC（TZ補正は集計クエリ内に閉じる）。
   - `sqlc.narg('device_id')::BIGINT IS NULL` → `CAST(sqlc.narg('device_id') AS INTEGER) IS NULL`（**`::` は SQLite parser がトークンを持たず generate 失敗するため必須**）
   - `$N` プレースホルダは sqlc が `?` へ自動変換するため原則そのまま（CAST 併用部のみ手当て）
   - `RETURNING *` は SQLite 3.35+ で対応・modernc v1.46.1 で利用可（要動作確認）
@@ -120,8 +120,8 @@
 
 ## 未確定事項・要確認（あれば）
 
-1. **NUMERIC 精度**: 温湿度・閾値を REAL（float64）で扱う方針で良いか（推奨）。厳密10進が必要なら「スケール済 INTEGER（×100）」となり改修増。**要オーナー確認**。
-2. **日次バケットの TZ**: `DATE(recorded_at)` を UTC 基準のまま許容するか、`date(recorded_at,'+9 hours')` で JST 日境界に明示補正するか（現 design でも Out of Boundary 既知）。**要オーナー確認**。
+1. ~~**NUMERIC 精度**~~ → **【決定済み 2026-06-08】REAL（float64）採用で確定**。現行 float 往復・`%.2f` 表示ロジックを流用（改修小）。スケール済 INTEGER 案は不採用。
+2. ~~**日次バケットの TZ**~~ → **【決定済み 2026-06-08】JST(+9h) 補正で確定**（`date(recorded_at, '+9 hours')`）。Task 0 の DATE 書換に反映済み（SELECT/GROUP BY/ORDER BY を同式統一・消費側で二重補正しない）。
 3. **sqlc 生成型の実機確定**: NUMERIC/集計/DATE/RETURNING/部分INDEX/CAST化 narg の最終生成型は Task 0 の sqlc generate 実走でのみ確定。想定（float64/time.Time）と異なれば下流改修量が変動する。
 4. **modernc の time.Time パース挙動**: CURRENT_TIMESTAMP（T無し表記）と datetime affinity 列の string/time.Time マッピングが現行 UTC 保存 + JST 表示と噛み合うか実機確認。
 5. **DATABASE_URL の扱い**: SQLite パスへ転用するか新キー（DB_PATH）を導入するか（.env.example/steering 整合）。デスクトップ向けの既定パス・必須env緩和は S10 に委ねる。
