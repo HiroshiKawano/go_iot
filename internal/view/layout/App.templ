@@ -15,6 +15,9 @@ type AppLayoutData struct {
 // App は認証後画面の共通レイアウト。
 // ヘッダー・サイドバー・メインコンテンツ枠 (#main-content)・通知領域 (#flash-message) を持ち、
 // HTMX 部分更新のため csrf meta と htmx:configRequest を備える。
+// 加えて検索可能 select 用の Tom Select アセット (CDN 2.3.1) と一括初期化 (select.js-tom-select)、
+// およびインライン CRUD のバリデーション部分返却を差し替えさせる
+// htmx.config.responseHandling (422 を swap 対象に含める) を同梱する。
 templ App(data AppLayoutData) {
 	<!DOCTYPE html>
 	<html lang="ja">
@@ -24,6 +27,8 @@ templ App(data AppLayoutData) {
 			<meta name="csrf-token" content={ data.CSRFToken }/>
 			<title>{ data.Title }</title>
 			<link rel="stylesheet" href={ data.CSSURL }/>
+			<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet"/>
+			<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 			<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.x.x/dist/htmx.min.js"></script>
 		</head>
@@ -39,6 +44,31 @@ templ App(data AppLayoutData) {
 				document.addEventListener('htmx:configRequest', function(event) {
 					event.detail.headers['X-CSRF-Token'] = document.querySelector('meta[name="csrf-token"]').content;
 				});
+			</script>
+			<script>
+				htmx.config.responseHandling = [
+					{code: "204", swap: false},
+					{code: "[23]..", swap: true},
+					{code: "422", swap: true},
+					{code: "[45]..", swap: false}
+				];
+			</script>
+			<script>
+				function initTomSelect(root) {
+					(root || document).querySelectorAll('select.js-tom-select:not([disabled]):not(.tomselected)').forEach(function(el) {
+						new TomSelect(el, {
+							allowEmptyOption: true,
+							dropdownParent: 'body',
+							plugins: el.multiple
+								? ['remove_button', 'dropdown_input']
+								: ['dropdown_input'],
+							onChange: function(value) {
+								el.dispatchEvent(new Event('change', { bubbles: true }));
+							}
+						});
+					});
+				}
+				initTomSelect();
 			</script>
 		</body>
 	</html>

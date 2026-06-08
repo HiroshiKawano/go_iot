@@ -1,0 +1,31 @@
+package component
+
+// AlertRuleList はルール一覧領域 (id=alert-rule-list。table+empty-message を内包する wrapper)。
+// 削除時にこの中身を innerHTML 差し替えするため、0 件遷移も wrapper 内で表現する (§3.6/§12 を wrapper 方式で解消)。
+// ルールがあれば table.data-table に AlertRuleRow をループ、無ければ空状態メッセージ。モック写経。
+templ AlertRuleList(rules []AlertRuleRowView) {
+	<div id="alert-rule-list">
+		if len(rules) == 0 {
+			<p class="empty-message">このデバイスにはアラートルールが設定されていません。上のフォームから追加してください。</p>
+		} else {
+			<div class="table-wrapper">
+				<table class="data-table">
+					<thead>
+						<tr>
+							<th>有効</th>
+							<th>指標</th>
+							<th>条件</th>
+							<th>閾値</th>
+							<th>操作</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, r := range rules {
+							@AlertRuleRow(r)
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}

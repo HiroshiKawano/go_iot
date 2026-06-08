@@ -164,6 +164,18 @@ func newHTTPHandler(cfg *config.Config, sm *scs.SessionManager, q repository.Que
 	readingsH := &handler.ReadingsHandler{Repo: q}
 	web.GET("/devices/:device/readings", middleware.RequireAuth(), readingsH.Index)
 
+	// アラートルール管理 (alert-rules): デバイスごとのルールをインライン CRUD する 6 ルート。
+	// 初期表示/デバイス切替(GET)・追加(POST)・編集読込(GET)・更新(PUT)・有効切替(PATCH)・削除(DELETE)。
+	// 全ルート RequireAuth。ミューテーション(POST/PUT/PATCH/DELETE)は web グループの CSRF で保護され、
+	// HTMX は実メソッドを、no-JS は POST + _method を MethodOverride が昇格する。HTMX 部分更新。
+	alertRuleH := &handler.AlertRuleHandler{Repo: q}
+	web.GET("/alerts/rules", middleware.RequireAuth(), alertRuleH.Index)
+	web.POST("/alerts/rules", middleware.RequireAuth(), alertRuleH.Add)
+	web.GET("/alerts/rules/:rule/edit", middleware.RequireAuth(), alertRuleH.Edit)
+	web.PUT("/alerts/rules/:rule", middleware.RequireAuth(), alertRuleH.Update)
+	web.PATCH("/alerts/rules/:rule/toggle", middleware.RequireAuth(), alertRuleH.Toggle)
+	web.DELETE("/alerts/rules/:rule", middleware.RequireAuth(), alertRuleH.Delete)
+
 	// 合成: メソッド上書き (ルーティング前) → セッション load/save → engine
 	return middleware.MethodOverride(sm.LoadAndSave(engine))
 }

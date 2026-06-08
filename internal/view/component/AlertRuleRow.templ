@@ -1,0 +1,48 @@
+package component
+
+import "fmt"
+
+// AlertRuleRow はルール一覧の 1 行 (tr。mocks/html/alert-rules.html の各行を写経)。
+// id=alert-rule-row-{ID} は有効切替 (PATCH) 時の outerHTML 差し替え先。
+// 有効=checkbox (change で当該行のみ反転)、指標/条件=domain ラベル、閾値=%.2f+単位、操作=編集/削除。
+// 削除は hx-confirm でネイティブ確認 (§11)。CSRF は App の htmx:configRequest が自動付与。
+// ミューテーションは要素直接 hx-* (form/_method ラップなし。既存 device 削除と同流儀)。独自クラスは新設しない (§31)。
+templ AlertRuleRow(v AlertRuleRowView) {
+	<tr id={ fmt.Sprintf("alert-rule-row-%d", v.ID) }>
+		<td>
+			<label>
+				<input
+					type="checkbox"
+					name="is_enabled"
+					value="1"
+					checked?={ v.IsEnabled }
+					hx-patch={ fmt.Sprintf("/alerts/rules/%d/toggle", v.ID) }
+					hx-target={ fmt.Sprintf("#alert-rule-row-%d", v.ID) }
+					hx-swap="outerHTML"
+					hx-trigger="change"
+				/>
+				<span class="u-visually-hidden">有効</span>
+			</label>
+		</td>
+		<td>{ v.Metric.Label() }</td>
+		<td>{ v.Operator.Label() }</td>
+		<td>{ fmt.Sprintf("%.2f%s", v.Threshold, v.Metric.Unit()) }</td>
+		<td class="rule-list-actions">
+			<button
+				type="button"
+				class="btn btn-small btn-secondary"
+				hx-get={ fmt.Sprintf("/alerts/rules/%d/edit", v.ID) }
+				hx-target="#alert-rule-form"
+				hx-swap="outerHTML"
+			>編集</button>
+			<button
+				type="button"
+				class="btn btn-small btn-danger"
+				hx-delete={ fmt.Sprintf("/alerts/rules/%d", v.ID) }
+				hx-target="#alert-rule-list"
+				hx-swap="innerHTML"
+				hx-confirm="このルールを削除しますか?"
+			>削除</button>
+		</td>
+	</tr>
+}

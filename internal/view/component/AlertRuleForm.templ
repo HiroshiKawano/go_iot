@@ -1,0 +1,65 @@
+package component
+
+import (
+	"fmt"
+
+	"github.com/HiroshiKawano/go_iot/internal/domain"
+)
+
+// AlertRuleForm は追加/編集兼用フォーム (id=alert-rule-form。mocks/html/alert-rules.html の .rule-form を写経)。
+// EditingRuleID==0 で追加 (hx-post・「ルールを追加」)、>0 で編集 (hx-put・「更新」+ キャンセル) に分岐する。
+// 送信先は #alert-rule-section を innerHTML 差し替え (テーブル全体返却で件数整合。§12)。
+// 指標/条件は domain の全列挙をループし selected で選択状態を、threshold は value で入力値を復元する。
+// CSRF は App の htmx:configRequest が自動付与 (hidden 不要)。独自 CSS クラスは新設しない (§31)。
+templ AlertRuleForm(v AlertRuleFormView) {
+	<form
+		id="alert-rule-form"
+		class="rule-form"
+		if v.EditingRuleID == 0 {
+			hx-post="/alerts/rules"
+		} else {
+			hx-put={ fmt.Sprintf("/alerts/rules/%d", v.EditingRuleID) }
+		}
+		hx-target="#alert-rule-section"
+		hx-swap="innerHTML"
+	>
+		<input type="hidden" name="device_id" value={ fmt.Sprintf("%d", v.DeviceID) }/>
+		<div class="form-group">
+			<label>指標</label>
+			<select name="metric">
+				<option value="">選択してください</option>
+				for _, m := range domain.AllMetrics() {
+					<option value={ string(m) } selected?={ v.Metric == string(m) }>{ m.Label() }</option>
+				}
+			</select>
+			<span class="error-message">{ v.Errors["metric"] }</span>
+		</div>
+		<div class="form-group">
+			<label>条件</label>
+			<select name="operator">
+				<option value="">選択してください</option>
+				for _, op := range domain.AllComparisonOperators() {
+					<option value={ string(op) } selected?={ v.Operator == string(op) }>{ op.Label() }</option>
+				}
+			</select>
+			<span class="error-message">{ v.Errors["operator"] }</span>
+		</div>
+		<div class="form-group">
+			<label>閾値</label>
+			<input type="number" name="threshold" step="0.01" value={ v.Threshold } required/>
+			<span class="error-message">{ v.Errors["threshold"] }</span>
+		</div>
+		if v.EditingRuleID == 0 {
+			<button type="submit" class="btn btn-primary">ルールを追加</button>
+		} else {
+			<button
+				type="button"
+				class="btn btn-secondary"
+				hx-get={ fmt.Sprintf("/alerts/rules?device_id=%d", v.DeviceID) }
+				hx-target="#alert-rule-section"
+				hx-swap="innerHTML"
+			>キャンセル</button>
+			<button type="submit" class="btn btn-primary">更新</button>
+		}
+	</form>
+}

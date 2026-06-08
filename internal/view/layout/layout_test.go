@@ -44,6 +44,32 @@ func TestApp_共通要素を描画(t *testing.T) {
 	assertContains(t, html, `x-data="{ navOpen: false }"`)
 }
 
+func TestApp_TomSelectアセットと422swap設定を加算(t *testing.T) {
+	data := AppLayoutData{
+		Title:     "アラートルール - 農業IoTシステム",
+		UserName:  "テストユーザー",
+		CSRFToken: "tok-abc",
+		CSSURL:    "/static/css/style.css?v=dev",
+	}
+	html := render(t, App(data))
+
+	// Tom Select アセット (CDN 2.3.1・モック準拠) を head に加算
+	assertContains(t, html, "tom-select@2.3.1/dist/css/tom-select.css")
+	assertContains(t, html, "tom-select@2.3.1/dist/js/tom-select.complete.min.js")
+
+	// select.js-tom-select の一括初期化 (対象 select が無いページでは no-op)
+	assertContains(t, html, "select.js-tom-select")
+	assertContains(t, html, "new TomSelect")
+
+	// 422 をスワップ対象に含める responseHandling 設定 (インライン CRUD のバリデーション部分返却用)
+	assertContains(t, html, "htmx.config.responseHandling")
+	assertContains(t, html, `{code: "422", swap: true}`)
+
+	// 既存の CSRF 機構 (meta + htmx:configRequest) は不変
+	assertContains(t, html, "htmx:configRequest")
+	assertContains(t, html, `name="csrf-token"`)
+}
+
 func TestGuest_カードでchildrenを描画(t *testing.T) {
 	var buf bytes.Buffer
 	ctx := templ.WithChildren(context.Background(), templ.Raw("<p>子要素</p>"))

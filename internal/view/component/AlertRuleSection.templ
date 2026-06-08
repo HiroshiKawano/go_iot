@@ -1,0 +1,15 @@
+package component
+
+// AlertRuleSection は #alert-rule-section (追加/編集フォーム + ルール一覧を内包)。
+// デバイス切替・追加・更新時にこの領域全体を innerHTML 差し替えする単位 (§12 テーブル全体返却)。
+// 見出し (ルール追加 / ルール一覧) も内包し、差し替え後も構造を保つ。モック写経。
+templ AlertRuleSection(v AlertRuleSectionView) {
+	<div id="alert-rule-section">
+		<section class="card">
+			<h2>ルール追加</h2>
+			@AlertRuleForm(v.Form)
+		</section>
+		<h2 class="u-mbe-3">ルール一覧</h2>
+		@AlertRuleList(v.Rules)
+	</div>
+}

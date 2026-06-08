@@ -1,0 +1,51 @@
+package page
+
+import (
+	"fmt"
+
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
+	"github.com/HiroshiKawano/go_iot/internal/view/layout"
+)
+
+// AlertRules はアラートルール管理フルページ (mocks/html/alert-rules.html を写経)。
+// 共通レイアウト App 内に、デバイス選択 (検索可能 select。選択で対象セクションへ切替) と
+// #alert-rule-section (フォーム + 一覧) を描画する。所有デバイス 0 件は案内文を表示する。
+// デバイス選択は swap 対象 (#alert-rule-section) の外に置き、切替後も select 自身は再描画しない
+// (Tom Select は init 1 回で足りる。§16/C12)。select の change で hx-get し対象デバイスのセクションへ差し替える。
+templ AlertRules(v AlertRulesPageView) {
+	@layout.App(v.Layout) {
+		<div class="main-inner">
+			<div class="page-header">
+				<h1>アラートルール管理</h1>
+			</div>
+			if v.HasDevice {
+				<section class="card">
+					<h2>デバイス選択</h2>
+					<form action="/alerts/rules" method="get">
+						<div class="form-group">
+							<label>デバイス</label>
+							<select
+								name="device_id"
+								class="js-tom-select"
+								hx-get="/alerts/rules"
+								hx-target="#alert-rule-section"
+								hx-swap="innerHTML"
+								hx-trigger="change"
+							>
+								for _, d := range v.Devices {
+									<option value={ fmt.Sprintf("%d", d.ID) } selected?={ d.Selected }>{ d.Name }</option>
+								}
+							</select>
+							<span class="error-message"></span>
+						</div>
+					</form>
+				</section>
+				@component.AlertRuleSection(v.Section)
+			} else {
+				<section class="card">
+					<p class="empty-message">ルールを設定できるデバイスがありません。先にデバイスを登録してください。</p>
+				</section>
+			}
+		</div>
+	}
+}

@@ -64,6 +64,18 @@ type RegisterView struct {
 	Errors    map[string]string
 }
 
+// AlertRulesPageView はアラートルール管理フルページ (AlertRules) の描画データ。
+// 認証後レイアウト Layout に、デバイス選択肢 Devices (所有デバイスのみ) と
+// 選択中デバイスのセクション (フォーム + 一覧) を束ねる。HasDevice==false は所有デバイス 0 件で、
+// デバイス選択・セクションの代わりに案内文を表示する。Section はフォーム部品が所有する
+// component 側 DTO (layout を内包しない。layout → component の import 方向を保ち循環を避ける)。
+type AlertRulesPageView struct {
+	Layout    layout.AppLayoutData           // App レイアウト (Title/UserName/CSRFToken/CSSURL/Flash)
+	Devices   []component.DeviceOption       // デバイス選択肢 (所有デバイスのみ)
+	HasDevice bool                           // false=所有デバイス 0 件 → 案内表示
+	Section   component.AlertRuleSectionView // 選択中デバイスのフォーム + 一覧
+}
+
 // DeviceFormView はデバイス登録/編集ページ (DeviceCreatePage/DeviceEditPage) の描画データ。
 // 登録/編集で単一の View を共有する (画面差分は Form.IsEdit/Action/CancelURL と DeviceName のみ)。
 // 認証後レイアウト用の Layout と、編集見出し「デバイス編集: {DeviceName}」用の DeviceName、
