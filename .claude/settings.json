@@ -17,6 +17,7 @@
       "Bash(go tool cover:*)",
       "Bash(go run:*)",
       "Bash(gofmt:*)",
+      "Bash(templ:*)",
       "Bash(grep:*)",
       "Bash(rg:*)",
       "Bash(find:*)",
@@ -43,6 +44,7 @@
       "Bash(pkill:*)",
       "Bash(cd:*)",
       "Bash(set:*)",
+      "Bash(export:*)",
       "Bash(curl:*)",
       "Bash(python3:*)",
       "Bash(docker compose exec:*)",
@@ -62,15 +64,13 @@
       "Bash(perl:*)",
       "Bash(md5:*)",
       "Bash(md5sum:*)",
-      "Bash(rm -f /tmp/:*)",
-      "Bash(rm -f internal/:*)",
       "Bash(git ls-files:*)",
       "Bash(git worktree:*)",
       "Bash(git checkout HEAD -- internal/:*)",
+      "Bash(git restore:*)",
       "Bash(mkdir:*)",
       "Bash(rmdir:*)",
-      "Bash(cut:*)",
-      "Bash(rm -rf /tmp/:*)"
+      "Bash(cut:*)"
     ]
   },
   "hooks": {
@@ -81,6 +81,14 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-source-redirect.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/bash-rm-guard.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-force-push.sh\""
           }
         ]
       }
