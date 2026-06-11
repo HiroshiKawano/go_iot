@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/HiroshiKawano/go_iot/internal/appdata"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -35,16 +36,15 @@ func Destination(mode, envLogFile string, defaultPath func() string) string {
 }
 
 // DefaultPath は既定のログファイルパスを返す。
-// Windows では %LOCALAPPDATA%\go_iot\app.log、それ以外は os.UserConfigDir 配下。
-// いずれも取得できない場合はカレント配下の相対パスにフォールバックする。
+// パス解決は internal/appdata の単一解決源へ委譲し、app.db と同一ディレクトリ
+// (%LOCALAPPDATA%\go_iot\ 等) の app.log を返す (二重実装排除・Decision 1)。
+// appdata 解決が失敗する極端なケースのみ実行ファイル隣ではなく相対パスへ最終退避する。
 func DefaultPath() string {
-	if dir := os.Getenv("LOCALAPPDATA"); dir != "" {
-		return filepath.Join(dir, "go_iot", "app.log")
+	path, err := appdata.Path("app.log")
+	if err != nil {
+		return filepath.Join("go_iot-data", "app.log")
 	}
-	if dir, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(dir, "go_iot", "app.log")
-	}
-	return filepath.Join("go_iot-data", "app.log")
+	return path
 }
 
 // Setup はログ出力先を構築する。

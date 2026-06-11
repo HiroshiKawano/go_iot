@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/HiroshiKawano/go_iot/internal/appdata"
 )
 
 func TestDestination(t *testing.T) {
@@ -32,14 +34,35 @@ func TestDestination(t *testing.T) {
 	}
 }
 
-func TestDefaultPath_LocalAppData(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("LOCALAPPDATA", dir)
+// DefaultPath は appdata 単一解決源へ委譲する。実機 (darwin/linux) では appdata が
+// GOOS gated で LOCALAPPDATA を参照しないため、LOCALAPPDATA を設定しても委譲先 (UserConfigDir 配下)
+// を返し、app.db と同一ディレクトリへ解決される (二重実装排除・Decision 1)。
+func TestDefaultPath_DelegatesToAppdata(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("LOCALAPPDATA", filepath.Join(root, "localappdata"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "xdg"))
 
 	got := DefaultPath()
-	want := filepath.Join(dir, "go_iot", "app.log")
+
+	want, err := appdata.Path("app.log")
+	if err != nil {
+		t.Fatalf("appdata.Path: %v", err)
+	}
 	if got != want {
-		t.Errorf("DefaultPath() = %q, want %q", got, want)
+		t.Errorf("DefaultPath() = %q, appdata 委譲先 %q と一致すべき (二重実装排除)", got, want)
+	}
+	if filepath.Base(got) != "app.log" {
+		t.Errorf("DefaultPath() = %q, 末尾は app.log であるべき", got)
+	}
+
+	// app.log と app.db が同一ディレクトリへ解決される (単一解決源)
+	dbPath, err := appdata.Path("app.db")
+	if err != nil {
+		t.Fatalf("appdata.Path: %v", err)
+	}
+	if filepath.Dir(got) != filepath.Dir(dbPath) {
+		t.Errorf("app.log (%q) と app.db (%q) が同一ディレクトリへ解決されるべき", got, dbPath)
 	}
 }
 

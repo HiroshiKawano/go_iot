@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,32 +14,27 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/config"
 	infradb "github.com/HiroshiKawano/go_iot/internal/infra/db"
 	"github.com/HiroshiKawano/go_iot/internal/infra/token"
+	"github.com/HiroshiKawano/go_iot/internal/migrate"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/pressly/goose/v3"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // migratedServerDB は本番同条件(NewPool: WAL/busy_timeout)の実 SQLite ファイルへ
-// goose(sqlite3)で全マイグレーションを適用した *sql.DB を返す。
+// 本番と同じ internal/migrate.Up(embed migrations)で全マイグレーションを適用した *sql.DB を返す。
+// goose のグローバル状態(SetBaseFS)を本番経路と一致させ、テスト間の状態矛盾を避ける。
 func migratedServerDB(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := "file:" + filepath.Join(t.TempDir(), "ingest_test.sqlite")
+	dsn := "file:" + filepath.ToSlash(filepath.Join(t.TempDir(), "ingest_test.sqlite"))
 	db, err := infradb.NewPool(context.Background(), dsn)
 	if err != nil {
 		t.Fatalf("NewPool: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	_, thisFile, _, _ := runtime.Caller(0)
-	migDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "db", "migrations") // cmd/server → リポジトリルート
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		t.Fatalf("goose.SetDialect: %v", err)
-	}
-	goose.SetLogger(goose.NopLogger())
-	if err := goose.Up(db, migDir); err != nil {
-		t.Fatalf("goose.Up: %v", err)
+	if err := migrate.Up(db); err != nil {
+		t.Fatalf("migrate.Up: %v", err)
 	}
 	return db
 }

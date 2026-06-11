@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,10 +16,13 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/applog"
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/config"
+	"github.com/HiroshiKawano/go_iot/internal/desktop"
 	"github.com/HiroshiKawano/go_iot/internal/docs"
 	"github.com/HiroshiKawano/go_iot/internal/handler"
 	infradb "github.com/HiroshiKawano/go_iot/internal/infra/db"
+	"github.com/HiroshiKawano/go_iot/internal/mdns"
 	"github.com/HiroshiKawano/go_iot/internal/middleware"
+	"github.com/HiroshiKawano/go_iot/internal/migrate"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/service"
 	"github.com/HiroshiKawano/go_iot/internal/view"
@@ -53,11 +58,14 @@ func run() error {
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	defer rootCancel()
 
-	pool, err := infradb.NewPool(rootCtx, cfg.DatabaseURL)
+	// DB をオープンし、listen 開始前にスキーマを自動適用する (R4)。
+	// マイグレーション失敗は致命とし、起動を中断する (fail fast・R4.4)。
+	pool, err := openAndMigrate(rootCtx, cfg.DatabaseURL, migrate.Up)
 	if err != nil {
-		return fmt.Errorf("connect db: %w", err)
+		return err
 	}
 	defer pool.Close()
+	log.Printf("database ready: %s", cfg.DatabaseURL)
 
 	q := repository.New(pool)
 	sm := auth.NewSessionManager(pool, cfg)
@@ -71,19 +79,22 @@ func run() error {
 	httpHandler := newHTTPHandler(cfg, sm, q, pool.PingContext)
 
 	// --- サーバ起動 / Graceful shutdown ---
-	addr := fmt.Sprintf(":%d", cfg.AppPort)
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: httpHandler,
+	// ポートを自動採番し (既定ポート競合時は空きポート)、取得した listener で Serve する (R5.3/5.4)。
+	ln, actualPort, err := desktop.Listen(cfg.AppPort)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
+	srv := &http.Server{Handler: httpHandler}
+	log.Printf("起動環境: env=%s", cfg.AppEnv)
+	serverErrCh := startServer(srv, ln, actualPort, desktop.OpenBrowser)
 
-	serverErrCh := make(chan error, 1)
-	go func() {
-		log.Printf("listening on %s (env=%s)", addr, cfg.AppEnv)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErrCh <- err
-		}
-	}()
+	// 安定ホスト名 go-iot.local を mDNS で公開する (R7)。開始失敗は非致命 (IP 直打ちで到達可)。
+	// actualPort (自動採番後の実ポート) 渡しと defer Stop は run() 直読みで担保する
+	// (run() 全体は signal 待ちのため統合テスト対象外。startAdvertiser の引数/非致命性と
+	// adv.Stop の安全性は各々ユニットで検証済み)。
+	adv := mdns.New()
+	startAdvertiser(rootCtx, adv, mdns.HostName, actualPort)
+	defer adv.Stop()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -102,6 +113,53 @@ func run() error {
 	}
 	log.Println("shutdown complete")
 	return nil
+}
+
+// openAndMigrate は DB をオープンし、listen 開始前にマイグレーションを冪等適用する。
+// マイグレーション失敗時は pool を閉じてエラーを返し、呼び出し元 (run) が起動を中断する
+// (fail fast・R4.4)。migrateUp を引数化することで、失敗時の起動中断をテスト可能にする。
+func openAndMigrate(ctx context.Context, dsn string, migrateUp func(*sql.DB) error) (*sql.DB, error) {
+	pool, err := infradb.NewPool(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("connect db: %w", err)
+	}
+	if err := migrateUp(pool); err != nil {
+		_ = pool.Close()
+		return nil, fmt.Errorf("apply migrations: %w", err)
+	}
+	return pool, nil
+}
+
+// startServer は確定済み listener でサーバを goroutine で起動し、実ポートをログ出力後に
+// 既定ブラウザで localhost URL を開く (R5.1/5.4)。ブラウザ起動失敗は非致命とし、URL をログに
+// 提示して継続する (mDNS の go-iot.local は ESP32 向けで別系統。本 URL は同端末向け localhost)。
+// openURL を引数化することでブラウザ起動配線をテスト可能にする。
+//
+// Serve のエラーは errCh 経由で run() の select が回収する。listener は desktop.Listen で
+// 確立済みのため、bind 起因の即時失敗はここでは起きない (起きるのは shutdown 時の ErrServerClosed のみ)。
+func startServer(srv *http.Server, ln net.Listener, port int, openURL func(string) error) <-chan error {
+	errCh := make(chan error, 1)
+	go func() {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	url := fmt.Sprintf("http://localhost:%d", port)
+	log.Printf("待受開始: %s", url)
+	if err := openURL(url); err != nil {
+		log.Printf("ブラウザ自動起動に失敗しました（手動で %s を開いてください）: %v", url, err)
+	}
+	return errCh
+}
+
+// startAdvertiser は listen・実ポート確定後に mDNS 公開を開始する (R7)。
+// 開始失敗は致命でなく、URL/IP 直打ちで到達可能なためログのみで継続する (R7.1)。
+// adv.Stop() は未 Start でも安全なため、呼び出し側は常に defer adv.Stop() してよい。
+func startAdvertiser(ctx context.Context, adv mdns.Advertiser, hostname string, port int) {
+	if err := adv.Start(ctx, hostname, port); err != nil {
+		log.Printf("mDNS 公開の開始に失敗しました（IP 直打ちで到達可能・継続します）: %v", err)
+	}
 }
 
 // newHTTPHandler は全ルート (Web UI / デバイス API / 静的アセット / ドキュメント / ヘルス) を
