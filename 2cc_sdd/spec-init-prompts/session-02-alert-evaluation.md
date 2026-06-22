@@ -10,7 +10,7 @@
 
 ## 機能概要
 
-農場運営者が設定したアラートルール（気温が 35℃ を超えたら、湿度が 30% 未満になったら等）に基づき、ESP32 デバイスから送信されたセンサーデータを受信した際に、異常値判定を同期的に実行して `alert_histories` テーブルへ保存する。現状は domain.ComparisonOperator.Evaluate() と CreateAlertHistory は実装済みだが、センサーデータ受信ハンドラ（POST /api/sensor-data）内でこれらの接続が未着手のため、本セッションではこの接続とテストを完成させる。
+農場運営者が設定したアラートルール（気温が 35℃ を超えたら、湿度が 30% 未満になったら等）に基づき、ESP8266 デバイスから送信されたセンサーデータを受信した際に、異常値判定を同期的に実行して `alert_histories` テーブルへ保存する。現状は domain.ComparisonOperator.Evaluate() と CreateAlertHistory は実装済みだが、センサーデータ受信ハンドラ（POST /api/sensor-data）内でこれらの接続が未着手のため、本セッションではこの接続とテストを完成させる。
 
 ## 背景・現状
 

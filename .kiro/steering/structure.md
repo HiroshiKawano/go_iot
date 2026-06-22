@@ -95,4 +95,4 @@ go_iot/
 - **外部キー制約は張らない**（参照整合性はアプリ層 JOIN で担保）。
 - **論理削除**（`deleted_at`）採用。sqlc クエリは常に `WHERE deleted_at IS NULL`。
 - マスターデータは DB テーブルではなく **Go 定数 + VARCHAR + CHECK 制約**。
-- 認証: ESP32 = 自作 Bearer（SHA-256）/ ブラウザ = Session（scs、実装予定）。
+- 認証: ESP8266 = 自作 Bearer（SHA-256）/ ブラウザ = Session（scs、実装予定）。

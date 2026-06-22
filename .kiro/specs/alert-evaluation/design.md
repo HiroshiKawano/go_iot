@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Purpose**: 本機能は、ESP32 デバイスから受信したセンサーデータ（温度・湿度）を、デバイス単位で設定された有効なアラートルールに対し**同期的に評価**し、条件にマッチしたルールごとに発火履歴（`alert_histories`）を記録する判定ロジックを、農場運営者に提供する。
+**Purpose**: 本機能は、ESP8266 デバイスから受信したセンサーデータ（温度・湿度）を、デバイス単位で設定された有効なアラートルールに対し**同期的に評価**し、条件にマッチしたルールごとに発火履歴（`alert_histories`）を記録する判定ロジックを、農場運営者に提供する。
 
 **Users**: 農場運営者は本機能を直接操作しないが、設定済みアラートルールが受信時に評価されることで、閾値超過（例: 温度 > 35℃、湿度 < 30%）を遅延なく検知・記録できる。記録された履歴の閲覧・通知反映は後続スペック（ダッシュボード／履歴画面）が担う。
 
@@ -60,7 +60,7 @@
 
 ```mermaid
 graph TB
-    Device[ESP32 device]
+    Device[ESP8266 device]
     subgraph handler
         SensorAPI[SensorAPI Create]
         EvalIface[AlertEvaluator interface]
@@ -137,7 +137,7 @@ cmd/
 
 ```mermaid
 sequenceDiagram
-    participant Device as ESP32
+    participant Device as ESP8266
     participant API as SensorAPI Create
     participant Q as repository Querier
     participant Eval as AlertEvaluator
