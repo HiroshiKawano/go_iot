@@ -191,6 +191,7 @@ make dev          # air でホットリロード起動 → http://localhost:8080
 ```
 
 > **デバイス API を試すには**: Bearer トークンが必要です。`make gen-token user=1 name="ハウスA温湿度計"` で発行し、表示された平文トークンを `Authorization: Bearer <token>` ヘッダに付けて `POST /api/sensor-data` を叩きます（API 仕様は **http://localhost:8080/docs** の Scalar UI を参照）。
+> **実機（ESP8266）が無くても**、`make sensor-sim token=<平文> device=1` でファームと同形の JSON を送って受信〜画面反映〜アラート判定まで確認できます（連続送信は `go run ./cmd/sensor-sim -token <平文> -device 1 -count 0 -interval 5m -random`）。ファーム本体は [`firmware/`](firmware/) を参照。
 
 ---
 
@@ -271,9 +272,10 @@ make templ         # *.templ → *_templ.go を再生成
 # --- DB スナップショット（AI / 開発者向けスキーマ資産） ---
 make db-snapshot   # 実DBを内省し docs/database_snapshot/ にテーブル定義 + ER図を生成（要 make up + migrate-up）
 
-# --- データ / トークン ---
+# --- データ / トークン / デバイス送信テスト ---
 make seed                                       # 開発用データ投入（既存データは削除）
 make gen-token user=1 name="ハウスA温湿度計"    # デバイス API 用トークン発行
+make sensor-sim token=<平文> device=1           # 実機不要のセンサー送信テスト（cmd/sensor-sim）
 
 # --- モックプレビュー / クリーン ---
 make mocks-preview # mocks/html/ をブラウザでプレビュー（http://localhost:8000）
