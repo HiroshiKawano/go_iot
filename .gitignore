@@ -22,6 +22,9 @@ coverage.html
 .env.local
 .env.*.local
 
+# デバイスファームの実設定 (Wi-Fi パスワード・Bearer トークンを含む。example のみコミット)
+firmware/**/config.h
+
 # IDE / エディタ
 .idea/
 .vscode/
