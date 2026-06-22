@@ -5796,6 +5796,8 @@ readings はパス固定（`/devices/:device/readings`）で `authz.RequireDevic
 
 本ガイドは設計書（システム構成図 / DB設計書 / 画面設計書 / HTMLモック作成ルール）に基づき翻訳したが、以下は実装方針が未確定のため断定を避けた。実装着手前に決定すること。
 
+> **【2026-06-22 追記】下記5項目は S1〜S8 実装で全て確定・実装済み。** 実態は [実装現状サマリ.md](実装現状サマリ.md)（§2・§3）が正：① CSRF=**gorilla/csrf**（`SESSION_SECRET` から鍵導出・Web グループ限定）、② **自作 MethodOverride**（http.Handler 層で `_method` を昇格）、③ scs=**`internal/auth/session_auth.go`（scs/v2 + pgxstore）実装済み**、④ アセット=**go:embed（`internal/view/static.go` → `/static`）+ `make sync-css`**、⑤ 型名はコード（`internal/repository`・`internal/view/{component,page}`）が正。以下は翻訳時点の検討メモとして残す。
+
 1. **CSRF 対応**: Gin の CSRF ミドルウェアの採用ライブラリ（gorilla/csrf 等）と、ヘッダー名（本書は仮に `X-CSRF-Token` で統一）。`htmx:configRequest` でのヘッダー送信パターンはライブラリ非依存で流用可。
 2. **PUT / DELETE / PATCH のフォーム送信**: HTML フォームは PUT/PATCH/DELETE を直送できない。`_method` 隠しフィールド + MethodOverride ミドルウェア（システム構成図.md のルートマッピング参照）か、POST 受けで Handler 分岐かを確定する。HTMX 操作（`hx-put` 等）は直接送信可能。
 3. **セッション認証**: scs（`alexedwards/scs`）+ PostgreSQL ストアは将来 `internal/auth/session_auth.go` で実装予定。`Auth::user()` 相当の取得経路は実装時に確定。

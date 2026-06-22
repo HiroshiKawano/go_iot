@@ -199,7 +199,7 @@ make dev          # air でホットリロード起動 → http://localhost:8080
 ```
 go_iot/
 ├── cmd/
-│   ├── server/main.go        エントリポイント（合成ルート。API 配線済み、Web UI は実装予定）
+│   ├── server/main.go        エントリポイント（合成ルート。API・Web UI・静的・docs・health を配線）
 │   ├── seed/main.go          開発用シードデータ投入 CLI（make seed）
 │   ├── gen-token/main.go     デバイス API 用 Bearer トークン発行 CLI（make gen-token）
 │   └── db-snapshot/main.go   DB スキーマ内省 CLI（make db-snapshot）
@@ -207,15 +207,17 @@ go_iot/
 │   ├── config/               環境変数の読込・検証
 │   ├── domain/               Metric / ComparisonOperator Enum（純粋・無依存層）
 │   ├── infra/{db,pgconv,token}/  pgxpool / pgtype 変換 / トークン生成
-│   ├── auth/                  認証(authN)：device_auth.go（Bearer）。session_auth.go は実装予定
+│   ├── auth/                  認証(authN)：device_auth.go（Bearer）/ session_auth.go（scs Session）
 │   ├── authz/                 認可(authZ)：所有者認可(BOLA 防止)を集約
-│   ├── handler/               HTTP ハンドラ（Gin）
+│   ├── handler/               HTTP ハンドラ（Gin。sensor_api / auth / dashboard / device / readings / alert_*）
 │   ├── repository/            sqlc 生成コード（全37クエリ。Querier interface）
 │   ├── dbsnapshot/            DB 内省＋スナップショット整形（introspect=DB依存 / render=純粋・テスト済）
 │   ├── docs/                  OpenAPI YAML + Scalar UI（go:embed）
-│   ├── service/               アラート判定等のサービス層（実装予定）
-│   ├── middleware/            SessionLoad / MethodOverride 等（実装予定）
-│   └── view/                  templ 配置先（layout / component / page の3層。実装予定）
+│   ├── service/               アラート判定サービス（alert_evaluator.go）
+│   ├── chart/                 サーバサイド SVG 線グラフ生成（stdlib のみ・純粋層）
+│   ├── timefmt/               相対時刻の日本語整形（「N分前」等・純粋層）
+│   ├── middleware/            SessionLoad / MethodOverride / CSRF / RequireAuth
+│   └── view/                  templ（layout / component / page の3層・28ファイル）+ static.go（go:embed 配信）
 ├── db/
 │   ├── migrations/            goose マイグレーション（*.sql）
 │   └── queries/               sqlc 入力クエリ（*.sql）
@@ -324,7 +326,7 @@ go tool cover -html=coverage.out -o coverage.html
 
 | エンドポイント | URL | 内容 |
 |---|---|---|
-| トップ | http://localhost:8080/ | 動作確認用の固定文字列（Web UI 実装予定） |
+| トップ | http://localhost:8080/ | ログイン状態に応じて `/dashboard` または `/login` へリダイレクト |
 | ヘルスチェック | http://localhost:8080/health | DB 疎通込み（`{"status":"ok"}` / 失敗時 503） |
 | **API ドキュメント** | http://localhost:8080/docs | **Scalar UI**（OpenAPI 3.0.3、`go:embed` 同梱） |
 | OpenAPI 生 YAML | http://localhost:8080/docs/openapi.yaml | 機械可読な仕様 |

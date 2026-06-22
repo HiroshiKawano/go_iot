@@ -18,6 +18,10 @@ ESP8266 温湿度センサー（SHT31）のデータを Go バックエンドで
 | テンプレート | **templ** v0.3（a-h/templ） | Blade/Eloquent ではない。templ 用語で記述する |
 | フロント動的化 | **HTMX** + **Alpine.js** | 部分更新は HTMX、軽い UI 状態は Alpine |
 | **CSS / スタイリング** | **素のモダンCSS（フレームワーク非依存）** | ★下記「CSS 方針」参照。Lism CSS は採用しない |
+| Session | **alexedwards/scs/v2** + **scs/pgxstore** | PostgreSQL セッションストア。`auth.NewSessionManager` |
+| CSRF | **gorilla/csrf** v1.7 | `SESSION_SECRET` を SHA-256 で 32B 鍵化。Web グループ限定 |
+| メソッド上書き | 自作 MethodOverride | hidden `_method` で PUT/PATCH/DELETE。http.Handler 層 |
+| SVG グラフ | 自作（`internal/chart`） | stdlib のみで線グラフ生成。`@templ.Raw` 埋込 |
 | バリデーション | go-playground/validator v10 | Gin の binding タグ経由 |
 | パスワード | golang.org/x/crypto（bcrypt） | |
 | API ドキュメント | **Scalar UI** + OpenAPI 3.0.3 | go:embed 同梱 |

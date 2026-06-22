@@ -7,21 +7,24 @@
 ```
 go_iot/
 ├── cmd/
-│   ├── server/main.go          エントリポイント（API配線済み、Web UI は実装予定）
+│   ├── server/main.go          エントリポイント（合成ルート。API・Web UI・静的・docs・health を配線）
 │   ├── seed/main.go            開発用シードデータ投入CLI
-│   └── gen-token/main.go       デバイスAPI用 Bearer トークン発行CLI
+│   ├── gen-token/main.go       デバイスAPI用 Bearer トークン発行CLI
+│   └── db-snapshot/main.go     DB スキーマ内省CLI（make db-snapshot）
 ├── internal/
 │   ├── config/                 環境変数読込・検証
 │   ├── domain/                 Metric / ComparisonOperator Enum
 │   ├── infra/{db,pgconv,token}/ pgxpool / 型変換 / トークン
-│   ├── auth/                   認証(authN): device_auth.go（Bearer）+ SetUserID。session_auth.go は実装予定
-│   ├── authz/                  認可(authZ): 所有者認可(BOLA防止)を集約（RequireDeviceOwner）
-│   ├── handler/                HTTP ハンドラ
+│   ├── auth/                   認証(authN): device_auth.go（Bearer）/ session_auth.go（scs Session）
+│   ├── authz/                  認可(authZ): 所有者認可(BOLA防止)を集約（RequireDeviceOwner / RequireAlertRuleOwner）
+│   ├── handler/                HTTP ハンドラ（sensor_api / auth / dashboard / device / readings / alert_*）
 │   ├── repository/             sqlc 生成コード（全37クエリ）
 │   ├── docs/                   OpenAPI YAML + Scalar（go:embed）
-│   ├── service/                アラート判定等のサービス置き場（実装予定）
-│   ├── middleware/             SessionLoad / MethodOverride 置き場（実装予定）
-│   └── view/                   ★templ 配置先（layout / component / page の3層）。public/css/style.css は配信用CSS（make sync-css の生成物）
+│   ├── service/                アラート判定サービス（alert_evaluator.go）
+│   ├── chart/                  サーバサイド SVG 線グラフ生成（stdlib のみ・純粋層）
+│   ├── timefmt/                相対時刻の日本語整形（純粋層）
+│   ├── middleware/             SessionLoad / MethodOverride / CSRF / RequireAuth
+│   └── view/                   ★templ（layout / component / page の3層・28ファイル）+ static.go。public/css/style.css は配信用CSS（make sync-css の生成物）
 ├── db/{migrations,queries}/    goose / sqlc 入力
 ├── mocks/html/                 全9画面の静的HTMLモック + style.css（CSS自前・Lism非依存）
 ├── .kiro/steering/             本ステアリング（product.md / tech.md / structure.md）
@@ -95,4 +98,4 @@ go_iot/
 - **外部キー制約は張らない**（参照整合性はアプリ層 JOIN で担保）。
 - **論理削除**（`deleted_at`）採用。sqlc クエリは常に `WHERE deleted_at IS NULL`。
 - マスターデータは DB テーブルではなく **Go 定数 + VARCHAR + CHECK 制約**。
-- 認証: ESP8266 = 自作 Bearer（SHA-256）/ ブラウザ = Session（scs、実装予定）。
+- 認証: ESP8266 = 自作 Bearer（SHA-256）/ ブラウザ = Session（scs + pgxstore）+ CSRF（gorilla/csrf）。いずれも実装済み。
