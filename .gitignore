@@ -1,6 +1,7 @@
 # ビルド成果物
 /tmp/
 /bin/
+/dist/
 *.exe
 *.out
 
