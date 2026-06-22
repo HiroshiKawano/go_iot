@@ -5,7 +5,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"net/http"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/infra/token"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 const (
@@ -60,7 +60,7 @@ func DeviceAuth(cfg DeviceAuthConfig) gin.HandlerFunc {
 		hash := token.Hash(plaintext)
 		tok, err := cfg.Repo.GetDeviceTokenByHash(c.Request.Context(), hash)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid or expired token"})
 				return
 			}

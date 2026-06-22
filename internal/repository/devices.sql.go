@@ -11,7 +11,7 @@ import (
 
 const createDevice = `-- name: CreateDevice :one
 INSERT INTO devices (user_id, name, mac_address, location, is_active)
-VALUES (?, ?, ?, ?, ?)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at
 `
 
@@ -24,7 +24,7 @@ type CreateDeviceParams struct {
 }
 
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error) {
-	row := q.db.QueryRowContext(ctx, createDevice,
+	row := q.db.QueryRow(ctx, createDevice,
 		arg.UserID,
 		arg.Name,
 		arg.MacAddress,
@@ -49,11 +49,11 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 
 const getDevice = `-- name: GetDevice :one
 SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at FROM devices
- WHERE id = ? AND deleted_at IS NULL
+ WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetDevice(ctx context.Context, id int64) (Device, error) {
-	row := q.db.QueryRowContext(ctx, getDevice, id)
+	row := q.db.QueryRow(ctx, getDevice, id)
 	var i Device
 	err := row.Scan(
 		&i.ID,
@@ -72,11 +72,11 @@ func (q *Queries) GetDevice(ctx context.Context, id int64) (Device, error) {
 
 const getDeviceByMacAddress = `-- name: GetDeviceByMacAddress :one
 SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at FROM devices
- WHERE mac_address = ? AND deleted_at IS NULL
+ WHERE mac_address = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetDeviceByMacAddress(ctx context.Context, macAddress string) (Device, error) {
-	row := q.db.QueryRowContext(ctx, getDeviceByMacAddress, macAddress)
+	row := q.db.QueryRow(ctx, getDeviceByMacAddress, macAddress)
 	var i Device
 	err := row.Scan(
 		&i.ID,
@@ -95,12 +95,12 @@ func (q *Queries) GetDeviceByMacAddress(ctx context.Context, macAddress string) 
 
 const listDevicesByUser = `-- name: ListDevicesByUser :many
 SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at FROM devices
- WHERE user_id = ? AND deleted_at IS NULL
+ WHERE user_id = $1 AND deleted_at IS NULL
  ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDevicesByUser(ctx context.Context, userID int64) ([]Device, error) {
-	rows, err := q.db.QueryContext(ctx, listDevicesByUser, userID)
+	rows, err := q.db.Query(ctx, listDevicesByUser, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -124,9 +124,6 @@ func (q *Queries) ListDevicesByUser(ctx context.Context, userID int64) ([]Device
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -135,42 +132,42 @@ func (q *Queries) ListDevicesByUser(ctx context.Context, userID int64) ([]Device
 
 const softDeleteDevice = `-- name: SoftDeleteDevice :exec
 UPDATE devices
-   SET deleted_at = datetime('now'),
-       updated_at = datetime('now')
- WHERE id = ? AND deleted_at IS NULL
+   SET deleted_at = NOW(),
+       updated_at = NOW()
+ WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SoftDeleteDevice(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, softDeleteDevice, id)
+	_, err := q.db.Exec(ctx, softDeleteDevice, id)
 	return err
 }
 
 const updateDevice = `-- name: UpdateDevice :one
 UPDATE devices
-   SET name        = ?,
-       mac_address = ?,
-       location    = ?,
-       is_active   = ?,
-       updated_at  = datetime('now')
- WHERE id = ? AND deleted_at IS NULL
+   SET name        = $2,
+       mac_address = $3,
+       location    = $4,
+       is_active   = $5,
+       updated_at  = NOW()
+ WHERE id = $1 AND deleted_at IS NULL
 RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at
 `
 
 type UpdateDeviceParams struct {
+	ID         int64   `json:"id"`
 	Name       string  `json:"name"`
 	MacAddress string  `json:"mac_address"`
 	Location   *string `json:"location"`
 	IsActive   bool    `json:"is_active"`
-	ID         int64   `json:"id"`
 }
 
 func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error) {
-	row := q.db.QueryRowContext(ctx, updateDevice,
+	row := q.db.QueryRow(ctx, updateDevice,
+		arg.ID,
 		arg.Name,
 		arg.MacAddress,
 		arg.Location,
 		arg.IsActive,
-		arg.ID,
 	)
 	var i Device
 	err := row.Scan(
@@ -190,12 +187,12 @@ func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Dev
 
 const updateDeviceLastCommunicated = `-- name: UpdateDeviceLastCommunicated :exec
 UPDATE devices
-   SET last_communicated_at = datetime('now'),
-       updated_at           = datetime('now')
- WHERE id = ? AND deleted_at IS NULL
+   SET last_communicated_at = NOW(),
+       updated_at           = NOW()
+ WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) UpdateDeviceLastCommunicated(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, updateDeviceLastCommunicated, id)
+	_, err := q.db.Exec(ctx, updateDeviceLastCommunicated, id)
 	return err
 }

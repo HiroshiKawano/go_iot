@@ -7,9 +7,7 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,6 +15,7 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/authz"
 	"github.com/HiroshiKawano/go_iot/internal/chart"
+	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/timefmt"
 	"github.com/HiroshiKawano/go_iot/internal/view"
@@ -25,6 +24,8 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/view/page"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // defaultPeriod は ?period 未指定時の既定期間。
@@ -36,8 +37,8 @@ const deviceShowTitleSuffix = " - 農業IoTシステム"
 // jst は表示用の日本標準時 (UTC+9)。timestamptz は時点 (instant) のため、農場運営者の
 // ローカル時刻で見せるには表示直前に JST へ変換する (R2.4/R5.3 の日本向け絶対表記)。
 // DST が無いため FixedZone で十分 (tzdata 非依存・time.LoadLocation のエラーを避ける)。
-// 注意: 日次集計の日付バケットは集計クエリ側で date(recorded_at,'+9 hours') により JST 補正済みの
-// 文字列となるため本変換の対象外 (消費側で二重補正しない。monthDayLabel 参照)。
+// 注意: 日次集計の日付バケット (DATE(recorded_at)) は DB セッション TZ 依存で本変換の対象外
+// (design Open Questions「接続 TZ=Asia/Tokyo を前提」= Out of Boundary。monthDayLabel 参照)。
 var jst = time.FixedZone("JST", 9*60*60)
 
 // chartQuery は期間切替フラグメント (Chart) の period クエリバインド。
@@ -199,7 +200,7 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 	if period == defaultPeriod {
 		rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
 			DeviceID:   deviceID,
-			RecordedAt: periodSince(period, now),
+			RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
 		})
 		if err != nil {
 			return component.DeviceChartAreaView{}, err
@@ -208,16 +209,12 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 	} else {
 		rows, err := h.Repo.ListDailySensorAggregates(ctx, repository.ListDailySensorAggregatesParams{
 			DeviceID:   deviceID,
-			RecordedAt: periodSince(period, now),
+			RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
 		})
 		if err != nil {
 			return component.DeviceChartAreaView{}, err
 		}
-		var serr error
-		tempSeries, humSeries, serr = dailySeries(rows)
-		if serr != nil {
-			return component.DeviceChartAreaView{}, serr
-		}
+		tempSeries, humSeries = dailySeries(rows)
 	}
 
 	return component.DeviceChartAreaView{
@@ -235,31 +232,25 @@ func rawSeries(rows []repository.SensorReading) (temp, hum []chart.Series) {
 	humPts := make([]chart.Point, 0, len(rows))
 	for _, r := range rows {
 		label := hourMinuteLabel(r.RecordedAt)
-		tempPts = append(tempPts, chart.Point{Label: label, Y: r.Temperature})
-		humPts = append(humPts, chart.Point{Label: label, Y: r.Humidity})
+		tempPts = append(tempPts, chart.Point{Label: label, Y: pgconv.NumericToFloat(r.Temperature)})
+		humPts = append(humPts, chart.Point{Label: label, Y: pgconv.NumericToFloat(r.Humidity)})
 	}
 	return []chart.Series{{Points: tempPts}}, []chart.Series{{Points: humPts}}
 }
 
 // dailySeries は日次集計行を温度/湿度それぞれ「最高(実線)・最低(破線)」の2系列へ写像する。
-// X ラベルは日付の "MM-DD"。max/min は aggregateToFloat で float64 化する。
-// 集計値が想定外の型 (silent 平坦化の温床) のときは 0 へ落とさず error を返す (R5.3)。
-func dailySeries(rows []repository.ListDailySensorAggregatesRow) (temp, hum []chart.Series, err error) {
+// X ラベルは日付の "MM-DD"。max/min は sqlc が interface{} 型のため aggregateToFloat で安全変換する。
+func dailySeries(rows []repository.ListDailySensorAggregatesRow) (temp, hum []chart.Series) {
 	tMax := make([]chart.Point, 0, len(rows))
 	tMin := make([]chart.Point, 0, len(rows))
 	hMax := make([]chart.Point, 0, len(rows))
 	hMin := make([]chart.Point, 0, len(rows))
 	for _, r := range rows {
 		label := monthDayLabel(r.ReadingDate)
-		// 4 列とも同じ理由で失敗するため、最初の想定外型でただちに中断する。
-		vals, verr := aggregateFloats(r.MaxTemperature, r.MinTemperature, r.MaxHumidity, r.MinHumidity)
-		if verr != nil {
-			return nil, nil, verr
-		}
-		tMax = append(tMax, chart.Point{Label: label, Y: vals[0]})
-		tMin = append(tMin, chart.Point{Label: label, Y: vals[1]})
-		hMax = append(hMax, chart.Point{Label: label, Y: vals[2]})
-		hMin = append(hMin, chart.Point{Label: label, Y: vals[3]})
+		tMax = append(tMax, chart.Point{Label: label, Y: aggregateToFloat(r.MaxTemperature)})
+		tMin = append(tMin, chart.Point{Label: label, Y: aggregateToFloat(r.MinTemperature)})
+		hMax = append(hMax, chart.Point{Label: label, Y: aggregateToFloat(r.MaxHumidity)})
+		hMin = append(hMin, chart.Point{Label: label, Y: aggregateToFloat(r.MinHumidity)})
 	}
 	temp = []chart.Series{
 		{Name: "最高", Points: tMax},
@@ -269,20 +260,7 @@ func dailySeries(rows []repository.ListDailySensorAggregatesRow) (temp, hum []ch
 		{Name: "最高", Points: hMax},
 		{Name: "最低", Dashed: true, Points: hMin},
 	}
-	return temp, hum, nil
-}
-
-// aggregateFloats は複数の集計値をまとめて float64 化する (1つでも想定外型なら error)。
-func aggregateFloats(vs ...interface{}) ([]float64, error) {
-	out := make([]float64, 0, len(vs))
-	for _, v := range vs {
-		f, err := aggregateToFloat(v)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, f)
-	}
-	return out, nil
+	return temp, hum
 }
 
 // buildDeviceInfoView はデバイス行を情報パネル View へ写像する。
@@ -303,7 +281,7 @@ func buildLatestReadingsView(deviceID int64, rows []repository.SensorReading) co
 	out := make([]component.ReadingRow, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, component.ReadingRow{
-			RecordedAt: timefmt.DateTimeMinuteJP(r.RecordedAt.In(jst)),
+			RecordedAt: timefmt.DateTimeMinuteJP(pgconv.TimestamptzToTime(r.RecordedAt).In(jst)),
 			Temp:       formatActual(r.Temperature),
 			Humidity:   formatActual(r.Humidity),
 		})
@@ -321,38 +299,40 @@ func deviceLocationOrDefault(d repository.Device) string {
 
 // lastCommAbsText は最終通信を JST 絶対表記で返す。未通信 (未記録) は "未通信" (R2.5)。
 func lastCommAbsText(d repository.Device) string {
-	if d.LastCommunicatedAt == nil {
+	if !d.LastCommunicatedAt.Valid {
 		return "未通信"
 	}
-	return timefmt.DateTimeJP(d.LastCommunicatedAt.In(jst))
+	return timefmt.DateTimeJP(pgconv.TimestamptzToTime(d.LastCommunicatedAt).In(jst))
 }
 
 // hourMinuteLabel は計測時刻 (instant) を JST に変換し 24h グラフの X ラベル "HH:MM" に整形する。
-func hourMinuteLabel(ts time.Time) string {
-	return ts.In(jst).Format("15:04")
+func hourMinuteLabel(ts pgtype.Timestamptz) string {
+	return pgconv.TimestamptzToTime(ts).In(jst).Format("15:04")
 }
 
 // monthDayLabel は集計日を 7d/30d グラフの X ラベル "MM-DD" に整形する。
-// ReadingDate は集計クエリが date(recorded_at,'+9 hours') で JST 補正済みの "YYYY-MM-DD" 文字列
-// (時点ではなく日付値)。ここで再び TZ 変換すると二重補正で日境界がずれるため、
-// 文字列の月日部分 ("MM-DD") をそのまま切り出す (design「消費側で二重補正しない」)。
-func monthDayLabel(d string) string {
-	if len(d) < 10 {
-		return d
+// ReadingDate は DB の DATE(recorded_at) バケット (時点ではなく日付値) であり、その日境界は
+// DB セッション TZ 依存 (design Out of Boundary / Open Question)。ここでは TZ 変換せず日付を
+// そのまま表示する (Date の .In() はかえって境界をずらすため適用しない)。
+func monthDayLabel(d pgtype.Date) string {
+	if !d.Valid {
+		return ""
 	}
-	return d[5:10]
+	return d.Time.Format("01-02")
 }
 
-// aggregateToFloat は日次/区間集計の MAX/MIN/AVG を float64 へ変換する。
-// SQLite 移行後は集計列に明示 CAST(... AS REAL) を付けたため sqlc は float64 を生成し、
-// 本関数へは float64 が渡る。silent 平坦化 (未知型を 0 へ落とす経路) を封じるため、
-// 期待型 (float64) のみ受理し、想定外の型は 0 ではなく明示エラーを返す (R5.3)。
-func aggregateToFloat(v interface{}) (float64, error) {
+// aggregateToFloat は日次集計の MAX/MIN を float64 へ安全変換する。
+// これらは SQL で NUMERIC への明示キャストが無い (MAX(temperature) 等) ため sqlc が any(interface{})
+// として生成する。本番の pgx/v5 は numeric を pgtype.Numeric として渡すのでそれを優先し、
+// float64・nil(NULL 集計)・想定外型は 0 にフォールバックする (防御的)。
+func aggregateToFloat(v interface{}) float64 {
 	switch n := v.(type) {
+	case pgtype.Numeric:
+		return pgconv.NumericToFloat(n)
 	case float64:
-		return n, nil
+		return n
 	default:
-		return 0, fmt.Errorf("集計値が想定外の型: %T", v)
+		return 0
 	}
 }
 
@@ -361,7 +341,7 @@ func aggregateToFloat(v interface{}) (float64, error) {
 // 想定外 (DB エラー等) は 500。
 func renderDeviceReadError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, sql.ErrNoRows), errors.Is(err, authz.ErrNotOwner):
+	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, authz.ErrNotOwner):
 		renderError(c, http.StatusNotFound)
 	default:
 		renderError(c, http.StatusInternalServerError)

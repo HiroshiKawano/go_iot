@@ -1,18 +1,19 @@
 -- +goose Up
 -- +goose StatementBegin
--- MACアドレス形式の検証は SQLite に正規表現 CHECK がないためアプリ層
--- (device.go の isValidMacFormat) へ委譲する。
 CREATE TABLE devices (
-    id                   INTEGER      PRIMARY KEY,
-    user_id              INTEGER      NOT NULL,
+    id                   BIGSERIAL    PRIMARY KEY,
+    user_id              BIGINT       NOT NULL,
     name                 VARCHAR(255) NOT NULL,
     mac_address          VARCHAR(17)  NOT NULL,
     location             VARCHAR(255),
     is_active            BOOLEAN      NOT NULL DEFAULT TRUE,
-    last_communicated_at DATETIME,
-    created_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at           DATETIME
+    last_communicated_at TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at           TIMESTAMPTZ,
+    CONSTRAINT devices_mac_address_format CHECK (
+        mac_address ~ '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+    )
 );
 
 -- MACアドレスは論理削除されていないデバイス間でユニーク
@@ -25,6 +26,10 @@ CREATE INDEX devices_user_id_idx
 
 CREATE INDEX devices_is_active_idx
     ON devices(is_active) WHERE deleted_at IS NULL;
+
+COMMENT ON TABLE devices IS 'ESP8266デバイス管理';
+COMMENT ON COLUMN devices.mac_address IS 'MACアドレス (例: AA:BB:CC:DD:EE:FF)';
+COMMENT ON COLUMN devices.deleted_at IS '論理削除日時 (NULL = 有効)';
 -- +goose StatementEnd
 
 -- +goose Down

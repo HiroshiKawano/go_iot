@@ -1,10 +1,10 @@
 // DBスナップショット生成CLI。
-// SQLite データベースを内省し、テーブル定義 (Markdown) または ER図 (Mermaid) を出力する。
+// 稼働中の PostgreSQL を内省し、テーブル定義 (Markdown) または ER図 (Mermaid) を出力する。
 //
 // 主目的: 実DBに接続しなくても、生成済みファイルを読むだけでスキーマを把握できる
 // ドキュメント資産を作ること (AI エージェント・新規参入者向け)。
 //
-// 前提: `make migrate-up` で SQLite ファイル (DATABASE_URL=file:...) にスキーマが適用済みであること。
+// 前提: `make up` + `make migrate-up` でスキーマが適用済みであること。
 //
 // 使い方:
 //

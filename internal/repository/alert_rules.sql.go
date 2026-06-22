@@ -7,24 +7,26 @@ package repository
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createAlertRule = `-- name: CreateAlertRule :one
 INSERT INTO alert_rules (device_id, metric, operator, threshold, is_enabled)
-VALUES (?, ?, ?, ?, ?)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, device_id, metric, operator, threshold, is_enabled, created_at, updated_at, deleted_at
 `
 
 type CreateAlertRuleParams struct {
-	DeviceID  int64   `json:"device_id"`
-	Metric    string  `json:"metric"`
-	Operator  string  `json:"operator"`
-	Threshold float64 `json:"threshold"`
-	IsEnabled bool    `json:"is_enabled"`
+	DeviceID  int64          `json:"device_id"`
+	Metric    string         `json:"metric"`
+	Operator  string         `json:"operator"`
+	Threshold pgtype.Numeric `json:"threshold"`
+	IsEnabled bool           `json:"is_enabled"`
 }
 
 func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error) {
-	row := q.db.QueryRowContext(ctx, createAlertRule,
+	row := q.db.QueryRow(ctx, createAlertRule,
 		arg.DeviceID,
 		arg.Metric,
 		arg.Operator,
@@ -48,11 +50,11 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 
 const getAlertRule = `-- name: GetAlertRule :one
 SELECT id, device_id, metric, operator, threshold, is_enabled, created_at, updated_at, deleted_at FROM alert_rules
- WHERE id = ? AND deleted_at IS NULL
+ WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetAlertRule(ctx context.Context, id int64) (AlertRule, error) {
-	row := q.db.QueryRowContext(ctx, getAlertRule, id)
+	row := q.db.QueryRow(ctx, getAlertRule, id)
 	var i AlertRule
 	err := row.Scan(
 		&i.ID,
@@ -70,12 +72,12 @@ func (q *Queries) GetAlertRule(ctx context.Context, id int64) (AlertRule, error)
 
 const listAlertRulesByDevice = `-- name: ListAlertRulesByDevice :many
 SELECT id, device_id, metric, operator, threshold, is_enabled, created_at, updated_at, deleted_at FROM alert_rules
- WHERE device_id = ? AND deleted_at IS NULL
+ WHERE device_id = $1 AND deleted_at IS NULL
  ORDER BY created_at ASC
 `
 
 func (q *Queries) ListAlertRulesByDevice(ctx context.Context, deviceID int64) ([]AlertRule, error) {
-	rows, err := q.db.QueryContext(ctx, listAlertRulesByDevice, deviceID)
+	rows, err := q.db.Query(ctx, listAlertRulesByDevice, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,9 +99,6 @@ func (q *Queries) ListAlertRulesByDevice(ctx context.Context, deviceID int64) ([
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -109,13 +108,14 @@ func (q *Queries) ListAlertRulesByDevice(ctx context.Context, deviceID int64) ([
 
 const listEnabledAlertRulesByDevice = `-- name: ListEnabledAlertRulesByDevice :many
 SELECT id, device_id, metric, operator, threshold, is_enabled, created_at, updated_at, deleted_at FROM alert_rules
- WHERE device_id  = ?
+ WHERE device_id  = $1
    AND is_enabled = TRUE
    AND deleted_at IS NULL
 `
 
+// アラート判定ロジック (センサー受信時の同期処理) で使用
 func (q *Queries) ListEnabledAlertRulesByDevice(ctx context.Context, deviceID int64) ([]AlertRule, error) {
-	rows, err := q.db.QueryContext(ctx, listEnabledAlertRulesByDevice, deviceID)
+	rows, err := q.db.Query(ctx, listEnabledAlertRulesByDevice, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +138,6 @@ func (q *Queries) ListEnabledAlertRulesByDevice(ctx context.Context, deviceID in
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -149,26 +146,26 @@ func (q *Queries) ListEnabledAlertRulesByDevice(ctx context.Context, deviceID in
 
 const softDeleteAlertRule = `-- name: SoftDeleteAlertRule :exec
 UPDATE alert_rules
-   SET deleted_at = datetime('now'),
-       updated_at = datetime('now')
- WHERE id = ? AND deleted_at IS NULL
+   SET deleted_at = NOW(),
+       updated_at = NOW()
+ WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SoftDeleteAlertRule(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, softDeleteAlertRule, id)
+	_, err := q.db.Exec(ctx, softDeleteAlertRule, id)
 	return err
 }
 
 const toggleAlertRule = `-- name: ToggleAlertRule :one
 UPDATE alert_rules
    SET is_enabled = NOT is_enabled,
-       updated_at = datetime('now')
- WHERE id = ? AND deleted_at IS NULL
+       updated_at = NOW()
+ WHERE id = $1 AND deleted_at IS NULL
 RETURNING id, device_id, metric, operator, threshold, is_enabled, created_at, updated_at, deleted_at
 `
 
 func (q *Queries) ToggleAlertRule(ctx context.Context, id int64) (AlertRule, error) {
-	row := q.db.QueryRowContext(ctx, toggleAlertRule, id)
+	row := q.db.QueryRow(ctx, toggleAlertRule, id)
 	var i AlertRule
 	err := row.Scan(
 		&i.ID,
@@ -186,30 +183,30 @@ func (q *Queries) ToggleAlertRule(ctx context.Context, id int64) (AlertRule, err
 
 const updateAlertRule = `-- name: UpdateAlertRule :one
 UPDATE alert_rules
-   SET metric     = ?,
-       operator   = ?,
-       threshold  = ?,
-       is_enabled = ?,
-       updated_at = datetime('now')
- WHERE id = ? AND deleted_at IS NULL
+   SET metric     = $2,
+       operator   = $3,
+       threshold  = $4,
+       is_enabled = $5,
+       updated_at = NOW()
+ WHERE id = $1 AND deleted_at IS NULL
 RETURNING id, device_id, metric, operator, threshold, is_enabled, created_at, updated_at, deleted_at
 `
 
 type UpdateAlertRuleParams struct {
-	Metric    string  `json:"metric"`
-	Operator  string  `json:"operator"`
-	Threshold float64 `json:"threshold"`
-	IsEnabled bool    `json:"is_enabled"`
-	ID        int64   `json:"id"`
+	ID        int64          `json:"id"`
+	Metric    string         `json:"metric"`
+	Operator  string         `json:"operator"`
+	Threshold pgtype.Numeric `json:"threshold"`
+	IsEnabled bool           `json:"is_enabled"`
 }
 
 func (q *Queries) UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (AlertRule, error) {
-	row := q.db.QueryRowContext(ctx, updateAlertRule,
+	row := q.db.QueryRow(ctx, updateAlertRule,
+		arg.ID,
 		arg.Metric,
 		arg.Operator,
 		arg.Threshold,
 		arg.IsEnabled,
-		arg.ID,
 	)
 	var i AlertRule
 	err := row.Scan(

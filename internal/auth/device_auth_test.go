@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestMain(m *testing.M) {
@@ -134,7 +134,7 @@ func TestDeviceAuth_有効なトークンは200でuser_idを格納(t *testing.T)
 }
 
 func TestDeviceAuth_不正トークンは401(t *testing.T) {
-	repo := fakeTokenRepo{getErr: sql.ErrNoRows}
+	repo := fakeTokenRepo{getErr: pgx.ErrNoRows}
 	w := getProtected(newRouterRepo(repo), "bad-token")
 
 	if got, want := w.Code, http.StatusUnauthorized; got != want {

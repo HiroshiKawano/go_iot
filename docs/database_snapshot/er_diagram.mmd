@@ -2,75 +2,75 @@ erDiagram
 %% DBスナップショット — ER図 (Mermaid)。make db-snapshot で自動生成。手動編集しない。
 %% 外部キー制約は張らない方針のため、関連は <table>_id 命名からの推論（論理リレーション）。
     alert_histories {
-        INTEGER id PK
-        INTEGER alert_rule_id FK
-        VARCHAR metric
-        VARCHAR operator
-        REAL threshold
-        REAL actual_value
-        BOOLEAN is_notified
-        DATETIME triggered_at
-        DATETIME created_at
-        DATETIME updated_at
-        DATETIME deleted_at
+        bigint id PK
+        bigint alert_rule_id FK
+        varchar metric
+        varchar operator
+        numeric threshold
+        numeric actual_value
+        boolean is_notified
+        timestamptz triggered_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
     }
     alert_rules {
-        INTEGER id PK
-        INTEGER device_id FK
-        VARCHAR metric
-        VARCHAR operator
-        REAL threshold
-        BOOLEAN is_enabled
-        DATETIME created_at
-        DATETIME updated_at
-        DATETIME deleted_at
+        bigint id PK
+        bigint device_id FK
+        varchar metric
+        varchar operator
+        numeric threshold
+        boolean is_enabled
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
     }
     device_tokens {
-        INTEGER id PK
-        INTEGER user_id FK
-        VARCHAR name
-        VARCHAR token_hash
-        json abilities
-        DATETIME last_used_at
-        DATETIME expires_at
-        DATETIME created_at
-        DATETIME updated_at
+        bigint id PK
+        bigint user_id FK
+        varchar name
+        varchar token_hash
+        jsonb abilities
+        timestamptz last_used_at
+        timestamptz expires_at
+        timestamptz created_at
+        timestamptz updated_at
     }
     devices {
-        INTEGER id PK
-        INTEGER user_id FK
-        VARCHAR name
-        VARCHAR mac_address
-        VARCHAR location
-        BOOLEAN is_active
-        DATETIME last_communicated_at
-        DATETIME created_at
-        DATETIME updated_at
-        DATETIME deleted_at
+        bigint id PK
+        bigint user_id FK
+        varchar name
+        varchar mac_address
+        varchar location
+        boolean is_active
+        timestamptz last_communicated_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
     }
     sensor_readings {
-        INTEGER id PK
-        INTEGER device_id FK
-        REAL temperature
-        REAL humidity
-        DATETIME recorded_at
-        DATETIME created_at
-        DATETIME updated_at
-        DATETIME deleted_at
+        bigint id PK
+        bigint device_id FK
+        numeric temperature
+        numeric humidity
+        timestamptz recorded_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
     }
     sessions {
-        TEXT token PK
-        BLOB data
-        REAL expiry
+        text token PK
+        bytea data
+        timestamptz expiry
     }
     users {
-        INTEGER id PK
-        VARCHAR name
-        VARCHAR email
-        VARCHAR password_hash
-        DATETIME email_verified_at
-        DATETIME created_at
-        DATETIME updated_at
+        bigint id PK
+        varchar name
+        varchar email
+        varchar password_hash
+        timestamptz email_verified_at
+        timestamptz created_at
+        timestamptz updated_at
     }
     alert_rules ||--o{ alert_histories : alert_rule_id
     devices ||--o{ alert_rules : device_id

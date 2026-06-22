@@ -5,7 +5,7 @@
 #       テーブル・カラム・制約・リレーションを把握できるようにする
 #       (AI エージェント・新規参入者向けのドキュメント資産)。
 #
-# 前提: SQLite ファイル (DATABASE_URL=file:...) にマイグレーション適用済み (make migrate-up)。
+# 前提: PostgreSQL が起動済み (make up) かつマイグレーション適用済み (make migrate-up)。
 #       スキーマを変更したら本スクリプトを再実行してスナップショットを更新すること。
 set -euo pipefail
 

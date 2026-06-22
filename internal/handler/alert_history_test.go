@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 )
 
@@ -82,16 +83,16 @@ func TestBuildAlertHistoryRows(t *testing.T) {
 	rows := []repository.ListAlertHistoriesPaginatedRow{
 		{
 			Metric: "temperature", Operator: ">",
-			Threshold: 35.00, ActualValue: 38.50,
+			Threshold: pgconv.Numeric2(35.00), ActualValue: pgconv.Numeric2(38.50),
 			IsNotified:  true,
-			TriggeredAt: time.Date(2026, 4, 20, 5, 30, 0, 0, time.UTC), // UTC5:30→JST14:30
+			TriggeredAt: pgconv.Timestamptz(time.Date(2026, 4, 20, 5, 30, 0, 0, time.UTC)), // UTC5:30→JST14:30
 			DeviceName:  "ハウスA温湿度計",
 		},
 		{
 			Metric: "humidity", Operator: "<",
-			Threshold: 30.00, ActualValue: 25.00,
+			Threshold: pgconv.Numeric2(30.00), ActualValue: pgconv.Numeric2(25.00),
 			IsNotified:  false,
-			TriggeredAt: time.Date(2026, 4, 20, 4, 15, 0, 0, time.UTC), // UTC4:15→JST13:15
+			TriggeredAt: pgconv.Timestamptz(time.Date(2026, 4, 20, 4, 15, 0, 0, time.UTC)), // UTC4:15→JST13:15
 			DeviceName:  "ハウスB温湿度計",
 		},
 	}

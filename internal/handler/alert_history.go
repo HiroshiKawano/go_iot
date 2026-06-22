@@ -16,6 +16,7 @@ import (
 
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/domain"
+	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/timefmt"
 	"github.com/HiroshiKawano/go_iot/internal/view"
@@ -69,7 +70,7 @@ func buildAlertHistoryRows(rows []repository.ListAlertHistoriesPaginatedRow) []c
 		m := domain.Metric(r.Metric)
 		unit := m.Unit()
 		out = append(out, component.AlertHistoryRow{
-			TriggeredAt: timefmt.DateTimeMinuteJP(r.TriggeredAt.In(jst)),
+			TriggeredAt: timefmt.DateTimeMinuteJP(pgconv.TimestamptzToTime(r.TriggeredAt).In(jst)),
 			DeviceName:  r.DeviceName,
 			MetricLabel: m.Label(),
 			Condition:   r.Operator + " " + formatActual(r.Threshold) + unit,
@@ -239,8 +240,11 @@ func (h *AlertHistoryHandler) Index(c *gin.Context) {
 // 件数・一覧は同一 (deviceID, fromTS, toTS) 境界を共有する (ページ非依存)。
 // テナント分離のため uid を必ず UserID へ渡す。1ページに収まる/0件はページャを非表示にする (R3.1/R6.2)。
 func (h *AlertHistoryHandler) fetchResults(ctx context.Context, uid int64, deviceID *int64, deviceIDStr, from, to string, fromTS, toTS time.Time, pageQuery string) (component.AlertHistoryListView, error) {
+	fromParam := pgconv.Timestamptz(fromTS)
+	toParam := pgconv.Timestamptz(toTS)
+
 	total, err := h.Repo.CountAlertHistoriesInRange(ctx, repository.CountAlertHistoriesInRangeParams{
-		UserID: uid, DeviceID: deviceID, FromAt: fromTS, ToAt: toTS,
+		UserID: uid, DeviceID: deviceID, FromAt: fromParam, ToAt: toParam,
 	})
 	if err != nil {
 		return component.AlertHistoryListView{}, err
@@ -251,10 +255,10 @@ func (h *AlertHistoryHandler) fetchResults(ctx context.Context, uid int64, devic
 	if pageNo > totalPages {
 		pageNo = totalPages // 過大ページは最終ページへクランプ
 	}
-	offset := int64((pageNo - 1) * pageSize)
+	offset := int32((pageNo - 1) * pageSize)
 
 	rows, err := h.Repo.ListAlertHistoriesPaginated(ctx, repository.ListAlertHistoriesPaginatedParams{
-		UserID: uid, DeviceID: deviceID, FromAt: fromTS, ToAt: toTS,
+		UserID: uid, DeviceID: deviceID, FromAt: fromParam, ToAt: toParam,
 		OffsetN: offset, LimitN: pageSize,
 	})
 	if err != nil {

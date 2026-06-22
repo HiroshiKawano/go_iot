@@ -2,22 +2,20 @@ package dbsnapshot
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
-// Querier は内省に必要な最小の DB アクセス機能 (*sql.DB が満たす)。
+// Querier は内省に必要な最小の DB アクセス機能 (pgxpool.Pool が満たす)。
 // テスト時にこの interface を差し替えてモックできる。
 type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// Introspect は SQLite の全ユーザーテーブル (goose 管理表・sqlite 内部表を除く) を
-// sqlite_master + PRAGMA で内省して Schema を構築する。テーブル名昇順で安定した出力になる。
-//
-// PostgreSQL の pg_catalog からの最小移植版 (R9.4)。SQLite にはテーブル/カラムコメントが
-// 無いため Comment は常に空 (機能縮退・許容)。
+// Introspect は public スキーマの全テーブル (goose 管理表を除く) を内省して
+// Schema を構築する。テーブル名昇順で安定した出力になる。
 func Introspect(ctx context.Context, db Querier) (*Schema, error) {
 	tables, err := listTables(ctx, db)
 	if err != nil {
@@ -31,6 +29,10 @@ func Introspect(ctx context.Context, db Querier) (*Schema, error) {
 			return nil, fmt.Errorf("columns(%s): %w", t.Name, err)
 		}
 		t.Columns = cols
+
+		if err := markPrimaryKeys(ctx, db, &t); err != nil {
+			return nil, fmt.Errorf("pk(%s): %w", t.Name, err)
+		}
 
 		t.Indexes, err = listIndexes(ctx, db, t.Name)
 		if err != nil {
@@ -47,18 +49,17 @@ func Introspect(ctx context.Context, db Querier) (*Schema, error) {
 	return schema, nil
 }
 
-// listTables は sqlite_master からユーザーテーブルを昇順で取得する。
-// goose 管理表と sqlite 内部表 (sqlite_*) は除外する。
 func listTables(ctx context.Context, db Querier) ([]Table, error) {
 	const q = `
-		SELECT name
-		FROM sqlite_master
-		WHERE type = 'table'
-		  AND name <> 'goose_db_version'
-		  AND name NOT LIKE 'sqlite_%'
-		ORDER BY name`
+		SELECT c.relname, COALESCE(obj_description(c.oid), '')
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = 'public'
+		  AND c.relkind = 'r'
+		  AND c.relname <> 'goose_db_version'
+		ORDER BY c.relname`
 
-	rows, err := db.QueryContext(ctx, q)
+	rows, err := db.Query(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -67,24 +68,30 @@ func listTables(ctx context.Context, db Querier) ([]Table, error) {
 	var tables []Table
 	for rows.Next() {
 		var t Table
-		if err := rows.Scan(&t.Name); err != nil {
+		if err := rows.Scan(&t.Name, &t.Comment); err != nil {
 			return nil, err
 		}
-		// SQLite はテーブルコメントを持たない (Comment は空のまま)。
 		tables = append(tables, t)
 	}
 	return tables, rows.Err()
 }
 
-// listColumns は PRAGMA table_info をテーブル値関数 (pragma_table_info) 経由で取得する。
-// PK は同 PRAGMA の pk 列から判定し、PostgreSQL 版の markPrimaryKeys を兼ねる。
 func listColumns(ctx context.Context, db Querier, table string) ([]Column, error) {
 	const q = `
-		SELECT name, type, "notnull", pk, IFNULL(dflt_value, '')
-		FROM pragma_table_info(?)
-		ORDER BY cid`
+		SELECT a.attname,
+		       format_type(a.atttypid, a.atttypmod),
+		       a.attnotnull,
+		       COALESCE(pg_get_expr(ad.adbin, ad.adrelid), ''),
+		       COALESCE(col_description(a.attrelid, a.attnum), '')
+		FROM pg_attribute a
+		JOIN pg_class c ON c.oid = a.attrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
+		WHERE n.nspname = 'public' AND c.relname = $1
+		  AND a.attnum > 0 AND NOT a.attisdropped
+		ORDER BY a.attnum`
 
-	rows, err := db.QueryContext(ctx, q, table)
+	rows, err := db.Query(ctx, q, table)
 	if err != nil {
 		return nil, err
 	}
@@ -92,31 +99,60 @@ func listColumns(ctx context.Context, db Querier, table string) ([]Column, error
 
 	var cols []Column
 	for rows.Next() {
-		var (
-			c              Column
-			notNull, pkPos int
-		)
-		if err := rows.Scan(&c.Name, &c.Type, &notNull, &pkPos, &c.Default); err != nil {
+		var c Column
+		var notNull bool
+		if err := rows.Scan(&c.Name, &c.Type, &notNull, &c.Default, &c.Comment); err != nil {
 			return nil, err
 		}
-		c.IsPK = pkPos > 0
-		// notnull=0 でも PK 構成列は NULL 不可 (rowid PK 含む)。
-		c.Nullable = notNull == 0 && !c.IsPK
+		c.Nullable = !notNull
 		cols = append(cols, c)
 	}
 	return cols, rows.Err()
 }
 
-// listIndexes は sqlite_master から明示的に作成された索引 (CREATE [UNIQUE] INDEX) を取得する。
-// UNIQUE/PK 制約由来の自動索引 (sqlite_autoindex_*) は sql が NULL のため自然に除外される。
+func markPrimaryKeys(ctx context.Context, db Querier, t *Table) error {
+	const q = `
+		SELECT a.attname
+		FROM pg_index i
+		JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+		JOIN pg_class c ON c.oid = i.indrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE i.indisprimary AND n.nspname = 'public' AND c.relname = $1`
+
+	rows, err := db.Query(ctx, q, t.Name)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	pk := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		pk[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for i := range t.Columns {
+		if pk[t.Columns[i].Name] {
+			t.Columns[i].IsPK = true
+		}
+	}
+	return nil
+}
+
 func listIndexes(ctx context.Context, db Querier, table string) ([]Index, error) {
 	const q = `
-		SELECT name, sql
-		FROM sqlite_master
-		WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL
-		ORDER BY name`
+		SELECT indexname, indexdef
+		FROM pg_indexes
+		WHERE schemaname = 'public' AND tablename = $1
+		ORDER BY indexname`
 
-	rows, err := db.QueryContext(ctx, q, table)
+	rows, err := db.Query(ctx, q, table)
 	if err != nil {
 		return nil, err
 	}
@@ -128,118 +164,38 @@ func listIndexes(ctx context.Context, db Querier, table string) ([]Index, error)
 		if err := rows.Scan(&idx.Name, &idx.Def); err != nil {
 			return nil, err
 		}
-		idx.IsUnique = strings.Contains(strings.ToUpper(idx.Def), "UNIQUE")
+		// 主キー索引 (<table>_pkey) は列の PK マーカーで表現済みのため除外。
+		if strings.HasSuffix(idx.Name, "_pkey") {
+			continue
+		}
+		idx.IsUnique = strings.Contains(idx.Def, "UNIQUE INDEX")
 		idxs = append(idxs, idx)
 	}
 	return idxs, rows.Err()
 }
 
-// listChecks はテーブルの CREATE 文 (sqlite_master.sql) から CHECK 制約を抽出する。
-// SQLite には CHECK 専用のカタログ/PRAGMA が無いため DDL テキストをパースする。
-// enum 的な許容値 (metric/operator の IN リスト) を保全することが目的。
 func listChecks(ctx context.Context, db Querier, table string) ([]Check, error) {
-	const q = `SELECT IFNULL(sql, '') FROM sqlite_master WHERE type = 'table' AND name = ?`
+	const q = `
+		SELECT con.conname, pg_get_constraintdef(con.oid)
+		FROM pg_constraint con
+		JOIN pg_class c ON c.oid = con.conrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE con.contype = 'c' AND n.nspname = 'public' AND c.relname = $1
+		ORDER BY con.conname`
 
-	rows, err := db.QueryContext(ctx, q, table)
+	rows, err := db.Query(ctx, q, table)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var createSQL string
-	if rows.Next() {
-		if err := rows.Scan(&createSQL); err != nil {
+	var checks []Check
+	for rows.Next() {
+		var ck Check
+		if err := rows.Scan(&ck.Name, &ck.Expr); err != nil {
 			return nil, err
 		}
+		checks = append(checks, ck)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return parseCheckConstraints(createSQL), nil
-}
-
-// parseCheckConstraints は CREATE TABLE 文から `CONSTRAINT <name> CHECK (<expr>)` を抽出する。
-// 本プロジェクトの CHECK は全て名前付き制約として宣言されている。UNIQUE/PRIMARY KEY 等の
-// 別種 CONSTRAINT はスキップする。文字列リテラル内の括弧は深さ計算から除外する。
-//
-// 前提と限界 (本プロジェクトの DDL では成立): 制約名は引用なし識別子であること
-// (`CONSTRAINT "spaced name"` のような引用識別子は名前境界の判定が崩れ脱落しうる)、
-// および文字列リテラル/コメント内に `CONSTRAINT ... CHECK` キーワード列が現れないこと
-// (トークナイザではなくキーワード探索のため)。完全な SQL パースは過剰なため採用しない。
-func parseCheckConstraints(createSQL string) []Check {
-	var checks []Check
-	s := createSQL
-	upper := strings.ToUpper(s) // ASCII DDL 前提 (バイト長は ToUpper で不変)
-
-	for {
-		rel := strings.Index(upper, "CONSTRAINT")
-		if rel < 0 {
-			break
-		}
-		// "CONSTRAINT" の次のトークン (制約名) を読む。
-		after := s[rel+len("CONSTRAINT"):]
-		trimmed := strings.TrimLeft(after, " \t\r\n")
-		lead := len(after) - len(trimmed)
-		nameEnd := strings.IndexAny(trimmed, " \t\r\n(")
-		if nameEnd < 0 {
-			break
-		}
-		name := trimmed[:nameEnd]
-		rest := strings.TrimLeft(trimmed[nameEnd:], " \t\r\n")
-
-		if !strings.HasPrefix(strings.ToUpper(rest), "CHECK") {
-			// CHECK 以外の制約 (UNIQUE/PRIMARY KEY/FOREIGN KEY 等) は対象外。次の CONSTRAINT へ。
-			advance := rel + len("CONSTRAINT") + lead + nameEnd
-			s = s[advance:]
-			upper = upper[advance:]
-			continue
-		}
-
-		exprSrc := strings.TrimLeft(rest[len("CHECK"):], " \t\r\n")
-		expr, consumed, ok := extractBalancedParens(exprSrc)
-		if !ok {
-			advance := rel + len("CONSTRAINT") + lead + nameEnd
-			s = s[advance:]
-			upper = upper[advance:]
-			continue
-		}
-		checks = append(checks, Check{Name: name, Expr: "CHECK (" + strings.TrimSpace(expr) + ")"})
-
-		// 抽出済み CHECK 式の末尾以降へ前進する。
-		consumedTotal := len(s) - len(exprSrc) + consumed
-		s = s[consumedTotal:]
-		upper = upper[consumedTotal:]
-	}
-	return checks
-}
-
-// extractBalancedParens は先頭が '(' の文字列から対応する ')' までの中身 (外側括弧を除く) と
-// 消費バイト数を返す。単一引用符の文字列リテラル内の括弧は深さ計算から除外する。
-func extractBalancedParens(s string) (inner string, consumed int, ok bool) {
-	if len(s) == 0 || s[0] != '(' {
-		return "", 0, false
-	}
-	depth := 0
-	inStr := false
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if inStr {
-			if ch == '\'' {
-				inStr = false
-			}
-			continue
-		}
-		switch ch {
-		case '\'':
-			inStr = true
-		case '(':
-			depth++
-		case ')':
-			depth--
-			if depth == 0 {
-				return s[1:i], i + 1, true
-			}
-		}
-	}
-	return "", 0, false
+	return checks, rows.Err()
 }

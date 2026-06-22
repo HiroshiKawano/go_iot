@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/HiroshiKawano/go_iot/internal/auth"
+	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/HiroshiKawano/go_iot/internal/view/component"
 )
@@ -25,7 +27,7 @@ func showDeviceRepo() *fakeDeviceRepo {
 			MacAddress: "AA:BB:CC:DD:EE:01", Location: strPtr("ビニールハウスA"),
 			IsActive: true,
 			// 05:30 UTC = 14:30 JST。表示は JST 変換されるため期待値は 14:30:00 になる。
-			LastCommunicatedAt: timePtr(time.Date(2026, 4, 20, 5, 30, 0, 0, time.UTC)),
+			LastCommunicatedAt: pgconv.Timestamptz(time.Date(2026, 4, 20, 5, 30, 0, 0, time.UTC)),
 		},
 	}
 	return repo
@@ -35,22 +37,21 @@ func showDeviceRepo() *fakeDeviceRepo {
 func sensorRow(deviceID int64, t time.Time, temp, hum float64) repository.SensorReading {
 	return repository.SensorReading{
 		DeviceID:    deviceID,
-		RecordedAt:  t,
-		Temperature: temp,
-		Humidity:    hum,
+		RecordedAt:  pgconv.Timestamptz(t),
+		Temperature: pgconv.Numeric2(temp),
+		Humidity:    pgconv.Numeric2(hum),
 	}
 }
 
-// dailyAggRow は日次集計1行を作る。SQLite 移行後は集計列が CAST(... AS REAL) で float64、
-// ReadingDate は date(recorded_at,'+9 hours') の JST 補正済み "YYYY-MM-DD" 文字列として生成される。
-// テストでは date の暦日をそのまま日付文字列に整形して渡す (消費側は二重補正しない)。
+// dailyAggRow は日次集計1行を作る。max/min は sqlc が interface{} 型で生成するため
+// 本番 pgx と同じ pgtype.Numeric を入れる (ハンドラ側の型アサーションを通す)。
 func dailyAggRow(date time.Time, tMax, tMin, hMax, hMin float64) repository.ListDailySensorAggregatesRow {
 	return repository.ListDailySensorAggregatesRow{
-		ReadingDate:    date.Format("2006-01-02"),
-		MaxTemperature: tMax,
-		MinTemperature: tMin,
-		MaxHumidity:    hMax,
-		MinHumidity:    hMin,
+		ReadingDate:    pgtype.Date{Time: date, Valid: true},
+		MaxTemperature: pgconv.Numeric2(tMax),
+		MinTemperature: pgconv.Numeric2(tMin),
+		MaxHumidity:    pgconv.Numeric2(hMax),
+		MinHumidity:    pgconv.Numeric2(hMin),
 		SampleCount:    10,
 	}
 }
@@ -171,7 +172,7 @@ func TestShow_最終通信と計測日時はJSTに変換して表示_日跨ぎ(t
 	repo.devices[1] = repository.Device{
 		ID: 1, UserID: 7, Name: "ハウスA温湿度計", MacAddress: "AA:BB:CC:DD:EE:01",
 		Location: strPtr("ビニールハウスA"), IsActive: true,
-		LastCommunicatedAt: timePtr(time.Date(2026, 4, 20, 20, 0, 0, 0, time.UTC)),
+		LastCommunicatedAt: pgconv.Timestamptz(time.Date(2026, 4, 20, 20, 0, 0, 0, time.UTC)),
 	}
 	repo.latestReadings = []repository.SensorReading{
 		sensorRow(1, time.Date(2026, 4, 20, 20, 0, 0, 0, time.UTC), 28.50, 65.30),
@@ -559,55 +560,23 @@ func TestDelete_論理削除のDBエラーは500(t *testing.T) {
 	}
 }
 
-// --- 日次/区間集計 max/min の明示型化 (silent 平坦化封じ・R5.3) ---
+// --- 日次集計 max/min の interface{} 安全変換 ---
 
-// TestAggregateToFloat_期待型float64は受理 は、SQLite 移行後に集計列が CAST(... AS REAL) で
-// float64 生成されることを前提に、float64 をそのまま受理して error を返さないことを検証する。
-func TestAggregateToFloat_期待型float64は受理(t *testing.T) {
+func TestAggregateToFloat_型ごとの安全変換(t *testing.T) {
 	tests := []struct {
 		name string
-		in   float64
+		in   interface{}
 		want float64
 	}{
-		{"正の値", 28.50, 28.50},
-		{"別の正値", 30.0, 30.0},
-		{"ゼロ値", 0, 0},
-		{"負の値", -5.5, -5.5},
+		{"pgtype.Numeric (本番 pgx の uncast numeric)", pgconv.Numeric2(28.50), 28.50},
+		{"float64 (防御的)", float64(30.0), 30.0},
+		{"nil (NULL 集計)", nil, 0},
+		{"想定外の型", "30.0", 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := aggregateToFloat(tt.in)
-			if err != nil {
-				t.Fatalf("aggregateToFloat(%v) で予期しないエラー: %v", tt.in, err)
-			}
-			if got != tt.want {
+			if got := aggregateToFloat(tt.in); got != tt.want {
 				t.Errorf("aggregateToFloat(%v) = %v, want %v", tt.in, got, tt.want)
-			}
-		})
-	}
-}
-
-// TestAggregateToFloat_未知型は0へ平坦化せず明示エラー は、想定外の型を渡したとき
-// silent に 0 へフォールバックせず error を返すことを検証する (R5.3 の最重要回帰防止)。
-// 旧実装は nil/文字列を 0 に落としてグラフを黙って平坦化していた。
-func TestAggregateToFloat_未知型は0へ平坦化せず明示エラー(t *testing.T) {
-	unknowns := []struct {
-		name string
-		in   interface{}
-	}{
-		{"nil (NULL 集計)", nil},
-		{"文字列", "30.0"},
-		{"整数", int64(30)},
-		{"bool", true},
-	}
-	for _, tt := range unknowns {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := aggregateToFloat(tt.in)
-			if err == nil {
-				t.Fatalf("aggregateToFloat(%v): error を期待したが nil (silent 平坦化してはならない)", tt.in)
-			}
-			if got != 0 {
-				t.Errorf("エラー時の戻り値 = %v, want 0", got)
 			}
 		})
 	}

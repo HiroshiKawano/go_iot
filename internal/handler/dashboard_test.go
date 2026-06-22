@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // authedDashboardRepo はログイン可能なユーザー (id=7) を持つ fakeAuthRepo を返す。
@@ -36,16 +38,14 @@ func getDashboard(t *testing.T, repo *fakeAuthRepo) *httptest.ResponseRecorder {
 func validReading(deviceID int64) repository.SensorReading {
 	return repository.SensorReading{
 		DeviceID:    deviceID,
-		Temperature: 28.50,
-		Humidity:    65.30,
+		Temperature: pgconv.Numeric2(28.50),
+		Humidity:    pgconv.Numeric2(65.30),
 	}
 }
 
 // validComm は通信実績ありの最終通信時刻 (固定・相対時間は非アサート)。
-// NULL 許容列 last_communicated_at は *time.Time として渡す。
-func validComm() *time.Time {
-	t := time.Date(2026, 6, 7, 11, 0, 0, 0, time.UTC)
-	return &t
+func validComm() pgtype.Timestamptz {
+	return pgconv.Timestamptz(time.Date(2026, 6, 7, 11, 0, 0, 0, time.UTC))
 }
 
 // --- 5.1 成功系 ---
@@ -57,7 +57,7 @@ func TestDashboard_認証済みでデバイスとアラートを描画(t *testin
 	}
 	repo.readings = map[int64]repository.SensorReading{1: validReading(1)}
 	repo.alerts = []repository.ListUnnotifiedAlertHistoriesWithDeviceRow{
-		{ID: 100, DeviceID: 1, DeviceName: "ハウスA温湿度計", Metric: "temperature", Operator: ">", Threshold: 35.00, ActualValue: 38.50},
+		{ID: 100, DeviceID: 1, DeviceName: "ハウスA温湿度計", Metric: "temperature", Operator: ">", Threshold: pgconv.Numeric2(35.00), ActualValue: pgconv.Numeric2(38.50)},
 	}
 
 	w := getDashboard(t, repo)
@@ -133,7 +133,7 @@ func TestDashboard_計測未受信は温湿度がダッシュ表記(t *testing.T
 
 func TestDashboard_通信実績なしは該当文言(t *testing.T) {
 	repo := authedDashboardRepo()
-	repo.devices = []repository.Device{{ID: 1, Name: "未通信", IsActive: true, LastCommunicatedAt: nil}} // 未通信(NULL)
+	repo.devices = []repository.Device{{ID: 1, Name: "未通信", IsActive: true, LastCommunicatedAt: pgtype.Timestamptz{}}} // Valid=false
 	repo.readings = map[int64]repository.SensorReading{1: validReading(1)}
 
 	w := getDashboard(t, repo)
@@ -206,7 +206,7 @@ func TestDashboard_自動ポーリング属性を持たない(t *testing.T) {
 	repo.devices = []repository.Device{{ID: 1, Name: "D", IsActive: true, LastCommunicatedAt: validComm()}}
 	repo.readings = map[int64]repository.SensorReading{1: validReading(1)}
 	repo.alerts = []repository.ListUnnotifiedAlertHistoriesWithDeviceRow{
-		{ID: 1, DeviceID: 1, DeviceName: "D", Metric: "temperature", Operator: ">", Threshold: 35.00, ActualValue: 38.50},
+		{ID: 1, DeviceID: 1, DeviceName: "D", Metric: "temperature", Operator: ">", Threshold: pgconv.Numeric2(35.00), ActualValue: pgconv.Numeric2(38.50)},
 	}
 
 	body := getDashboard(t, repo).Body.String()

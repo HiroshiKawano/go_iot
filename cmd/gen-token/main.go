@@ -21,6 +21,7 @@ import (
 	infradb "github.com/HiroshiKawano/go_iot/internal/infra/db"
 	"github.com/HiroshiKawano/go_iot/internal/infra/token"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func main() {
@@ -68,12 +69,20 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var expiresAt pgtype.Timestamptz
+	if expireDay > 0 {
+		expiresAt = pgtype.Timestamptz{
+			Time:  time.Now().Add(time.Duration(expireDay) * 24 * time.Hour),
+			Valid: true,
+		}
+	}
+
 	tok, err := q.CreateDeviceToken(ctx, repository.CreateDeviceTokenParams{
 		UserID:    userID,
 		Name:      name,
 		TokenHash: hash,
 		Abilities: abilitiesRaw,
-		ExpiresAt: buildExpiresAt(expireDay, time.Now()),
+		ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		log.Fatalf("トークン保存失敗: %v", err)
@@ -85,8 +94,8 @@ func main() {
 	fmt.Println("  user_id:     ", tok.UserID)
 	fmt.Println("  name:        ", tok.Name)
 	fmt.Println("  abilities:   ", abilities)
-	if tok.ExpiresAt != nil {
-		fmt.Println("  expires_at:  ", tok.ExpiresAt.Format(time.RFC3339))
+	if tok.ExpiresAt.Valid {
+		fmt.Println("  expires_at:  ", tok.ExpiresAt.Time.Format(time.RFC3339))
 	} else {
 		fmt.Println("  expires_at:  無期限")
 	}
@@ -96,15 +105,4 @@ func main() {
 	fmt.Println()
 	fmt.Println("  HTTP ヘッダ例:")
 	fmt.Printf("     Authorization: Bearer %s\n", plaintext)
-}
-
-// buildExpiresAt は有効期間(日)から device_tokens.expires_at の値を決める。
-// expireDay <= 0 は無期限 (NULL = *time.Time の nil) を表し、正値は now から N 日後を返す。
-// SQLite 移行で生成型が pgtype.Timestamptz → *time.Time へ変わったことに追従する。
-func buildExpiresAt(expireDay int, now time.Time) *time.Time {
-	if expireDay <= 0 {
-		return nil
-	}
-	t := now.Add(time.Duration(expireDay) * 24 * time.Hour)
-	return &t
 }

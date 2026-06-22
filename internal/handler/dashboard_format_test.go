@@ -4,8 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/view/component"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // TestComposeAlertMessage は未対応アラート1件の表示文言合成を検証する。
@@ -23,8 +25,8 @@ func TestComposeAlertMessage(t *testing.T) {
 				DeviceName:  "ハウスA温湿度計",
 				Metric:      "temperature",
 				Operator:    ">",
-				Threshold:   35.00,
-				ActualValue: 38.50,
+				Threshold:   pgconv.Numeric2(35.00),
+				ActualValue: pgconv.Numeric2(38.50),
 			},
 			want: "ハウスA温湿度計: 温度が35℃を超えました（38.50℃）",
 		},
@@ -34,8 +36,8 @@ func TestComposeAlertMessage(t *testing.T) {
 				DeviceName:  "ハウスB温湿度計",
 				Metric:      "humidity",
 				Operator:    "<",
-				Threshold:   30.00,
-				ActualValue: 25.00,
+				Threshold:   pgconv.Numeric2(30.00),
+				ActualValue: pgconv.Numeric2(25.00),
 			},
 			want: "ハウスB温湿度計: 湿度が30%を下回りました（25.00%）",
 		},
@@ -45,8 +47,8 @@ func TestComposeAlertMessage(t *testing.T) {
 				DeviceName:  "D",
 				Metric:      "temperature",
 				Operator:    ">=",
-				Threshold:   40.00,
-				ActualValue: 40.00,
+				Threshold:   pgconv.Numeric2(40.00),
+				ActualValue: pgconv.Numeric2(40.00),
 			},
 			want: "D: 温度が40℃を超えました（40.00℃）",
 		},
@@ -56,8 +58,8 @@ func TestComposeAlertMessage(t *testing.T) {
 				DeviceName:  "D",
 				Metric:      "humidity",
 				Operator:    "<=",
-				Threshold:   20.00,
-				ActualValue: 20.00,
+				Threshold:   pgconv.Numeric2(20.00),
+				ActualValue: pgconv.Numeric2(20.00),
 			},
 			want: "D: 湿度が20%を下回りました（20.00%）",
 		},
@@ -67,8 +69,8 @@ func TestComposeAlertMessage(t *testing.T) {
 				DeviceName:  "D",
 				Metric:      "temperature",
 				Operator:    ">",
-				Threshold:   35.50,
-				ActualValue: 36.00,
+				Threshold:   pgconv.Numeric2(35.50),
+				ActualValue: pgconv.Numeric2(36.00),
 			},
 			want: "D: 温度が35.5℃を超えました（36.00℃）",
 		},
@@ -85,17 +87,14 @@ func TestComposeAlertMessage(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
-// timePtr は NULL 許容 datetime 列 (*time.Time) のフィクスチャ生成ヘルパ。
-func timePtr(t time.Time) *time.Time { return &t }
-
 // TestBuildDashboardDevice はデバイス行＋最新計測(無い場合あり)＋基準時刻から
 // 表示用デバイスデータへの写像を検証する。温湿度は小数2桁＋単位、未受信は「ー」、
 // 通信実績なしは「通信実績なし」、ありは相対時間。決定的テストのため now を固定注入する。
 func TestBuildDashboardDevice(t *testing.T) {
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 	reading := &repository.SensorReading{
-		Temperature: 28.50,
-		Humidity:    65.30,
+		Temperature: pgconv.Numeric2(28.50),
+		Humidity:    pgconv.Numeric2(65.30),
 	}
 
 	tests := []struct {
@@ -111,7 +110,7 @@ func TestBuildDashboardDevice(t *testing.T) {
 				Name:               "ハウスA温湿度計",
 				Location:           strPtr("ビニールハウスA"),
 				IsActive:           true,
-				LastCommunicatedAt: timePtr(now.Add(-2 * time.Minute)),
+				LastCommunicatedAt: pgconv.Timestamptz(now.Add(-2 * time.Minute)),
 			},
 			reading: reading,
 			want: component.DashboardDevice{
@@ -131,7 +130,7 @@ func TestBuildDashboardDevice(t *testing.T) {
 				Name:               "計測待ちデバイス",
 				Location:           strPtr("ハウスC"),
 				IsActive:           true,
-				LastCommunicatedAt: timePtr(now.Add(-3 * time.Hour)),
+				LastCommunicatedAt: pgconv.Timestamptz(now.Add(-3 * time.Hour)),
 			},
 			reading: nil,
 			want: component.DashboardDevice{
@@ -151,7 +150,7 @@ func TestBuildDashboardDevice(t *testing.T) {
 				Name:               "未通信デバイス",
 				Location:           strPtr("ハウスD"),
 				IsActive:           false,
-				LastCommunicatedAt: nil, // 未通信(NULL)
+				LastCommunicatedAt: pgtype.Timestamptz{}, // Valid=false
 			},
 			reading: reading,
 			want: component.DashboardDevice{
@@ -171,7 +170,7 @@ func TestBuildDashboardDevice(t *testing.T) {
 				Name:               "場所なしデバイス",
 				Location:           nil,
 				IsActive:           true,
-				LastCommunicatedAt: nil,
+				LastCommunicatedAt: pgtype.Timestamptz{},
 			},
 			reading: nil,
 			want: component.DashboardDevice{

@@ -7,26 +7,26 @@ package repository
 
 import (
 	"context"
-	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countSensorReadingsInRange = `-- name: CountSensorReadingsInRange :one
-SELECT COUNT(*) AS total
+SELECT COUNT(*)::BIGINT AS total
   FROM sensor_readings
- WHERE device_id   = ?
-   AND recorded_at >= ?
-   AND recorded_at <= ?
+ WHERE device_id   = $1
+   AND recorded_at BETWEEN $2 AND $3
    AND deleted_at IS NULL
 `
 
 type CountSensorReadingsInRangeParams struct {
-	DeviceID     int64     `json:"device_id"`
-	RecordedAt   time.Time `json:"recorded_at"`
-	RecordedAt_2 time.Time `json:"recorded_at_2"`
+	DeviceID     int64              `json:"device_id"`
+	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
+	RecordedAt_2 pgtype.Timestamptz `json:"recorded_at_2"`
 }
 
 func (q *Queries) CountSensorReadingsInRange(ctx context.Context, arg CountSensorReadingsInRangeParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countSensorReadingsInRange, arg.DeviceID, arg.RecordedAt, arg.RecordedAt_2)
+	row := q.db.QueryRow(ctx, countSensorReadingsInRange, arg.DeviceID, arg.RecordedAt, arg.RecordedAt_2)
 	var total int64
 	err := row.Scan(&total)
 	return total, err
@@ -34,19 +34,19 @@ func (q *Queries) CountSensorReadingsInRange(ctx context.Context, arg CountSenso
 
 const createSensorReading = `-- name: CreateSensorReading :one
 INSERT INTO sensor_readings (device_id, temperature, humidity, recorded_at)
-VALUES (?, ?, ?, ?)
+VALUES ($1, $2, $3, $4)
 RETURNING id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at
 `
 
 type CreateSensorReadingParams struct {
-	DeviceID    int64     `json:"device_id"`
-	Temperature float64   `json:"temperature"`
-	Humidity    float64   `json:"humidity"`
-	RecordedAt  time.Time `json:"recorded_at"`
+	DeviceID    int64              `json:"device_id"`
+	Temperature pgtype.Numeric     `json:"temperature"`
+	Humidity    pgtype.Numeric     `json:"humidity"`
+	RecordedAt  pgtype.Timestamptz `json:"recorded_at"`
 }
 
 func (q *Queries) CreateSensorReading(ctx context.Context, arg CreateSensorReadingParams) (SensorReading, error) {
-	row := q.db.QueryRowContext(ctx, createSensorReading,
+	row := q.db.QueryRow(ctx, createSensorReading,
 		arg.DeviceID,
 		arg.Temperature,
 		arg.Humidity,
@@ -68,13 +68,14 @@ func (q *Queries) CreateSensorReading(ctx context.Context, arg CreateSensorReadi
 
 const getLatestSensorReading = `-- name: GetLatestSensorReading :one
 SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
- WHERE device_id = ? AND deleted_at IS NULL
+ WHERE device_id = $1 AND deleted_at IS NULL
  ORDER BY recorded_at DESC
  LIMIT 1
 `
 
+// ダッシュボードでデバイスごとの最新値表示に使用
 func (q *Queries) GetLatestSensorReading(ctx context.Context, deviceID int64) (SensorReading, error) {
-	row := q.db.QueryRowContext(ctx, getLatestSensorReading, deviceID)
+	row := q.db.QueryRow(ctx, getLatestSensorReading, deviceID)
 	var i SensorReading
 	err := row.Scan(
 		&i.ID,
@@ -91,39 +92,38 @@ func (q *Queries) GetLatestSensorReading(ctx context.Context, deviceID int64) (S
 
 const getSensorReadingsSummary = `-- name: GetSensorReadingsSummary :one
 SELECT
-    CAST(AVG(temperature) AS REAL) AS avg_temperature,
-    CAST(MAX(temperature) AS REAL) AS max_temperature,
-    CAST(MIN(temperature) AS REAL) AS min_temperature,
-    CAST(AVG(humidity)    AS REAL) AS avg_humidity,
-    CAST(MAX(humidity)    AS REAL) AS max_humidity,
-    CAST(MIN(humidity)    AS REAL) AS min_humidity,
-    COUNT(*)                       AS sample_count
+    AVG(temperature)::NUMERIC(5, 2) AS avg_temperature,
+    MAX(temperature)                AS max_temperature,
+    MIN(temperature)                AS min_temperature,
+    AVG(humidity)::NUMERIC(5, 2)    AS avg_humidity,
+    MAX(humidity)                   AS max_humidity,
+    MIN(humidity)                   AS min_humidity,
+    COUNT(*)::BIGINT                AS sample_count
   FROM sensor_readings
- WHERE device_id   = ?
-   AND recorded_at >= ?
-   AND recorded_at <= ?
+ WHERE device_id   = $1
+   AND recorded_at BETWEEN $2 AND $3
    AND deleted_at IS NULL
- GROUP BY device_id
 `
 
 type GetSensorReadingsSummaryParams struct {
-	DeviceID     int64     `json:"device_id"`
-	RecordedAt   time.Time `json:"recorded_at"`
-	RecordedAt_2 time.Time `json:"recorded_at_2"`
+	DeviceID     int64              `json:"device_id"`
+	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
+	RecordedAt_2 pgtype.Timestamptz `json:"recorded_at_2"`
 }
 
 type GetSensorReadingsSummaryRow struct {
-	AvgTemperature float64 `json:"avg_temperature"`
-	MaxTemperature float64 `json:"max_temperature"`
-	MinTemperature float64 `json:"min_temperature"`
-	AvgHumidity    float64 `json:"avg_humidity"`
-	MaxHumidity    float64 `json:"max_humidity"`
-	MinHumidity    float64 `json:"min_humidity"`
-	SampleCount    int64   `json:"sample_count"`
+	AvgTemperature pgtype.Numeric `json:"avg_temperature"`
+	MaxTemperature interface{}    `json:"max_temperature"`
+	MinTemperature interface{}    `json:"min_temperature"`
+	AvgHumidity    pgtype.Numeric `json:"avg_humidity"`
+	MaxHumidity    interface{}    `json:"max_humidity"`
+	MinHumidity    interface{}    `json:"min_humidity"`
+	SampleCount    int64          `json:"sample_count"`
 }
 
+// センサーデータ履歴画面の集計ボックス用
 func (q *Queries) GetSensorReadingsSummary(ctx context.Context, arg GetSensorReadingsSummaryParams) (GetSensorReadingsSummaryRow, error) {
-	row := q.db.QueryRowContext(ctx, getSensorReadingsSummary, arg.DeviceID, arg.RecordedAt, arg.RecordedAt_2)
+	row := q.db.QueryRow(ctx, getSensorReadingsSummary, arg.DeviceID, arg.RecordedAt, arg.RecordedAt_2)
 	var i GetSensorReadingsSummaryRow
 	err := row.Scan(
 		&i.AvgTemperature,
@@ -139,40 +139,41 @@ func (q *Queries) GetSensorReadingsSummary(ctx context.Context, arg GetSensorRea
 
 const listDailySensorAggregates = `-- name: ListDailySensorAggregates :many
 SELECT
-    CAST(date(substr(recorded_at, 1, 19), '+9 hours') AS TEXT) AS reading_date,
-    CAST(AVG(temperature) AS REAL)              AS avg_temperature,
-    CAST(MAX(temperature) AS REAL)              AS max_temperature,
-    CAST(MIN(temperature) AS REAL)              AS min_temperature,
-    CAST(AVG(humidity)    AS REAL)              AS avg_humidity,
-    CAST(MAX(humidity)    AS REAL)              AS max_humidity,
-    CAST(MIN(humidity)    AS REAL)              AS min_humidity,
-    COUNT(*)                                    AS sample_count
+    DATE(recorded_at)                       AS reading_date,
+    AVG(temperature)::NUMERIC(5, 2)         AS avg_temperature,
+    MAX(temperature)                        AS max_temperature,
+    MIN(temperature)                        AS min_temperature,
+    AVG(humidity)::NUMERIC(5, 2)            AS avg_humidity,
+    MAX(humidity)                           AS max_humidity,
+    MIN(humidity)                           AS min_humidity,
+    COUNT(*)::BIGINT                        AS sample_count
   FROM sensor_readings
- WHERE device_id   = ?
-   AND recorded_at >= ?
+ WHERE device_id   = $1
+   AND recorded_at >= $2
    AND deleted_at IS NULL
- GROUP BY CAST(date(substr(recorded_at, 1, 19), '+9 hours') AS TEXT)
- ORDER BY CAST(date(substr(recorded_at, 1, 19), '+9 hours') AS TEXT) ASC
+ GROUP BY DATE(recorded_at)
+ ORDER BY DATE(recorded_at) ASC
 `
 
 type ListDailySensorAggregatesParams struct {
-	DeviceID   int64     `json:"device_id"`
-	RecordedAt time.Time `json:"recorded_at"`
+	DeviceID   int64              `json:"device_id"`
+	RecordedAt pgtype.Timestamptz `json:"recorded_at"`
 }
 
 type ListDailySensorAggregatesRow struct {
-	ReadingDate    string  `json:"reading_date"`
-	AvgTemperature float64 `json:"avg_temperature"`
-	MaxTemperature float64 `json:"max_temperature"`
-	MinTemperature float64 `json:"min_temperature"`
-	AvgHumidity    float64 `json:"avg_humidity"`
-	MaxHumidity    float64 `json:"max_humidity"`
-	MinHumidity    float64 `json:"min_humidity"`
-	SampleCount    int64   `json:"sample_count"`
+	ReadingDate    pgtype.Date    `json:"reading_date"`
+	AvgTemperature pgtype.Numeric `json:"avg_temperature"`
+	MaxTemperature interface{}    `json:"max_temperature"`
+	MinTemperature interface{}    `json:"min_temperature"`
+	AvgHumidity    pgtype.Numeric `json:"avg_humidity"`
+	MaxHumidity    interface{}    `json:"max_humidity"`
+	MinHumidity    interface{}    `json:"min_humidity"`
+	SampleCount    int64          `json:"sample_count"`
 }
 
+// 7日/30日グラフ用: 日別の平均/最大/最小を集計
 func (q *Queries) ListDailySensorAggregates(ctx context.Context, arg ListDailySensorAggregatesParams) ([]ListDailySensorAggregatesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listDailySensorAggregates, arg.DeviceID, arg.RecordedAt)
+	rows, err := q.db.Query(ctx, listDailySensorAggregates, arg.DeviceID, arg.RecordedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -194,9 +195,6 @@ func (q *Queries) ListDailySensorAggregates(ctx context.Context, arg ListDailySe
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -205,13 +203,15 @@ func (q *Queries) ListDailySensorAggregates(ctx context.Context, arg ListDailySe
 
 const listLatestSensorReadings = `-- name: ListLatestSensorReadings :many
 SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
- WHERE device_id = ? AND deleted_at IS NULL
+ WHERE device_id = $1 AND deleted_at IS NULL
  ORDER BY recorded_at DESC
  LIMIT 10
 `
 
+// デバイス詳細の最新計測テーブル用: 最新10件を降順で取得 (期間に非連動・固定10件)
+// 既存 ListRecentSensorReadings (時刻以降・昇順=24hグラフ用) とは役割が異なるため Latest で命名分離
 func (q *Queries) ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]SensorReading, error) {
-	rows, err := q.db.QueryContext(ctx, listLatestSensorReadings, deviceID)
+	rows, err := q.db.Query(ctx, listLatestSensorReadings, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -232,9 +232,6 @@ func (q *Queries) ListLatestSensorReadings(ctx context.Context, deviceID int64) 
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -244,19 +241,20 @@ func (q *Queries) ListLatestSensorReadings(ctx context.Context, deviceID int64) 
 
 const listRecentSensorReadings = `-- name: ListRecentSensorReadings :many
 SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
- WHERE device_id   = ?
-   AND recorded_at >= ?
+ WHERE device_id   = $1
+   AND recorded_at >= $2
    AND deleted_at IS NULL
  ORDER BY recorded_at ASC
 `
 
 type ListRecentSensorReadingsParams struct {
-	DeviceID   int64     `json:"device_id"`
-	RecordedAt time.Time `json:"recorded_at"`
+	DeviceID   int64              `json:"device_id"`
+	RecordedAt pgtype.Timestamptz `json:"recorded_at"`
 }
 
+// 24時間グラフ用: 指定時刻以降の生データを昇順で取得
 func (q *Queries) ListRecentSensorReadings(ctx context.Context, arg ListRecentSensorReadingsParams) ([]SensorReading, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentSensorReadings, arg.DeviceID, arg.RecordedAt)
+	rows, err := q.db.Query(ctx, listRecentSensorReadings, arg.DeviceID, arg.RecordedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -278,9 +276,6 @@ func (q *Queries) ListRecentSensorReadings(ctx context.Context, arg ListRecentSe
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -289,24 +284,24 @@ func (q *Queries) ListRecentSensorReadings(ctx context.Context, arg ListRecentSe
 
 const listSensorReadingsPaginated = `-- name: ListSensorReadingsPaginated :many
 SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
- WHERE device_id   = ?
-   AND recorded_at >= ?
-   AND recorded_at <= ?
+ WHERE device_id   = $1
+   AND recorded_at BETWEEN $2 AND $3
    AND deleted_at IS NULL
  ORDER BY recorded_at DESC
- LIMIT ? OFFSET ?
+ LIMIT $4 OFFSET $5
 `
 
 type ListSensorReadingsPaginatedParams struct {
-	DeviceID     int64     `json:"device_id"`
-	RecordedAt   time.Time `json:"recorded_at"`
-	RecordedAt_2 time.Time `json:"recorded_at_2"`
-	Limit        int64     `json:"limit"`
-	Offset       int64     `json:"offset"`
+	DeviceID     int64              `json:"device_id"`
+	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
+	RecordedAt_2 pgtype.Timestamptz `json:"recorded_at_2"`
+	Limit        int32              `json:"limit"`
+	Offset       int32              `json:"offset"`
 }
 
+// センサーデータ履歴画面のテーブル用 (期間指定 + ページング)
 func (q *Queries) ListSensorReadingsPaginated(ctx context.Context, arg ListSensorReadingsPaginatedParams) ([]SensorReading, error) {
-	rows, err := q.db.QueryContext(ctx, listSensorReadingsPaginated,
+	rows, err := q.db.Query(ctx, listSensorReadingsPaginated,
 		arg.DeviceID,
 		arg.RecordedAt,
 		arg.RecordedAt_2,
@@ -333,9 +328,6 @@ func (q *Queries) ListSensorReadingsPaginated(ctx context.Context, arg ListSenso
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

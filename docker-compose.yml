@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: go_iot_db
+    environment:
+      POSTGRES_DB: go_iot
+      POSTGRES_USER: go_iot
+      POSTGRES_PASSWORD: go_iot_dev
+      TZ: Asia/Tokyo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U go_iot -d go_iot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pg_data:

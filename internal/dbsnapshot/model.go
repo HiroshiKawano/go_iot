@@ -1,11 +1,11 @@
-// Package dbsnapshot は SQLite のスキーマを内省し、
+// Package dbsnapshot は PostgreSQL のスキーマを内省し、
 // テーブル定義 (Markdown) と ER 図 (Mermaid) のスナップショットを生成する。
 //
 // 主目的: 実DBに接続しなくても、生成済みスナップショットを読むだけで
 // テーブル・カラム・制約・リレーションを把握できるようにすること
 // (AI エージェント・新規参入者向けのドキュメント資産)。
 //
-// 設計方針: スキーマ取得 (introspect.go: DB依存・非純粋・sqlite_master+PRAGMA) と
+// 設計方針: スキーマ取得 (introspect.go: DB依存・非純粋) と
 // 描画 (render.go: 純粋・テスト可能) を分離する。
 package dbsnapshot
 
@@ -26,14 +26,14 @@ type Table struct {
 // Column は1カラムの定義。
 type Column struct {
 	Name     string // カラム名
-	Type     string // SQLite の宣言型 (例: INTEGER / REAL / DATETIME / VARCHAR(20) / BLOB / json)
+	Type     string // PostgreSQL の型 (例: bigint / character varying(255) / numeric(5,2))
 	Nullable bool   // NULL 許容なら true
 	Default  string // デフォルト式 (無ければ空文字)
 	IsPK     bool   // 主キー構成カラムなら true
-	Comment  string // SQLite はカラムコメント非対応のため常に空 (PK 表示は IsPK で補う)
+	Comment  string // COMMENT ON COLUMN の内容 (無ければ空文字)
 }
 
-// Index は1索引の定義。Def は sqlite_master.sql の CREATE INDEX 文
+// Index は1索引の定義。Def は pg_indexes.indexdef の生 SQL
 // (UNIQUE や部分索引の WHERE 句を含む)。
 type Index struct {
 	Name     string
@@ -41,8 +41,8 @@ type Index struct {
 	IsUnique bool
 }
 
-// Check は1つの CHECK 制約。Expr は CREATE TABLE 文から抽出した CHECK 式
-// (例: CHECK (metric IN ('temperature', 'humidity')))。
+// Check は1つの CHECK 制約。Expr は pg_get_constraintdef の出力
+// (例: CHECK ((metric = ANY (ARRAY['temperature', 'humidity'])))).
 type Check struct {
 	Name string
 	Expr string

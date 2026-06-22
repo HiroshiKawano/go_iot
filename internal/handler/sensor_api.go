@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 // SensorRepo は SensorAPI が必要とする最小の DB ポート (consumer interface)。
@@ -102,7 +102,7 @@ func (h *SensorAPI) Create(c *gin.Context) {
 		switch {
 		case errors.Is(err, authz.ErrUnauthenticated):
 			c.JSON(http.StatusUnauthorized, gin.H{"message": "authentication required"})
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": "device not found or deleted"})
 		case errors.Is(err, authz.ErrNotOwner):
 			c.JSON(http.StatusForbidden, gin.H{"message": "device belongs to a different user"})
@@ -113,12 +113,10 @@ func (h *SensorAPI) Create(c *gin.Context) {
 	}
 
 	reading, err := h.Repo.CreateSensorReading(ctx, repository.CreateSensorReadingParams{
-		DeviceID: req.DeviceID,
-		// SQLite の REAL は float64 を丸めず保持するため、移行前の NUMERIC(5,2) 保存と
-		// 等価にするよう INSERT 直前に小数第2位へ量子化する (R4.1)。
-		Temperature: pgconv.Quantize2(req.Temperature),
-		Humidity:    pgconv.Quantize2(req.Humidity),
-		RecordedAt:  req.RecordedAt,
+		DeviceID:    req.DeviceID,
+		Temperature: pgconv.Numeric2(req.Temperature),
+		Humidity:    pgconv.Numeric2(req.Humidity),
+		RecordedAt:  pgconv.Timestamptz(req.RecordedAt),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed to save reading: " + err.Error()})
@@ -135,10 +133,10 @@ func (h *SensorAPI) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, CreateSensorReadingResponse{
 		ID:          reading.ID,
 		DeviceID:    reading.DeviceID,
-		Temperature: reading.Temperature,
-		Humidity:    reading.Humidity,
-		RecordedAt:  reading.RecordedAt,
-		CreatedAt:   reading.CreatedAt,
+		Temperature: pgconv.NumericToFloat(reading.Temperature),
+		Humidity:    pgconv.NumericToFloat(reading.Humidity),
+		RecordedAt:  pgconv.TimestamptzToTime(reading.RecordedAt),
+		CreatedAt:   pgconv.TimestamptzToTime(reading.CreatedAt),
 		AlertsFired: len(alerts),
 	})
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -32,28 +32,28 @@ func (f fakeDeviceQuerier) GetUserByEmail(_ context.Context, email string) (repo
 	if u, ok := f.byEmail[email]; ok {
 		return u, nil
 	}
-	return repository.User{}, sql.ErrNoRows
+	return repository.User{}, pgx.ErrNoRows
 }
 
 func (f fakeDeviceQuerier) GetUser(_ context.Context, id int64) (repository.User, error) {
 	if u, ok := f.byID[id]; ok {
 		return u, nil
 	}
-	return repository.User{}, sql.ErrNoRows
+	return repository.User{}, pgx.ErrNoRows
 }
 
 func (f fakeDeviceQuerier) GetDevice(_ context.Context, id int64) (repository.Device, error) {
 	if d, ok := f.devices[id]; ok {
 		return d, nil
 	}
-	return repository.Device{}, sql.ErrNoRows
+	return repository.Device{}, pgx.ErrNoRows
 }
 
 func (f fakeDeviceQuerier) GetDeviceByMacAddress(_ context.Context, mac string) (repository.Device, error) {
 	if d, ok := f.byMac[mac]; ok {
 		return d, nil
 	}
-	return repository.Device{}, sql.ErrNoRows
+	return repository.Device{}, pgx.ErrNoRows
 }
 
 func (f fakeDeviceQuerier) CreateDevice(_ context.Context, _ repository.CreateDeviceParams) (repository.Device, error) {

@@ -3,16 +3,11 @@
 /bin/
 *.exe
 *.out
-# `go build ./cmd/<tool>/` がリポジトリルートへ出力する拡張子なしバイナリ (誤コミット防止)
-/gen-token
-/seed
-/server
 
 # Go 関連
 /vendor/
 *.test
 coverage.out
-coverage.biz.out
 coverage.html
 
 # templ 生成コード (再生成可能なため git 管理しない)
@@ -21,9 +16,6 @@ coverage.html
 
 # CSS 単一ソースの生成物 (正本は mocks/html/style.css。make sync-css で再生成・手編集禁止)
 /internal/view/public/css/style.css
-
-# マイグレーション単一ソースの生成物 (正本は db/migrations。make sync-migrations で複製・go:embed 用・手編集禁止)
-/internal/migrate/migrations/
 
 # 環境変数ファイル (機密情報を含むため絶対にコミットしない)
 .env
@@ -44,6 +36,3 @@ build-errors.log
 
 # Docker
 postgres-data/
-
-# Claude Code ランタイム生成物 (スケジュールロック等)
-.claude/scheduled_tasks.lock

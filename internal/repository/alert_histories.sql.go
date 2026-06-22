@@ -7,32 +7,32 @@ package repository
 
 import (
 	"context"
-	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countAlertHistoriesInRange = `-- name: CountAlertHistoriesInRange :one
-SELECT COUNT(*) AS total
+SELECT COUNT(*)::BIGINT AS total
   FROM alert_histories AS ah
   JOIN alert_rules     AS ar ON ar.id = ah.alert_rule_id
   JOIN devices         AS d  ON d.id  = ar.device_id
- WHERE d.user_id      = ?1
-   AND (CAST(?2 AS INTEGER) IS NULL OR d.id = ?2)
-   AND ah.triggered_at >= ?3
-   AND ah.triggered_at <= ?4
+ WHERE d.user_id      = $1
+   AND ($2::BIGINT IS NULL OR d.id = $2)
+   AND ah.triggered_at BETWEEN $3 AND $4
    AND ah.deleted_at  IS NULL
    AND ar.deleted_at  IS NULL
    AND d.deleted_at   IS NULL
 `
 
 type CountAlertHistoriesInRangeParams struct {
-	UserID   int64     `json:"user_id"`
-	DeviceID *int64    `json:"device_id"`
-	FromAt   time.Time `json:"from_at"`
-	ToAt     time.Time `json:"to_at"`
+	UserID   int64              `json:"user_id"`
+	DeviceID *int64             `json:"device_id"`
+	FromAt   pgtype.Timestamptz `json:"from_at"`
+	ToAt     pgtype.Timestamptz `json:"to_at"`
 }
 
 func (q *Queries) CountAlertHistoriesInRange(ctx context.Context, arg CountAlertHistoriesInRangeParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countAlertHistoriesInRange,
+	row := q.db.QueryRow(ctx, countAlertHistoriesInRange,
 		arg.UserID,
 		arg.DeviceID,
 		arg.FromAt,
@@ -46,21 +46,22 @@ func (q *Queries) CountAlertHistoriesInRange(ctx context.Context, arg CountAlert
 const createAlertHistory = `-- name: CreateAlertHistory :one
 INSERT INTO alert_histories (
     alert_rule_id, metric, operator, threshold, actual_value, triggered_at
-) VALUES (?, ?, ?, ?, ?, ?)
+) VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, alert_rule_id, metric, operator, threshold, actual_value, is_notified, triggered_at, created_at, updated_at, deleted_at
 `
 
 type CreateAlertHistoryParams struct {
-	AlertRuleID int64     `json:"alert_rule_id"`
-	Metric      string    `json:"metric"`
-	Operator    string    `json:"operator"`
-	Threshold   float64   `json:"threshold"`
-	ActualValue float64   `json:"actual_value"`
-	TriggeredAt time.Time `json:"triggered_at"`
+	AlertRuleID int64              `json:"alert_rule_id"`
+	Metric      string             `json:"metric"`
+	Operator    string             `json:"operator"`
+	Threshold   pgtype.Numeric     `json:"threshold"`
+	ActualValue pgtype.Numeric     `json:"actual_value"`
+	TriggeredAt pgtype.Timestamptz `json:"triggered_at"`
 }
 
+// アラート発火時に metric / operator / threshold を alert_rules から非正規化して保存
 func (q *Queries) CreateAlertHistory(ctx context.Context, arg CreateAlertHistoryParams) (AlertHistory, error) {
-	row := q.db.QueryRowContext(ctx, createAlertHistory,
+	row := q.db.QueryRow(ctx, createAlertHistory,
 		arg.AlertRuleID,
 		arg.Metric,
 		arg.Operator,
@@ -100,42 +101,43 @@ SELECT
   FROM alert_histories AS ah
   JOIN alert_rules     AS ar ON ar.id = ah.alert_rule_id
   JOIN devices         AS d  ON d.id  = ar.device_id
- WHERE d.user_id      = ?1
-   AND (CAST(?2 AS INTEGER) IS NULL OR d.id = ?2)
-   AND ah.triggered_at >= ?3
-   AND ah.triggered_at <= ?4
+ WHERE d.user_id      = $1
+   AND ($2::BIGINT IS NULL OR d.id = $2)
+   AND ah.triggered_at BETWEEN $3 AND $4
    AND ah.deleted_at  IS NULL
    AND ar.deleted_at  IS NULL
    AND d.deleted_at   IS NULL
  ORDER BY ah.triggered_at DESC
- LIMIT  ?6
-OFFSET ?5
+ LIMIT  $6
+OFFSET $5
 `
 
 type ListAlertHistoriesPaginatedParams struct {
-	UserID   int64     `json:"user_id"`
-	DeviceID *int64    `json:"device_id"`
-	FromAt   time.Time `json:"from_at"`
-	ToAt     time.Time `json:"to_at"`
-	OffsetN  int64     `json:"offset_n"`
-	LimitN   int64     `json:"limit_n"`
+	UserID   int64              `json:"user_id"`
+	DeviceID *int64             `json:"device_id"`
+	FromAt   pgtype.Timestamptz `json:"from_at"`
+	ToAt     pgtype.Timestamptz `json:"to_at"`
+	OffsetN  int32              `json:"offset_n"`
+	LimitN   int32              `json:"limit_n"`
 }
 
 type ListAlertHistoriesPaginatedRow struct {
-	ID          int64     `json:"id"`
-	AlertRuleID int64     `json:"alert_rule_id"`
-	Metric      string    `json:"metric"`
-	Operator    string    `json:"operator"`
-	Threshold   float64   `json:"threshold"`
-	ActualValue float64   `json:"actual_value"`
-	IsNotified  bool      `json:"is_notified"`
-	TriggeredAt time.Time `json:"triggered_at"`
-	DeviceID    int64     `json:"device_id"`
-	DeviceName  string    `json:"device_name"`
+	ID          int64              `json:"id"`
+	AlertRuleID int64              `json:"alert_rule_id"`
+	Metric      string             `json:"metric"`
+	Operator    string             `json:"operator"`
+	Threshold   pgtype.Numeric     `json:"threshold"`
+	ActualValue pgtype.Numeric     `json:"actual_value"`
+	IsNotified  bool               `json:"is_notified"`
+	TriggeredAt pgtype.Timestamptz `json:"triggered_at"`
+	DeviceID    int64              `json:"device_id"`
+	DeviceName  string             `json:"device_name"`
 }
 
+// アラート履歴画面の一覧用 (デバイスフィルタ + 期間フィルタ + ページング)
+// device_id が NULL の場合は全デバイス対象
 func (q *Queries) ListAlertHistoriesPaginated(ctx context.Context, arg ListAlertHistoriesPaginatedParams) ([]ListAlertHistoriesPaginatedRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlertHistoriesPaginated,
+	rows, err := q.db.Query(ctx, listAlertHistoriesPaginated,
 		arg.UserID,
 		arg.DeviceID,
 		arg.FromAt,
@@ -166,9 +168,6 @@ func (q *Queries) ListAlertHistoriesPaginated(ctx context.Context, arg ListAlert
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -187,36 +186,38 @@ SELECT
     d.id   AS device_id,
     d.name AS device_name
   FROM alert_histories AS ah
-  JOIN alert_rules     AS ar ON ar.id = ah.alert_rule_id
-  JOIN devices         AS d  ON d.id  = ar.device_id
+  JOIN alert_rules     AS ar ON ar.id        = ah.alert_rule_id
+  JOIN devices         AS d  ON d.id         = ar.device_id
  WHERE ah.is_notified = FALSE
    AND ah.deleted_at  IS NULL
    AND ar.deleted_at  IS NULL
    AND d.deleted_at   IS NULL
-   AND d.user_id      = ?
+   AND d.user_id      = $1
  ORDER BY ah.triggered_at DESC
- LIMIT ?
+ LIMIT $2
 `
 
 type ListUnnotifiedAlertHistoriesWithDeviceParams struct {
 	UserID int64 `json:"user_id"`
-	Limit  int64 `json:"limit"`
+	Limit  int32 `json:"limit"`
 }
 
 type ListUnnotifiedAlertHistoriesWithDeviceRow struct {
-	ID          int64     `json:"id"`
-	AlertRuleID int64     `json:"alert_rule_id"`
-	Metric      string    `json:"metric"`
-	Operator    string    `json:"operator"`
-	Threshold   float64   `json:"threshold"`
-	ActualValue float64   `json:"actual_value"`
-	TriggeredAt time.Time `json:"triggered_at"`
-	DeviceID    int64     `json:"device_id"`
-	DeviceName  string    `json:"device_name"`
+	ID          int64              `json:"id"`
+	AlertRuleID int64              `json:"alert_rule_id"`
+	Metric      string             `json:"metric"`
+	Operator    string             `json:"operator"`
+	Threshold   pgtype.Numeric     `json:"threshold"`
+	ActualValue pgtype.Numeric     `json:"actual_value"`
+	TriggeredAt pgtype.Timestamptz `json:"triggered_at"`
+	DeviceID    int64              `json:"device_id"`
+	DeviceName  string             `json:"device_name"`
 }
 
+// ダッシュボードのアラート通知バナー表示用
+// alert_histories → alert_rules → devices の JOIN で devices.name も取得
 func (q *Queries) ListUnnotifiedAlertHistoriesWithDevice(ctx context.Context, arg ListUnnotifiedAlertHistoriesWithDeviceParams) ([]ListUnnotifiedAlertHistoriesWithDeviceRow, error) {
-	rows, err := q.db.QueryContext(ctx, listUnnotifiedAlertHistoriesWithDevice, arg.UserID, arg.Limit)
+	rows, err := q.db.Query(ctx, listUnnotifiedAlertHistoriesWithDevice, arg.UserID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -239,9 +240,6 @@ func (q *Queries) ListUnnotifiedAlertHistoriesWithDevice(ctx context.Context, ar
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -251,11 +249,11 @@ func (q *Queries) ListUnnotifiedAlertHistoriesWithDevice(ctx context.Context, ar
 const markAlertHistoryNotified = `-- name: MarkAlertHistoryNotified :exec
 UPDATE alert_histories
    SET is_notified = TRUE,
-       updated_at  = datetime('now')
- WHERE id = ?
+       updated_at  = NOW()
+ WHERE id = $1
 `
 
 func (q *Queries) MarkAlertHistoryNotified(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, markAlertHistoryNotified, id)
+	_, err := q.db.Exec(ctx, markAlertHistoryNotified, id)
 	return err
 }

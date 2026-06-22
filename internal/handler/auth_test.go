@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"database/sql"
 	"github.com/HiroshiKawano/go_iot/internal/middleware"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -47,7 +47,7 @@ func (f *fakeAuthRepo) GetUserByEmail(_ context.Context, email string) (reposito
 	if u, ok := f.byEmail[email]; ok {
 		return u, nil
 	}
-	return repository.User{}, sql.ErrNoRows
+	return repository.User{}, pgx.ErrNoRows
 }
 
 func (f *fakeAuthRepo) CreateUser(_ context.Context, arg repository.CreateUserParams) (repository.User, error) {
@@ -68,7 +68,7 @@ func (f *fakeAuthRepo) GetUser(_ context.Context, id int64) (repository.User, er
 	if u, ok := f.byID[id]; ok {
 		return u, nil
 	}
-	return repository.User{}, sql.ErrNoRows
+	return repository.User{}, pgx.ErrNoRows
 }
 
 func (f *fakeAuthRepo) ListDevicesByUser(_ context.Context, userID int64) ([]repository.Device, error) {
@@ -80,7 +80,7 @@ func (f *fakeAuthRepo) ListDevicesByUser(_ context.Context, userID int64) ([]rep
 }
 
 // GetLatestSensorReading は per-device の値/エラー注入に対応する。
-// エラー注入 > 値注入 の優先順で判定し、いずれも無ければ未受信 (sql.ErrNoRows)。
+// エラー注入 > 値注入 の優先順で判定し、いずれも無ければ未受信 (pgx.ErrNoRows)。
 func (f *fakeAuthRepo) GetLatestSensorReading(_ context.Context, deviceID int64) (repository.SensorReading, error) {
 	f.gotReadingDeviceIDs = append(f.gotReadingDeviceIDs, deviceID)
 	if err, ok := f.readingErrs[deviceID]; ok {
@@ -89,7 +89,7 @@ func (f *fakeAuthRepo) GetLatestSensorReading(_ context.Context, deviceID int64)
 	if r, ok := f.readings[deviceID]; ok {
 		return r, nil
 	}
-	return repository.SensorReading{}, sql.ErrNoRows
+	return repository.SensorReading{}, pgx.ErrNoRows
 }
 
 func (f *fakeAuthRepo) ListUnnotifiedAlertHistoriesWithDevice(_ context.Context, arg repository.ListUnnotifiedAlertHistoriesWithDeviceParams) ([]repository.ListUnnotifiedAlertHistoriesWithDeviceRow, error) {
@@ -360,9 +360,9 @@ func TestFakeAuthRepo_既定は空スライスと未受信(t *testing.T) {
 		t.Errorf("既定アラート len = %d, want 0", len(alerts))
 	}
 
-	// 計測未注入は未受信 (:one → sql.ErrNoRows) として扱う
-	if _, err := repo.GetLatestSensorReading(ctx, 1); !errors.Is(err, sql.ErrNoRows) {
-		t.Errorf("未注入の最新計測 err = %v, want sql.ErrNoRows", err)
+	// 計測未注入は未受信 (:one → pgx.ErrNoRows) として扱う
+	if _, err := repo.GetLatestSensorReading(ctx, 1); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("未注入の最新計測 err = %v, want pgx.ErrNoRows", err)
 	}
 }
 
@@ -393,8 +393,8 @@ func TestFakeAuthRepo_最新計測はper_deviceで値とエラーを注入でき
 	}
 
 	// device 3: 未設定 → 未受信
-	if _, err := repo.GetLatestSensorReading(ctx, 3); !errors.Is(err, sql.ErrNoRows) {
-		t.Errorf("device3 計測 err = %v, want sql.ErrNoRows", err)
+	if _, err := repo.GetLatestSensorReading(ctx, 3); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("device3 計測 err = %v, want pgx.ErrNoRows", err)
 	}
 }
 
