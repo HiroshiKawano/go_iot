@@ -49,6 +49,9 @@ static bool connectWiFi() {
 
   Serial.printf("[WiFi] connecting to %s ...\n", WIFI_SSID);
   WiFi.mode(WIFI_STA);
+  // このモジュール(ESP8266)固有の Wi-Fi MAC。Web UI のデバイス登録 (mac_address) に使う。
+  // 接続可否に関わらず読めるよう、接続試行の前に出力する。
+  Serial.printf("[WiFi] MAC: %s\n", WiFi.macAddress().c_str());
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   const unsigned long deadline = millis() + WIFI_TIMEOUT_MS;
