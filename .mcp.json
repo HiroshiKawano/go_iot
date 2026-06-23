@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "aws-knowledge": {
+      "type": "http",
+      "url": "https://knowledge-mcp.global.api.aws"
+    },
+    "aws-api": {
+      "type": "stdio",
+      "command": "/Users/c/.local/bin/uv",
+      "args": [
+        "run",
+        "--no-project",
+        "--with",
+        "awslabs.aws-api-mcp-server",
+        "python",
+        "-c",
+        "import sys; sys.argv=['awslabs.aws-api-mcp-server']; from awslabs.aws_api_mcp_server.server import main; main()"
+      ],
+      "env": {
+        "AWS_REGION": "ap-northeast-1",
+        "AWS_API_MCP_PROFILE_NAME": "go-iot-mcp",
+        "READ_OPERATIONS_ONLY": "true",
+        "REQUIRE_MUTATION_CONSENT": "true",
+        "AWS_API_MCP_ALLOW_UNRESTRICTED_LOCAL_FILE_ACCESS": "no-access",
+        "FASTMCP_LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}
