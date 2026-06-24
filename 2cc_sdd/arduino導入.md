@@ -31,6 +31,8 @@ ESP8266系のUSBシリアル変換チップによって名前が変わる。
 7. Serial Monitorで確認
 ```
 
+> 📍 **温湿度センサー（SHT31）を使う場合**: 上記のボード導入に加えて、ライブラリマネージャから **Adafruit SHT31 Library**（依存の **Adafruit BusIO** / **Adafruit Unified Sensor** も一緒に）を入れる。センサーは I2C 接続で、実機のアドレスは **`0x45`**（ADDR ピン High／既定 `0x44`）。完成版の参考ファームは [`firmware/esp8266_sht31/`](../firmware/esp8266_sht31/) と [firmware/README.md](../firmware/README.md) を参照。
+
 Windowsとの違いで注意するのはここ。
 
 ```text

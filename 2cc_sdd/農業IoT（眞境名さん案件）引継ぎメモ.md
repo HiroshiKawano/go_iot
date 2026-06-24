@@ -436,6 +436,8 @@ https://example.com/iot/ingest.php?device=test01&key=xxxxx&temp=27.3&hum=62.1
 
 次回確認すべき点です。
 
+> ✅ **【確定済み・2026-06-23 追記】**: 下記のうち主要点は実機検証で確定済み。**マイコン＝ESP8266（ESP-WROOM-02 系）**、**センサー型番＝SHT31**（I2C・アドレス `0x45`＝ADDR ピン High／既定 `0x44`、Adafruit SHT31 Library〔依存: Adafruit BusIO / Adafruit Unified Sensor〕）。実機書込→本番へ実測送信→画面反映まで確認済み。残る確認は台数・他機（ESP32 等）混在・CO2/照度/土壌水分等の追加計測の有無。
+
 ### 機材
 
 * 実機はESP8266で確定か
