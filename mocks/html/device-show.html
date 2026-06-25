@@ -66,8 +66,18 @@
         </div>
 
         <h2 class="u-mbs-6">温度グラフ</h2>
+        <!-- 折れ線(24h/3d/7d の実測値)にマウスを合わせると、全高の縦点線+短い横点線の十字ポインターと、
+             最寄りの計測点の値(系列色)・時刻(X軸)を表示する。実装は Alpine の hoverChart で SVG に重ねる。
+             以下はホバー状態を静的に図示したもの。 -->
         <div class="chart-wrapper">
           <div class="chart-placeholder">SVGグラフ (温度 / 横軸:時間, 縦軸:℃)</div>
+          <svg class="chart-hover" viewBox="0 0 720 240" preserveAspectRatio="none" aria-hidden="true">
+            <line class="ch-vline" x1="430" x2="430" y1="16" y2="208"></line>
+            <line class="ch-hline" x1="422" x2="438" y1="96" y2="96"></line>
+            <circle class="ch-dot" cx="430" cy="96" r="3" fill="#e8590c"></circle>
+          </svg>
+          <div class="chart-hover-tip" style="left:59.7%; top:40%; color:#e8590c; border-color:#e8590c;">30.6℃</div>
+          <div class="chart-hover-time" style="left:59.7%; color:#e8590c;">12:05</div>
         </div>
 
         <h2 class="u-mbs-6">湿度グラフ</h2>

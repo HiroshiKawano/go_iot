@@ -77,10 +77,7 @@ func LineChartSVG(title, unit string, series []Series) string {
 		return plotTop + (scaleMax-y)/(scaleMax-scaleMin)*plotHeight
 	}
 	xAt := func(i int) float64 {
-		if n <= 1 {
-			return plotLeft + plotWidth/2.0
-		}
-		return plotLeft + float64(i)/float64(n-1)*plotWidth
+		return xAtIndex(i, n)
 	}
 
 	writeYAxisLabels(&b, unit, yMin, yMax, yToPixel)

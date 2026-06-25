@@ -434,9 +434,9 @@ func TestChart_HXリクエストでグラフ領域フラグメントのみ返す
 	if !activeButtonHas(body, "7日間") {
 		t.Errorf("7日間 がアクティブでない:\n%s", body)
 	}
-	// 温度/湿度の2 SVG
-	if got := strings.Count(body, "<svg"); got != 2 {
-		t.Errorf("<svg> の数 = %d, want 2 (温度/湿度)", got)
+	// 温度/湿度の2データSVG (role="img")。ホバー用オーバーレイ SVG (aria-hidden) は数えない。
+	if got := strings.Count(body, `role="img"`); got != 2 {
+		t.Errorf("データSVG (role=img) の数 = %d, want 2 (温度/湿度)", got)
 	}
 	// 最新計測テーブルは期間非連動なので返さない
 	if strings.Contains(body, "latest-readings-table") {

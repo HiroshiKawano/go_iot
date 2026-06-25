@@ -40,11 +40,16 @@ type DeviceInfoView struct {
 // DeviceChartAreaView はグラフ領域フラグメント (DeviceChartArea) の表示データ。
 // Period は active 判定用の現在期間 ("24h"/"3d"/"7d"/"30d")、温度/湿度 SVG は internal/chart が
 // 生成済みの文字列 (templ.Raw で埋め込む)。DeviceID は期間ボタンの hx-get/hx-push-url URL 用。
+// TemperatureHoverJSON/HumidityHoverJSON は折れ線ホバー (十字ポインター+値/時刻ツールチップ) 用の
+// 各点座標 JSON ([]chart.HoverPoint を整形)。生データ折れ線 (24h/3d/7d) のみ点列を持ち、
+// 日次集計 (30d) や空データは "[]" (ホバー無効)。
 type DeviceChartAreaView struct {
-	DeviceID       int64
-	Period         string
-	TemperatureSVG string
-	HumiditySVG    string
+	DeviceID             int64
+	Period               string
+	TemperatureSVG       string
+	HumiditySVG          string
+	TemperatureHoverJSON string
+	HumidityHoverJSON    string
 }
 
 // chartPeriod は期間切替ボタン1個の定義 (Value=クエリ値, Label=表示文言)。

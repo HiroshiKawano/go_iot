@@ -7,6 +7,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -215,6 +216,7 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 // X ラベルは 24h が "HH:MM"、3d/7d は日跨ぎのため "M/D HH:MM"、30d は日付 "MM-DD"。
 func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	var tempSeries, humSeries []chart.Series
+	tempHover, humHover := "[]", "[]" // 既定 (日次集計=30d はホバー無効)
 
 	if usesRawSeries(period) {
 		rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
@@ -225,6 +227,9 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 			return component.DeviceChartAreaView{}, err
 		}
 		tempSeries, humSeries = rawSeries(rows, rawLabelFor(period))
+		// 生データ折れ線のみホバー (十字ポインター+値/時刻) 用の点列を持たせる。
+		tempHover = hoverJSON(chart.LineChartHoverPoints(tempSeries))
+		humHover = hoverJSON(chart.LineChartHoverPoints(humSeries))
 	} else {
 		rows, err := h.Repo.ListDailySensorAggregates(ctx, repository.ListDailySensorAggregatesParams{
 			DeviceID:   deviceID,
@@ -237,11 +242,26 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 	}
 
 	return component.DeviceChartAreaView{
-		DeviceID:       deviceID,
-		Period:         period,
-		TemperatureSVG: chart.LineChartSVG("温度", "℃", tempSeries),
-		HumiditySVG:    chart.LineChartSVG("湿度", "%", humSeries),
+		DeviceID:             deviceID,
+		Period:               period,
+		TemperatureSVG:       chart.LineChartSVG("温度", "℃", tempSeries),
+		HumiditySVG:          chart.LineChartSVG("湿度", "%", humSeries),
+		TemperatureHoverJSON: tempHover,
+		HumidityHoverJSON:    humHover,
 	}, nil
+}
+
+// hoverJSON は折れ線ホバーの点列を JSON 文字列へ整形する (templ の x-data へ埋め込む)。
+// 点が無い場合は "[]" を返す (Alpine 側でホバー無効)。
+func hoverJSON(pts []chart.HoverPoint) string {
+	if len(pts) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(pts)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 // rawSeries は生データ行を温度/湿度それぞれ1系列 (折れ線) へ写像する。

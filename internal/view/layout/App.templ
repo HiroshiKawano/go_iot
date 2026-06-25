@@ -113,6 +113,49 @@ templ App(data AppLayoutData) {
 				}
 				initTomSelect();
 			</script>
+			<script>
+				// hoverChart はデバイス詳細の折れ線グラフ用 Alpine コンポーネント。
+				// グラフ上のマウス x から最寄りの計測点 (cfg.points: SVG 720x240 座標+時刻+値) を選び、
+				// 全高の縦点線+短い横点線の十字ポインターと、値/時刻ツールチップを表示する。
+				// 点列が空 (30d 日次集計や未受信) のときは何も表示しない。
+				function hoverChart(cfg) {
+					return {
+						points: (cfg && cfg.points) || [],
+						color: (cfg && cfg.color) || '#495057',
+						unit: (cfg && cfg.unit) || '',
+						active: false,
+						cx: 0,
+						cy: 0,
+						valueText: '',
+						timeText: '',
+						onMove(e) {
+							if (!this.points.length) return;
+							var rect = this.$el.getBoundingClientRect();
+							if (!rect.width) return;
+							var svgX = (e.clientX - rect.left) / rect.width * 720;
+							var nearest = this.points[0];
+							for (var i = 1; i < this.points.length; i++) {
+								if (Math.abs(this.points[i].x - svgX) < Math.abs(nearest.x - svgX)) {
+									nearest = this.points[i];
+								}
+							}
+							this.cx = nearest.x;
+							this.cy = nearest.y;
+							this.valueText = nearest.v.toFixed(1) + this.unit;
+							this.timeText = nearest.t;
+							this.active = true;
+						},
+						onLeave: function() { this.active = false; },
+						get tipStyle() {
+							return 'left:' + (this.cx / 720 * 100) + '%; top:' + (this.cy / 240 * 100) +
+								'%; color:' + this.color + '; border-color:' + this.color;
+						},
+						get timeStyle() {
+							return 'left:' + (this.cx / 720 * 100) + '%; color:' + this.color;
+						}
+					};
+				}
+			</script>
 		</body>
 	</html>
 }

@@ -505,6 +505,61 @@
   font-style: italic;
 }
 
+/* --- グラフのホバー十字ポインター + 値/時刻ツールチップ (Alpine: hoverChart) --- */
+/* 折れ線グラフ (24h/3d/7d の実測値) にマウスを合わせると、全高の縦点線 + 短い横点線の
+   十字ポインターと、最寄りの計測点の値 (系列色) ・時刻 (X軸) を表示する。 */
+.chart-wrapper {
+  position: relative;
+}
+/* 本体グラフ SVG は幅いっぱい・viewBox の縦横比 (720:240) で表示し、オーバーレイと寸法を揃える。 */
+.chart-wrapper > svg:not(.chart-hover) {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* オーバーレイ SVG: 本体と同じ viewBox で完全に重ねる。マウスは本体側で拾うため透過させる。 */
+.chart-hover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.ch-vline,
+.ch-hline {
+  stroke: #495057;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.ch-dot {
+  stroke: #fff;
+  stroke-width: 1;
+}
+/* 値ツールチップ: 計測点の右側に小箱で表示 (文字色/枠線色は系列色=温度橙/湿度青)。 */
+.chart-hover-tip {
+  position: absolute;
+  transform: translate(10px, -50%);
+  background: var(--color-surface);
+  border: 1px solid;
+  border-radius: var(--radius);
+  padding: 1px 6px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* X 軸の時刻ラベル: グラフ下端 (X 軸の行) に系列色で表示。 */
+.chart-hover-time {
+  position: absolute;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* --- センサーデータ履歴: フィルタとサマリ --- */
 /* インラインフォーム共通（.filter-form=履歴/readings の絞り込み, .rule-form=アラートルール追加）。
    flex 配置と form-group の伸縮を共有し、gap と min-width だけ各フォームで個別指定する */
