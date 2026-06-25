@@ -66,6 +66,21 @@ func periodSince(period string, now time.Time) time.Time {
 	}
 }
 
+// usesRawSeries は生データの折れ線 (実測値) で描く期間か判定する (24h/3d/7d)。
+// 30d のみ 1 か月ぶんの生データが過密になるため日次 max/min 集計に集約する。
+func usesRawSeries(period string) bool {
+	return period != "30d"
+}
+
+// rawLabelFor は生データ折れ線の X ラベル整形関数を period から選ぶ。
+// 24h は時刻のみ "HH:MM"、複数日 (3d/7d) は日跨ぎで時刻が重複するため日付付き "M/D HH:MM"。
+func rawLabelFor(period string) func(pgtype.Timestamptz) string {
+	if period == defaultPeriod {
+		return hourMinuteLabel
+	}
+	return dayTimeLabel
+}
+
 // Show はデバイス詳細フルページを描画する (GET /devices/:device・RequireAuth 前提)。
 // 非数値 ID→400、任意 ?period(既定24h・不正→400)、所有者認可(不在/非所有→404 列挙防止)、
 // デバイス情報＋最新10件＋期間別グラフを取得して 1 ページを 200 で返す。DB 想定外は 500。
@@ -195,12 +210,13 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 }
 
 // buildChartArea は period に応じてグラフデータを取得し、温度/湿度 SVG を生成した
-// グラフ領域 View を返す。24h=生データ1系列、3d/7d/30d=日次 max/min の2系列
-// (24h のみ生データ詳細・複数日は日次集計、という設計閾値に 3d を複数日側として乗せる)。
+// グラフ領域 View を返す。24h/3d/7d=生データ1系列 (実測値の折れ線)、30d=日次 max/min の2系列
+// (1 か月は生データだと過密なため日次集計に集約する、という設計閾値)。
+// X ラベルは 24h が "HH:MM"、3d/7d は日跨ぎのため "M/D HH:MM"、30d は日付 "MM-DD"。
 func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	var tempSeries, humSeries []chart.Series
 
-	if period == defaultPeriod {
+	if usesRawSeries(period) {
 		rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
 			DeviceID:   deviceID,
 			RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
@@ -208,7 +224,7 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 		if err != nil {
 			return component.DeviceChartAreaView{}, err
 		}
-		tempSeries, humSeries = rawSeries(rows)
+		tempSeries, humSeries = rawSeries(rows, rawLabelFor(period))
 	} else {
 		rows, err := h.Repo.ListDailySensorAggregates(ctx, repository.ListDailySensorAggregatesParams{
 			DeviceID:   deviceID,
@@ -228,15 +244,16 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 	}, nil
 }
 
-// rawSeries は 24h 生データ行を温度/湿度それぞれ1系列 (折れ線) へ写像する。
-// X ラベルは計測時刻の "HH:MM"。0 件なら空 Points の系列を返す (空グラフ分岐は chart 側)。
-func rawSeries(rows []repository.SensorReading) (temp, hum []chart.Series) {
+// rawSeries は生データ行を温度/湿度それぞれ1系列 (折れ線) へ写像する。
+// X ラベルは label で整形する (24h は "HH:MM"、複数日は "M/D HH:MM")。
+// 0 件なら空 Points の系列を返す (空グラフ分岐は chart 側)。
+func rawSeries(rows []repository.SensorReading, label func(pgtype.Timestamptz) string) (temp, hum []chart.Series) {
 	tempPts := make([]chart.Point, 0, len(rows))
 	humPts := make([]chart.Point, 0, len(rows))
 	for _, r := range rows {
-		label := hourMinuteLabel(r.RecordedAt)
-		tempPts = append(tempPts, chart.Point{Label: label, Y: pgconv.NumericToFloat(r.Temperature)})
-		humPts = append(humPts, chart.Point{Label: label, Y: pgconv.NumericToFloat(r.Humidity)})
+		l := label(r.RecordedAt)
+		tempPts = append(tempPts, chart.Point{Label: l, Y: pgconv.NumericToFloat(r.Temperature)})
+		humPts = append(humPts, chart.Point{Label: l, Y: pgconv.NumericToFloat(r.Humidity)})
 	}
 	return []chart.Series{{Points: tempPts}}, []chart.Series{{Points: humPts}}
 }
@@ -311,6 +328,12 @@ func lastCommAbsText(d repository.Device) string {
 // hourMinuteLabel は計測時刻 (instant) を JST に変換し 24h グラフの X ラベル "HH:MM" に整形する。
 func hourMinuteLabel(ts pgtype.Timestamptz) string {
 	return pgconv.TimestamptzToTime(ts).In(jst).Format("15:04")
+}
+
+// dayTimeLabel は計測時刻 (instant) を JST に変換し 3d/7d グラフの X ラベル "M/D HH:MM" に整形する。
+// 24h の "HH:MM" と異なり日跨ぎで時刻が重複するため、日付を併記して区別できるようにする。
+func dayTimeLabel(ts pgtype.Timestamptz) string {
+	return pgconv.TimestamptzToTime(ts).In(jst).Format("1/2 15:04")
 }
 
 // monthDayLabel は集計日を 3d/7d/30d グラフの X ラベル "MM-DD" に整形する。

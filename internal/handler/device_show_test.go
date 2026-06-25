@@ -222,11 +222,12 @@ func TestShow_未通信と未設定のフォールバック表示(t *testing.T) 
 	}
 }
 
-func TestShow_period7dで日次集計と7dアクティブ(t *testing.T) {
+func TestShow_period7dは生データ折れ線と7dアクティブ(t *testing.T) {
 	repo := showDeviceRepo()
-	repo.dailyAggs = []repository.ListDailySensorAggregatesRow{
-		dailyAggRow(time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC), 30.0, 18.0, 70.0, 40.0),
-		dailyAggRow(time.Date(2026, 4, 19, 0, 0, 0, 0, time.UTC), 31.0, 19.0, 72.0, 42.0),
+	// 7d は 24h と同じ生データ折れ線。複数日のため X ラベルは "M/D HH:MM" (日付併記)。
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00), // 14:00 JST
+		sensorRow(1, time.Date(2026, 4, 19, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
 	}
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
@@ -238,19 +239,22 @@ func TestShow_period7dで日次集計と7dアクティブ(t *testing.T) {
 	if !activeButtonHas(body, "7日間") {
 		t.Errorf("7日間 がアクティブでない:\n%s", body)
 	}
-	// 日次2系列 → 凡例 (最高/最低) と日付ラベルが出る
-	for _, want := range []string{"最高", "最低", "04-18", "04-19", "31.0", "18.0"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("7d グラフに %q が含まれていない", want)
+	// 生データ1系列 → 日付付き時刻ラベル "M/D HH:MM" が出る。日次集計の凡例 (最高/最低) は出ない。
+	if !strings.Contains(body, "4/18 14:00") || !strings.Contains(body, "4/19 14:00") {
+		t.Errorf("7d 生データの日付時刻ラベル(JST)が無い:\n%s", body)
+	}
+	for _, ng := range []string{"最高", "最低"} {
+		if strings.Contains(body, ng) {
+			t.Errorf("7d は生データ折れ線のはずだが日次集計の凡例 %q が含まれる:\n%s", ng, body)
 		}
 	}
 }
 
-func TestShow_period3dで日次集計と3dアクティブ(t *testing.T) {
+func TestShow_period3dは生データ折れ線と3dアクティブ(t *testing.T) {
 	repo := showDeviceRepo()
-	repo.dailyAggs = []repository.ListDailySensorAggregatesRow{
-		dailyAggRow(time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC), 30.0, 18.0, 70.0, 40.0),
-		dailyAggRow(time.Date(2026, 4, 19, 0, 0, 0, 0, time.UTC), 31.0, 19.0, 72.0, 42.0),
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00), // 14:00 JST
+		sensorRow(1, time.Date(2026, 4, 19, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
 	}
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
@@ -262,10 +266,13 @@ func TestShow_period3dで日次集計と3dアクティブ(t *testing.T) {
 	if !activeButtonHas(body, "3日間") {
 		t.Errorf("3日間 がアクティブでない:\n%s", body)
 	}
-	// 3d は複数日扱い=日次2系列 → 凡例 (最高/最低) と日付ラベルが出る (24h の生データ経路ではない)
-	for _, want := range []string{"最高", "最低", "04-18", "04-19", "31.0", "18.0"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("3d グラフに %q が含まれていない", want)
+	// 3d は 24h と同じ生データ折れ線。日付付き時刻ラベルが出て、日次集計の凡例は出ない。
+	if !strings.Contains(body, "4/18 14:00") || !strings.Contains(body, "4/19 14:00") {
+		t.Errorf("3d 生データの日付時刻ラベル(JST)が無い:\n%s", body)
+	}
+	for _, ng := range []string{"最高", "最低"} {
+		if strings.Contains(body, ng) {
+			t.Errorf("3d は生データ折れ線のはずだが日次集計の凡例 %q が含まれる:\n%s", ng, body)
 		}
 	}
 }
@@ -404,9 +411,9 @@ func hxGet(r http.Handler, path string) *httptest.ResponseRecorder {
 
 func TestChart_HXリクエストでグラフ領域フラグメントのみ返す(t *testing.T) {
 	repo := showDeviceRepo()
-	repo.dailyAggs = []repository.ListDailySensorAggregatesRow{
-		dailyAggRow(time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC), 30.0, 18.0, 70.0, 40.0),
-		dailyAggRow(time.Date(2026, 4, 19, 0, 0, 0, 0, time.UTC), 31.0, 19.0, 72.0, 42.0),
+	repo.recentReadings = []repository.SensorReading{ // 7d は生データ折れ線経路
+		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00),
+		sensorRow(1, time.Date(2026, 4, 19, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
 	}
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
@@ -502,15 +509,15 @@ func TestChart_24hは生データで取得(t *testing.T) {
 	}
 }
 
-func TestChart_3dは日次集計で取得(t *testing.T) {
+func TestChart_3dは生データで取得(t *testing.T) {
 	repo := showDeviceRepo()
-	repo.dailyAggs = []repository.ListDailySensorAggregatesRow{
-		dailyAggRow(time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC), 30.0, 18.0, 70.0, 40.0),
-		dailyAggRow(time.Date(2026, 4, 19, 0, 0, 0, 0, time.UTC), 31.0, 19.0, 72.0, 42.0),
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00), // 14:00 JST
+		sensorRow(1, time.Date(2026, 4, 19, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
 	}
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
-	// oneof バインディングが 3d を受理し (400 にならず)、複数日=日次集計経路を通る
+	// oneof バインディングが 3d を受理し (400 にならず)、24h と同じ生データ折れ線経路を通る
 	w := hxGet(r, "/devices/1/chart?period=3d")
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d, want 200 (3d は許容値・R8.2)", w.Code)
@@ -519,9 +526,35 @@ func TestChart_3dは日次集計で取得(t *testing.T) {
 	if !activeButtonHas(body, "3日間") {
 		t.Errorf("3日間 がアクティブでない:\n%s", body)
 	}
-	for _, want := range []string{"最高", "最低", "04-18"} {
+	// 生データ折れ線 → 日付付き時刻ラベル。日次集計の凡例は出ない。
+	if !strings.Contains(body, "4/18 14:00") {
+		t.Errorf("3d 生データの日付時刻ラベルが無い:\n%s", body)
+	}
+	if strings.Contains(body, "最高") || strings.Contains(body, "最低") {
+		t.Errorf("3d は生データ折れ線のはずだが日次集計の凡例が含まれる:\n%s", body)
+	}
+}
+
+func TestChart_30dは日次集計で取得(t *testing.T) {
+	repo := showDeviceRepo()
+	// 30d のみ日次 max/min 集計 (2系列: 最高 実線 / 最低 破線)。X ラベルは "MM-DD"。
+	repo.dailyAggs = []repository.ListDailySensorAggregatesRow{
+		dailyAggRow(time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC), 30.0, 18.0, 70.0, 40.0),
+		dailyAggRow(time.Date(2026, 4, 19, 0, 0, 0, 0, time.UTC), 31.0, 19.0, 72.0, 42.0),
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := hxGet(r, "/devices/1/chart?period=30d")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	if !activeButtonHas(body, "30日間") {
+		t.Errorf("30日間 がアクティブでない:\n%s", body)
+	}
+	for _, want := range []string{"最高", "最低", "04-18", "04-19"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("3d グラフに %q が含まれていない (日次集計経路)", want)
+			t.Errorf("30d グラフに %q が含まれていない (日次集計経路)", want)
 		}
 	}
 }
