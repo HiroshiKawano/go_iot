@@ -42,6 +42,9 @@ func TestSidebar_ナビゲーションリンクを描画(t *testing.T) {
 	assertContains(t, html, `href="/alerts/rules"`)
 	assertContains(t, html, `href="/alerts/history"`)
 	assertContains(t, html, "ダッシュボード")
+	// Alpine の開閉バインディングはサーバ HTML へ属性として出力される
+	// (§4.11: 後付け状態クラスでなく、それを駆動する :class バインディングの存在を検証)。
+	assertContains(t, html, `:class="{ 'is-open': navOpen }"`)
 }
 
 func TestFlashMessage_メッセージ未指定でも領域を描画(t *testing.T) {

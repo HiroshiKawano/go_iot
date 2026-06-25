@@ -49,6 +49,10 @@ func TestLatestReadingsTable_0件で空メッセージとtbody常設(t *testing.
 	// tbody（id）は 0 件でも常設（HTMX ターゲットを失わない）
 	assertContains(t, html, `id="latest-readings-table"`)
 	assertContains(t, html, "計測データはまだありません。")
+	// thead は常設なので 0 件でも列見出しは描画される（非空テストと対称・§4.16）
+	for _, h := range []string{"計測日時", "温度(℃)", "湿度(%)"} {
+		assertContains(t, html, h)
+	}
 	if strings.Contains(html, "<td>") {
 		t.Errorf("0 件なのにデータ行が描画されている:\n%s", html)
 	}

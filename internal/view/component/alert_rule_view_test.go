@@ -75,6 +75,10 @@ func TestAlertRuleList_N件で行を描画(t *testing.T) {
 	assertContains(t, html, "data-table")
 	assertContains(t, html, `id="alert-rule-row-1"`)
 	assertContains(t, html, `id="alert-rule-row-2"`)
+	// 列見出し (有効/指標/条件/閾値/操作) — thead 削除や 0 件分岐の取り違え回帰を検出 (§4.16)
+	for _, h := range []string{"有効", "指標", "条件", "閾値", "操作"} {
+		assertContains(t, html, h)
+	}
 	if n := strings.Count(html, `id="alert-rule-row-`); n != 2 {
 		t.Errorf("行数: got %d, want 2", n)
 	}

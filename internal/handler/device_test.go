@@ -554,6 +554,29 @@ func TestUpdate_正常時は更新して303(t *testing.T) {
 	}
 }
 
+// TestUpdate_設置場所未入力時はnilで更新する は、空 location が「未設定」(nil) として
+// 保存される R2 AC3 の契約を固定する (locationPtr("")→nil)。Create 側 (空→nil) と対称。
+// location は常時送信される通常入力で disabled ではないため、空=ユーザーの明示クリアであり、
+// 移植知見 §12.3 (disabled→未送信→null 上書き) は当てはまらない。その誤適用を防ぐ characterization。
+func TestUpdate_設置場所未入力時はnilで更新する(t *testing.T) {
+	repo := ownedDevice1Repo() // 既存 device1 の Location は "旧場所"
+	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	vals := validDeviceVals()
+	vals.Set("location", "") // 空送信 = 未設定 (明示クリア)
+	w := formRequest(r, http.MethodPut, "/devices/1", vals)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d, want 303 (body=%s)", w.Code, w.Body.String())
+	}
+	if !repo.updateCalled {
+		t.Fatal("UpdateDevice が呼ばれていない")
+	}
+	if repo.lastUpdate.Location != nil {
+		t.Errorf("Location=%v, want nil (空 location は未設定・R2 AC3)", repo.lastUpdate.Location)
+	}
+}
+
 func TestUpdate_自身のMAC据置は許可して303(t *testing.T) {
 	repo := ownedDevice1Repo()
 	// 自身の現在 MAC が byMac にヒットするが、existing.ID==id なので重複扱いしない

@@ -295,6 +295,13 @@ func TestAlertRuleAdd_成功で新ルールとフォーム空(t *testing.T) {
 	if repo.lastCreate.DeviceID != 200 {
 		t.Errorf("CreateAlertRule.DeviceID=%d, want 200", repo.lastCreate.DeviceID)
 	}
+	// 指標・条件がフォーム値どおり保存される (ラベルや空文字の誤送信を検出・§4.12/§4.13)。
+	if repo.lastCreate.Metric != "temperature" {
+		t.Errorf("CreateAlertRule.Metric=%q, want temperature", repo.lastCreate.Metric)
+	}
+	if repo.lastCreate.Operator != ">" {
+		t.Errorf("CreateAlertRule.Operator=%q, want >", repo.lastCreate.Operator)
+	}
 	body := w.Body.String()
 	if !strings.Contains(body, `id="alert-rule-row-11"`) {
 		t.Error("新ルールが一覧に現れるべき")
