@@ -65,6 +65,17 @@ func TestApp_TomSelectアセットと422swap設定を加算(t *testing.T) {
 	assertContains(t, html, "htmx.config.responseHandling")
 	assertContains(t, html, `{code: "422", swap: true}`)
 
+	// [45].. には error: true を付与する (全置換で htmx 既定の error: true を書き落とすと
+	// htmx:responseError が発火せず §14 のエラートーストが死にコード化するため)
+	assertContains(t, html, `{code: "[45]..", swap: false, error: true}`)
+
+	// §14 グローバルエラー通知トースト + htmx:responseError/sendError ハンドラ。
+	// error: true とセットで機能する。401 セッションタイムアウト分岐 (/login 遷移) を含む。
+	assertContains(t, html, `id="global-error-toast"`)
+	assertContains(t, html, "htmx:responseError")
+	assertContains(t, html, "htmx:sendError")
+	assertContains(t, html, "__sessionExpiredHandled")
+
 	// 既存の CSRF 機構 (meta + htmx:configRequest) は不変
 	assertContains(t, html, "htmx:configRequest")
 	assertContains(t, html, `name="csrf-token"`)

@@ -140,8 +140,9 @@ func TestIntegration_CSRF通しのログインフロー(t *testing.T) {
 	}
 }
 
-// TestIntegration_CSRFトークン不正は403 は、正規 cookie でも誤ったトークンなら拒否されることを確認する。
-func TestIntegration_CSRFトークン不正は403(t *testing.T) {
+// TestIntegration_CSRFトークン不正は419 は、正規 cookie でも誤ったトークンなら拒否されることを確認する。
+// CSRF 失敗は BOLA 認可拒否 (403) と区別するため 419 (middleware.StatusCSRFExpired) を返す。
+func TestIntegration_CSRFトークン不正は419(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{AppEnv: "development", SessionSecret: "0123456789abcdef0123456789abcdef"}
 	sm := scs.New()
@@ -162,7 +163,7 @@ func TestIntegration_CSRFトークン不正は403(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Errorf("不正トークン POST /login = %d, want 403", w.Code)
+	if w.Code != 419 { // middleware.StatusCSRFExpired
+		t.Errorf("不正トークン POST /login = %d, want 419", w.Code)
 	}
 }

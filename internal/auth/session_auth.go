@@ -19,6 +19,9 @@ import (
 // sessionKeyUserID はセッションに格納するログインユーザー ID のキー。
 const sessionKeyUserID = "user_id"
 
+// sessionKeyFlash は遷移先で 1 回だけ表示するフラッシュメッセージのキー。
+const sessionKeyFlash = "flash"
+
 // NewSessionManager は scs の SessionManager を PostgreSQL ストア (pgxstore) で構築する。
 // セッションテーブル sessions は migration で作成済みであることを前提とする。
 //
@@ -69,4 +72,19 @@ func Logout(ctx context.Context, sm *scs.SessionManager) error {
 // 未ログイン (未設定) の場合は 0 を返す。
 func UserIDFromSession(ctx context.Context, sm *scs.SessionManager) int64 {
 	return sm.GetInt64(ctx, sessionKeyUserID)
+}
+
+// PutFlash は遷移先で 1 回だけ表示するフラッシュメッセージを session に格納する。
+// HX-Redirect / c.Redirect のいずれの遷移でも、遷移「前」に呼ぶことで遷移先の
+// PopFlash で読み出せる。HX-Redirect は本文なし応答だが、scs の LoadAndSave が
+// 応答時に store へ確定するため遷移先リクエストへ運ばれる
+// (詳細は 2cc_sdd/HTMX実装ガイド(動的).md §9.1)。
+func PutFlash(ctx context.Context, sm *scs.SessionManager, msg string) {
+	sm.Put(ctx, sessionKeyFlash, msg)
+}
+
+// PopFlash はフラッシュメッセージを読み取り、同時に session から削除する (1 回限り表示)。
+// メッセージが無い場合は空文字を返す。
+func PopFlash(ctx context.Context, sm *scs.SessionManager) string {
+	return sm.PopString(ctx, sessionKeyFlash)
 }

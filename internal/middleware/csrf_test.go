@@ -36,12 +36,39 @@ func newCSRFRouter() *gin.Engine {
 	return r
 }
 
-func TestCSRF_トークン無しのPOSTは403(t *testing.T) {
+func TestCSRF_トークン無しのPOSTは419(t *testing.T) {
 	r := newCSRFRouter()
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/submit", nil))
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("トークン無し POST: got %d, want 403", w.Code)
+	// CSRF 失敗は BOLA 認可拒否 (403) と区別するため 419 を返す (StatusCSRFExpired)
+	if w.Code != StatusCSRFExpired {
+		t.Fatalf("トークン無し POST: got %d, want %d", w.Code, StatusCSRFExpired)
+	}
+}
+
+func TestCSRF_HTMX失敗は本文なし419_非HTMXは誘導本文あり419(t *testing.T) {
+	r := newCSRFRouter()
+
+	// HTMX (HX-Request 有): 本文なし 419 (フロントの 419 分岐がトースト表示)
+	hw := httptest.NewRecorder()
+	hreq := httptest.NewRequest(http.MethodPost, "/submit", nil)
+	hreq.Header.Set("HX-Request", "true")
+	r.ServeHTTP(hw, hreq)
+	if hw.Code != StatusCSRFExpired {
+		t.Fatalf("HTMX CSRF 失敗: got %d, want %d", hw.Code, StatusCSRFExpired)
+	}
+	if hw.Body.Len() != 0 {
+		t.Errorf("HTMX は本文なし 419 のはず: body=%q", hw.Body.String())
+	}
+
+	// 非 HTMX フルページ送信: ログイン誘導の本文あり 419
+	fw := httptest.NewRecorder()
+	r.ServeHTTP(fw, httptest.NewRequest(http.MethodPost, "/submit", nil))
+	if fw.Code != StatusCSRFExpired {
+		t.Fatalf("非HTMX CSRF 失敗: got %d, want %d", fw.Code, StatusCSRFExpired)
+	}
+	if fw.Body.Len() == 0 {
+		t.Error("非 HTMX は誘導本文を含む 419 のはず")
 	}
 }
 

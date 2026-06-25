@@ -299,6 +299,22 @@
   margin-top: var(--space-1);
   min-height: 1em;
 }
+/* HTMX グローバルエラー通知トースト (App.templ #global-error-toast)。
+   インラインのフィールド検証エラー .error-message とは別物のため独立クラスにする。 */
+.error-toast {
+  position: fixed;
+  top: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  max-width: 90%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-danger);
+  color: var(--color-surface);
+  font-size: var(--fs-sm);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
 .radio-group { display: flex; gap: var(--space-4); }
 .radio-group label { font-weight: normal; }
 

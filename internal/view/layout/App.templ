@@ -18,6 +18,9 @@ type AppLayoutData struct {
 // 加えて検索可能 select 用の Tom Select アセット (CDN 2.3.1) と一括初期化 (select.js-tom-select)、
 // およびインライン CRUD のバリデーション部分返却を差し替えさせる
 // htmx.config.responseHandling (422 を swap 対象に含める) を同梱する。
+// [45].. には error: true を付与する。全置換で htmx 既定の error: true を書き落とすと
+// htmx:responseError が発火せず §14 のグローバルエラートーストが死にコード化するため
+// (詳細は 2cc_sdd/HTMX実装ガイド(動的).md §7・§14)。
 templ App(data AppLayoutData) {
 	<!DOCTYPE html>
 	<html lang="ja">
@@ -50,8 +53,48 @@ templ App(data AppLayoutData) {
 					{code: "204", swap: false},
 					{code: "[23]..", swap: true},
 					{code: "422", swap: true},
-					{code: "[45]..", swap: false}
+					{code: "[45]..", swap: false, error: true}
 				];
+			</script>
+			<div id="global-error-toast" class="error-toast" role="alert" style="display:none;">
+				<span id="global-error-toast-text"></span>
+			</div>
+			<script>
+				// HTMX グローバルエラー通知トースト。responseHandling の [45].. error:true とセットで機能する
+				// (詳細は 2cc_sdd/HTMX実装ガイド(動的).md §14)。Alpine 非依存の純 JS で、Alpine 未ロード時も表示する。
+				(function() {
+					var toast = document.getElementById('global-error-toast');
+					var msgEl = document.getElementById('global-error-toast-text');
+					var hideTimer = null;
+					function showError(message) {
+						if (!toast || !msgEl) return;
+						msgEl.textContent = message;
+						toast.style.display = '';
+						if (hideTimer) clearTimeout(hideTimer);
+						hideTimer = setTimeout(function() { toast.style.display = 'none'; }, 5000);
+					}
+					document.addEventListener('htmx:responseError', function(event) {
+						var status = event.detail.xhr ? event.detail.xhr.status : 0;
+						// 401 (セッションタイムアウト): トースト通知後 /login へ遷移 (無言ログアウト防止)
+						if (status === 401) {
+							if (window.__sessionExpiredHandled) return; // 多重発火抑止
+							window.__sessionExpiredHandled = true;
+							showError('セッションが切れました。ログイン画面へ移動します。');
+							setTimeout(function() { window.location.href = '/login'; }, 1500);
+							return;
+						}
+						var message = '';
+						if (status === 403) message = 'アクセス権限がありません。';          // 認可拒否 (CSRF は 419 で分離)
+						else if (status === 404) message = '対象が見つかりません。';
+						else if (status === 419) message = 'セッションが切れました。ページを再読み込みしてください。'; // CSRF/セッション
+						else if (status >= 500) message = 'サーバーエラーが発生しました。しばらく後に再度お試しください。';
+						if (message) showError(message);
+					});
+					// ネットワークエラー (接続失敗・タイムアウト)
+					document.addEventListener('htmx:sendError', function() {
+						showError('ネットワークエラーが発生しました。接続を確認してください。');
+					});
+				})();
 			</script>
 			<script>
 				function initTomSelect(root) {

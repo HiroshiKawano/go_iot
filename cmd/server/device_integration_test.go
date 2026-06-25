@@ -238,7 +238,7 @@ func TestIntegration_認証済みCSRF往復で登録が303(t *testing.T) {
 	}
 }
 
-func TestIntegration_認証済みでもCSRFトークン欠落のPOSTは403(t *testing.T) {
+func TestIntegration_認証済みでもCSRFトークン欠落のPOSTは419(t *testing.T) {
 	app := deviceApp(nil, repository.Device{ID: 10, UserID: 1}, repository.Device{})
 	cookies := loginCookies(t, app)
 
@@ -248,9 +248,10 @@ func TestIntegration_認証済みでもCSRFトークン欠落のPOSTは403(t *te
 		"is_active":   {"1"},
 		// gorilla.csrf.Token なし
 	}
+	// CSRF 失敗は BOLA 認可拒否 (403) と区別するため 419 (middleware.StatusCSRFExpired) を返す。
 	w := postFormWithCookies(app, "/devices", form, cookies)
-	if w.Code != http.StatusForbidden {
-		t.Errorf("トークン欠落 POST /devices = %d, want 403", w.Code)
+	if w.Code != 419 { // middleware.StatusCSRFExpired
+		t.Errorf("トークン欠落 POST /devices = %d, want 419", w.Code)
 	}
 }
 

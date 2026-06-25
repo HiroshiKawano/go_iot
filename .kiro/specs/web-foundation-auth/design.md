@@ -264,9 +264,9 @@ func CSRF(cfg config.Config) gin.HandlerFunc // gorilla/csrf.Protect を gin に
 func csrfAuthKey(secret string) []byte       // sha256(secret) → 32 bytes（dev で <32 でも安全）
 ```
 - `csrf.Protect(csrfAuthKey(cfg.SessionSecret), csrf.Secure(prod), csrf.Path("/"))` を生成。既定ヘッダ `X-CSRF-Token`・既定フィールド `gorilla.csrf.Token` を使用。
-- gin 適応: protect でラップした `http.HandlerFunc` 内で `c.Request = r; c.Next()` し、未到達なら（CSRF 拒否で 403 済）`c.Abort()`。**web グループのみに適用**し /api（Bearer）は除外（8.1, Out of Boundary）。
+- gin 適応: protect でラップした `http.HandlerFunc` 内で `c.Request = r; c.Next()` し、未到達なら（CSRF 拒否で 419 済）`c.Abort()`。**web グループのみに適用**し /api（Bearer）は除外（8.1, Out of Boundary）。
 - ハンドラ/テンプレ用トークン取得: `csrf.Token(c.Request)`（GET 表示時に呼ぶと Cookie が発行され、フォーム hidden / meta に埋める）。
-- 失敗時: 無効/欠落トークンの状態変更リクエストは gorilla が 403 を返す（8.2）。
+- 失敗時: 無効/欠落トークンの状態変更リクエストは gorilla（`csrf.ErrorHandler`）が **419（`StatusCSRFExpired`）** を返す（8.2）。BOLA 認可拒否の 403 とフロントで区別するための分離（2026-06-25 適用。HTMX実装ガイド(動的).md §14 補完②）。
 - **採用根拠**: セキュリティ実装の自前化を避け battle-tested を adopt。utrack/gin-csrf は gin-contrib/sessions 依存で scs と二重化するため不採用。詳細は `research.md`。
 
 #### MethodOverride（http.Handler・基盤）
@@ -385,7 +385,7 @@ type RegisterForm struct {
 - **入力検証失敗（4xx 相当だが UX 上 200 再描画）**: field error map を templ に渡し同一フォーム再描画（2.4, 3.3–3.7）。
 - **認証失敗（不在/不一致）**: generic メッセージで 200 再描画（2.3・列挙防止）。
 - **email 重複**: 「このメールアドレスは既に登録されています」で 200 再描画（3.7）。
-- **CSRF 失敗**: gorilla/csrf が 403（8.2）。
+- **CSRF 失敗**: gorilla/csrf（`csrf.ErrorHandler`）が 419（`StatusCSRFExpired`・8.2。BOLA 認可拒否 403 と区別）。
 - **DB/内部失敗**: 500 + 機密非漏洩の簡潔メッセージ（11.4）。`pgx.ErrNoRows` は login/register では業務分岐（不在/新規）に使い 500 にしない。
 
 ### Monitoring
@@ -407,7 +407,7 @@ type RegisterForm struct {
 - `POST /logout`: セッション破棄→303 /login、以後 /dashboard は 302 /login（4.1, 4.2）。
 - `GET /dashboard`: 未認証→302 /login / 認証済→200 + ユーザー名（5.1, 6.1）。
 - `GET /`: 認証で /dashboard、未認証で /login（5.3, 5.4）。
-- CSRF: トークン無し POST→403 / 有り→通過（8.1, 8.2）。
+- CSRF: トークン無し POST→419（`StatusCSRFExpired`）/ 有り→通過（8.1, 8.2）。
 - テンプレ生成: `page.Login`/`page.Register` が `.error-message` にメッセージを描画、`App` が `#main-content`/`#flash-message`/csrf meta を含む（7.x, 8.4）。
 
 ### カバレッジ
@@ -418,7 +418,7 @@ type RegisterForm struct {
 - **セッション**: opaque 43 文字ランダムトークン + `HttpOnly`/`SameSite=Lax`/`Secure`(prod)。ログイン時 `RenewToken`（固定攻撃）・ログアウト時 `Destroy`（1.5, 4.1）。
 - **CSRF**: gorilla/csrf で全ミューテーションを保護（web グループ）。authKey は `sha256(SESSION_SECRET)`。`SESSION_SECRET` 未設定/本番 <32 文字は config が起動時に失敗（1.4・既存検証を活用）。
 - **ユーザー列挙防止**: login 失敗は不在/不一致を区別しない共通メッセージ（2.3）。
-- **境界**: /api（Bearer・機械間）は CSRF 非適用（誤適用すると 403 で取込停止するため明示除外）。
+- **境界**: /api（Bearer・機械間）は CSRF 非適用（誤適用すると 419 で取込停止するため明示除外）。
 
 ## Supporting References
 - 候補比較・出典 URL・scs/gorilla API 詳細・Gin メソッド上書き制約の調査ログは `research.md`（§4, §5, §6, §7）。

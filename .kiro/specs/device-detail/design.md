@@ -377,7 +377,7 @@ SELECT * FROM sensor_readings
 | Auth | 未認証 | RequireAuth が 302 → /login | 7.1 |
 | Not Found | 不在/論理削除デバイス、または閲覧系(Show/Chart)の他ユーザー所有 | 404（列挙防止・存在を明かさない） | 7.2 |
 | Forbidden | 削除(Delete)の他ユーザー所有 | 403（BOLA を明示） | 7.3 |
-| CSRF | DELETE にトークン無し | gorilla/csrf が 403 | 6.6 |
+| CSRF | DELETE にトークン無し | gorilla/csrf が 419（`StatusCSRFExpired`・BOLA 403 と区別） | 6.6 |
 | System 5xx | DB 取得/削除の想定外エラー | 500「エラーが発生しました…」 | 8.3 |
 | 正常(空) | 計測 0 件 | 200 + 空グラフ SVG + テーブル空メッセージ | 4.5,5.5 |
 
@@ -400,7 +400,7 @@ SELECT * FROM sensor_readings
 - Chart（`HX-Request: true`）: `DeviceChartArea` フラグメントのみ（`<html>`/サイドバー非包含）、要求 period の `active`、温度/湿度 SVG 2 つ、`latest-readings-table` 非包含。
 - Delete: `HX-Request` 有→200 + `HX-Redirect: /dashboard` ヘッダ・`SoftDeleteDevice` 呼出を確認 / 無→303 + `Location: /dashboard`。
 - Authz/Validation: 他ユーザー所有→404、不在→404、非数値 id→400、period 不正→400、DB エラー注入→500。
-- CSRF: GET でトークン往復 → DELETE 成功 / トークン無 DELETE→403（gorilla/csrf、dev は `csrf.PlaintextHTTPRequest`）。
+- CSRF: GET でトークン往復 → DELETE 成功 / トークン無 DELETE→419（`StatusCSRFExpired`・BOLA 403 と区別。gorilla/csrf、dev は `csrf.PlaintextHTTPRequest`）。
 - 空データ: 計測 0 件で Show/Chart が空グラフ + テーブル空メッセージ。
 
 ### templ Tests

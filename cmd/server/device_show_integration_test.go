@@ -168,13 +168,14 @@ func TestIntegration_非HTMXフォームDELETEは303でダッシュボードへ(
 	}
 }
 
-func TestIntegration_CSRFトークン欠落のDELETEは403(t *testing.T) {
+func TestIntegration_CSRFトークン欠落のDELETEは419(t *testing.T) {
 	app := showApp()
 	cookies := loginCookies(t, app)
 
-	// トークン無しの HTMX DELETE → gorilla/csrf が 403
+	// トークン無しの HTMX DELETE → gorilla/csrf が拒否。CSRF 失敗は BOLA 認可拒否 (403) と
+	// 区別するため 419 (middleware.StatusCSRFExpired) を返す。
 	w := deleteWithCookies(app, "/devices/1", map[string]string{"HX-Request": "true"}, cookies)
-	if w.Code != http.StatusForbidden {
-		t.Errorf("トークン欠落 DELETE /devices/1 = %d, want 403", w.Code)
+	if w.Code != 419 { // middleware.StatusCSRFExpired
+		t.Errorf("トークン欠落 DELETE /devices/1 = %d, want 419", w.Code)
 	}
 }

@@ -394,7 +394,7 @@ type AlertRulesPageView struct {
 4. Update: 成功で値反映 + `is_enabled` 保全（更新前後で有効状態不変）+ 空フォーム / 422 で編集フォーム保持 / 404 / 403（要件 5）。
 5. Toggle: `AlertRuleRow` outerHTML で `is_enabled` 反転、他行非依存（返却 HTML に当該行のみ）/ 404 / 403（要件 6）。
 6. Delete: `SoftDeleteAlertRule` 呼び出し記録 + `AlertRuleList` 再描画（削除行が消える、最後の 1 件削除で空状態）/ 404 / 403（要件 7）。
-7. 認証: 全ルートが未認証で 302 /login（RequireAuth 経由、§6）。CSRF: ミューテーションが `X-CSRF-Token` 欠如で 403（gorilla/csrf、§48/§50。dev は `csrf.PlaintextHTTPRequest`）。
+7. 認証: 全ルートが未認証で 302 /login（RequireAuth 経由、§6）。CSRF: ミューテーションが `X-CSRF-Token` 欠如で 419（`StatusCSRFExpired`・BOLA 認可拒否 403 と区別。gorilla/csrf の `ErrorHandler`、§48/§50。dev は `csrf.PlaintextHTTPRequest`）。
 
 ### View Tests（view/.../*_test.go、templ Render→bytes.Buffer→strings.Contains）
 1. `page.AlertRules`: デバイス選択 `select.js-tom-select`・`#alert-rule-section`・空追加フォームを含む（要件 1）。

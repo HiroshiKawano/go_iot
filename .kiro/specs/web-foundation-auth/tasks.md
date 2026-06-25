@@ -28,7 +28,7 @@
   - _Requirements: 9.1, 9.2_
 - [x] 2.3 CSRF ミドルウェア（web グループ限定）
   - gorilla/csrf を gin アダプタ化、authKey=sha256(SESSION_SECRET) で32バイト導出、既定ヘッダ X-CSRF-Token。ミドルウェア関数として提供（実配線は 5.1）
-  - 観測可能完了: 任意長 secret から32バイト鍵を導出。使い捨てルータに適用したユニットテストでトークン無し状態変更→403・有り→通過
+  - 観測可能完了: 任意長 secret から32バイト鍵を導出。使い捨てルータに適用したユニットテストでトークン無し状態変更→419（`StatusCSRFExpired`・BOLA 認可拒否 403 と区別。2026-06-25 適用）・有り→通過
   - _Requirements: 1.3, 1.4, 8.1, 8.2_
 - [x] 2.4 セッション橋渡しと認証ガード
   - SessionLoad（scs の user_id を `auth.SetUserID` で gin context へ）・RequireAuth（`auth.UserID<=0` で /login へ 302+Abort）

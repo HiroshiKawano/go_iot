@@ -1828,7 +1828,7 @@ func (h *AlertRuleHandler) Add(c *gin.Context) {
 
 ### 422 レスポンスの swap 設定
 
-**採用方針:** 共通レイアウト `internal/view/layout/App.templ` 内で `htmx.config.responseHandling` を設定し、422 をスワップ対象に含める。この JS はフレームワーク非依存なのでそのまま流用する。
+**採用方針:** 共通レイアウト `internal/view/layout/App.templ` 内で `htmx.config.responseHandling` を設定し、422 をスワップ対象に含める。この JS はフレームワーク非依存なのでそのまま流用する。**さらに `[45]..` には必ず `error: true` を付与する**（理由は下記の警告）。
 
 ```html
 <!-- App.templ の <body> 末尾（CSRF 設定と同じ箇所） -->
@@ -1836,11 +1836,19 @@ func (h *AlertRuleHandler) Add(c *gin.Context) {
     htmx.config.responseHandling = [
         {code: "204", swap: false},
         {code: "[23]..", swap: true},
-        {code: "422", swap: true},
-        {code: "[45]..", swap: false}
+        {code: "422", swap: true},                  // バリデーション: 本文（インラインエラー）を表示
+        {code: "[45]..", swap: false, error: true}  // その他の 4xx/5xx: 本文置換せず error 扱い（= htmx:responseError 発火）
     ];
 </script>
 ```
+
+> ⚠️ **`error: true` は必須（別プロジェクト〈Laravel・帳票管理〉の e2e で発見＝KDCS_PRJ-265 バグ⑦の教訓・📅 2026-06-25 移植）。**
+> htmx 2.x では `htmx:responseError` の発火条件は「マッチした `responseHandling` エントリの `error` が真であること」。
+> `htmx.config.responseHandling` を**全置換**すると、htmx 既定値 `{code:'[45]..', swap:false, error:true}` の **`error:true` を書き落としやすい**。
+> 書き落とすと **401/403/404/5xx すべてで `htmx:responseError` が発火せず**、§14 のグローバルエラーハンドラ（トースト通知）が**完全に死にコード化**する（エラーが無言になり、検索などの HTMX 操作後も古い内容が画面に残る）。
+> `swap: false` は維持するため本文置換は起きず、**エラーイベントの発火だけ**が復活する。個別 code を並べず `[45]..` 1 本で error 扱いにし、ステータス別の出し分けは §14 のハンドラ側で `status` 判定する。
+>
+> ✅ **2026-06-25 適用済み**: `internal/view/layout/App.templ` に `error: true` を追加し templ 再生成済み。回帰防止に `internal/view/layout/layout_test.go` で `{code: "[45]..", swap: false, error: true}` の存在をアサート。なお本プロジェクトは楽観ロック（§46 不採用）を使わないため、別プロジェクト版にある `{code:"409", swap:true}` は追加しない。
 
 > エラーメッセージは独立した id 要素ではなく、**フォームコンポーネント内にインライン（`.error-message` クラス）で含める**。templ では `errors` 引数を受け取り、該当項目があれば描画する。
 
@@ -2055,6 +2063,57 @@ templ DeviceReadingsList(deviceID string, readings []Reading, errors map[string]
 - 検索欄の既入力値を保ったままエラーを表示するには、同じビューを 200 で再描画する方が自然
 - HTMX 経由（`HX-Request` ヘッダ付き、`Accept` は HTML）の場合、`Accept` に `application/json` を含まないため HTML ブランチに入る。フラグメント返却と組み合わせると、検索ボタン押下で対象領域だけがエラー文言を含む空一覧に差し替わる
 
+### 反復項目（配列フォーム）の検証エラーは生フィールドパスを露出させず日本語ラベルで返す
+
+> 📅 2026-06-25 — 別プロジェクト（Laravel・帳票管理）の e2e で、複数行フォームの 422 フラグメントに生パス（`rows.0.work_idは必須です。`）が露出した事象（E2Eバグ③ / KDCS_PRJ-262）を移植。本プロジェクトは現状この種の反復フォームを持たないが、将来 1 画面で同種行を複数追加・一括編集する CRUD（例: アラート条件の複数行一括編集）を実装する際の指針。
+
+§7 冒頭の手動バリデーション（Handler 内で `map[string]string`〈フィールド→日本語メッセージ〉を組み、templ の `errors` 引数へ渡す）を**反復行へ拡張すると、エラーキーが `rows.0.work_id` のような添字付き生パスになりやすい**。これをそのままメッセージに混ぜると、422 フラグメントに生パスが露出する。
+
+**対策（Laravel の中央 `lang` 相当が Go には無いことが要点）:**
+- 日本語ラベルは**画面ローカル**に持つ。Laravel は中央 `lang/ja/validation.php` の `attributes` で解決するが、Go にこの仕組みは無いので、**そのフォーム専用の「フィールドキー → 日本語ラベル」マップを Handler（またはその画面の view パッケージ）に閉じて持つ**。`rows.*` は画面ごとに別物を指すため中央辞書に置くと衝突する、という Laravel 側の教訓はそのまま当てはまる。
+- メッセージは「ラベル＋定型文」で組み（`業種区分は必須です。` のように）、templ 側は受け取った日本語メッセージをそのまま描くだけにする。
+- 同一項目を区分コードごとに繰り返す場合（役職別など）は、コード→ラベルの対応を回して `errs["rows."+i+".user_id"] = label+"を指定してください。"` のように**コード別文言**を生成する。
+
+```go
+// 画面ローカルのラベル辞書（中央に置かない）
+var workRowLabels = map[string]string{"work_id": "作業", "staff_type": "担当区分", "amount": "金額"}
+
+for i, row := range rows {
+    if row.WorkID == 0 {
+        errs[fmt.Sprintf("rows.%d.work_id", i)] = workRowLabels["work_id"] + "は必須です。"
+    }
+}
+// → 「作業は必須です。」のように画面ラベルで返り、生パス rows.0.work_id は露出しない
+```
+
+**テスト**: 422 フラグメントの本文に生パス（`rows.0.` 等）が**含まれないこと**と、日本語ラベル文言が**含まれること**の両方をアサートする（§56.4 の 422 フラグメント検証と同型）。
+
+### 複数項目にまたがる必須要件は「フィールド名キー」でなく「セクションキー」で表示する
+
+> 📅 2026-06-25 — 別プロジェクト（Laravel・帳票管理）の通しテストで、「A・B の両方が必須」という要件メッセージが片方のフィールド横にだけ出て分かりにくかった事象（通しテスト バグ③ / KDCS_PRJ-265-3）を移植。
+
+1 つの要件が**複数フィールドにまたがる**（例: 「アラート通知を有効にするにはメール宛先と閾値の両方が必要」）場合、エラーキーに**特定フィールド名**を使うと、共通フォーム部品が `errors[name]` でそのフィールド直下にだけメッセージと赤枠（`.input-error` 等）を出す。結果、片方が埋まっているときに**埋まっている側へメッセージが出る**・赤枠が誤誘導する、という分かりにくさが起きる。
+
+**対策:** エラーキーを**フィールド非依存のセクションキー**（例 `notify_section`）にし、**該当セクション（パネル / フォームグループ）の最上段**にまとめて表示する。
+
+```go
+// Handler: フィールド名でなくセクションキーで積む
+errs["notify_section"] = "通知を有効にするにはメール宛先と閾値の両方を入力してください。"
+```
+
+```templ
+// セクション先頭にセクションレベルで表示（個別フィールド直下には出さない）
+if msg, ok := errors["notify_section"]; ok {
+    <div class="error-message" role="alert">{ msg }</div>
+}
+// 各フィールドの * マークと文言で「どの項目が必要か」を示す
+```
+
+**ポイント:**
+- フィールド名キーをやめると、`errors["mail_to"]` 等の赤枠・固定表示が発火しなくなり、特定フィールドへの誤誘導が消える。
+- 折り畳みセクション内に置くなら、エラー時は自動展開する（`open` 条件にエラー有無を OR）。既定折り畳みのまま差し戻すとメッセージが死角に入る。
+- ページ上部の集約バナーにも全エラーを出している場合、セクション表示と二重に出るのは正常（上部＝概況／セクション＝該当箇所への誘導）。出現箇所を「フィールド直下→セクション」へ移しただけで総数は不変。
+
 ---
 
 ## 8. CSRF 対応方針
@@ -2214,6 +2273,40 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 | デバイス編集画面からの削除 | `/dashboard` | 編集画面が存在しなくなるためリダイレクトが必要 |
 
 > **原則:** 一覧画面での削除は `HX-Redirect` を使わず、削除後の一覧サブコンポーネント（削除された行を除いた最新テーブル）を返却する方が自然。`HX-Redirect` はページ全体の遷移が必要な場合のみ使用する。
+
+> ⚠️ **`HX-Redirect` は `htmx:responseError` を抑制する（別プロジェクト〈Laravel〉KDCS_PRJ-265 バグ⑦の設計判断・📅 2026-06-25 移植）。**
+> htmx は `HX-Redirect` / `HX-Refresh` ヘッダを `responseHandling`（swap/error 判定）より**前**に処理し、即 `location.href` で遷移して return する（htmx 2.x `handleAjaxResponse`）。
+> そのため `HX-Redirect` を付けたレスポンスでは `htmx:responseError` が**発火せず**、§14 のトーストは出ない。
+> 「トーストで理由を見せてから遷移したい」ケース（例: 401 セッションタイムアウト）は、`HX-Redirect` を使わず、フロントの `htmx:responseError` 側でトースト表示＋`setTimeout` 遷移を行う（§14）。逆に「即時に確実な遷移」だけで良ければ `HX-Redirect` が最も堅牢。
+
+### 9.1 `HX-Redirect` 後に成功メッセージを出すには「遷移前に session へ flash」する
+
+> 📅 2026-06-25 — 別プロジェクト〈Laravel〉KDCS_PRJ-265 バグ⑥を Go/scs 向けに翻訳。保存後に別画面（一覧・ダッシュボード等）へ `HX-Redirect` しつつ「保存しました」を出したいケースの定石。
+
+`HX-Redirect` を返すレスポンスは**本文なしの 200（または 204）であり、リダイレクトレスポンスではない**。`HX-Redirect` はブラウザのフルナビゲーション（`location.href` による新規 GET）を発火させるため、成功／失敗メッセージを遷移先で出すには、**レスポンスを返す前に session へ値を flash しておく**。
+
+Go（scs）では flash は専用 API ではなく「`Put` して、遷移先で `PopString`（読み取り即削除）」で実現する。scs の `LoadAndSave`（本プロジェクトは `SessionLoad`）が応答時に store へ確定するため、200/204 + `HX-Redirect` でも値は遷移先へ運ばれる。`internal/auth/session_auth.go` の既存ヘルパ（`Login` / `Logout` / `UserIDFromSession`）に倣い、**`auth.PutFlash(ctx, sm, msg)` / `auth.PopFlash(ctx, sm)` を追加して session キーを散らさない**（現状未実装。反映時に追加する）。
+
+```go
+// 保存ハンドラ: HX-Redirect の前に flash を Put する（HTMX・通常 POST どちらの経路でも遷移前に）
+func (h *DeviceHandler) Update(c *gin.Context) {
+    // ... 保存処理 ...
+    auth.PutFlash(c.Request.Context(), h.sm, "デバイスを保存しました。") // ← 遷移前に flash（内部は sm.Put）
+
+    if c.GetHeader("HX-Request") != "" {
+        c.Header("HX-Redirect", "/dashboard")
+        c.Status(http.StatusOK) // 本文なし。ヘッダに ->with 相当は載らないので flash で運ぶ
+        return
+    }
+    c.Redirect(http.StatusSeeOther, "/dashboard") // 通常 POST も同じ flash を読む
+}
+
+// 遷移先（/dashboard 等）ハンドラ: PopString で 1 回だけ読み出し、共通バナーへ渡す
+flash := auth.PopFlash(c.Request.Context(), h.sm) // 内部は sm.PopString（読み取り後に自動削除）
+// → App.templ 共通バナーに flash を渡して表示
+```
+
+> **注意:** `HX-Redirect` のヘッダだけを載せて flash を忘れると、遷移はするが成功メッセージは出ない。`c.Redirect`（通常）と `HX-Redirect`（HTMX）の**どちらの経路でも遷移前に同じ flash を Put** しておけば、どちらで送信されても表示される。要点は「遷移が `c.Redirect` か `HX-Redirect` か」に関わらず **flash の Put を遷移前に必ず行う**こと。なお保存後に同じ画面へ留まる（遷移しない）場合は、flash ではなく描画する view に直接メッセージを渡せばよい。
 
 ---
 
@@ -3153,46 +3246,108 @@ func (h *DeviceHandler) UploadFile(c *gin.Context) {
 ## 14. ネットワークエラー・タイムアウト対応方針
 
 > **cc-sdd への価値:**
-> HTMX リクエストが失敗した場合（ネットワーク断、サーバーエラー、タイムアウト）のユーザー体験はプロジェクト固有の設計決定。未定義だとエラー時に無反応になり、ユーザーが操作を繰り返す原因になる。
+> HTMX リクエストが失敗した場合（ネットワーク断、サーバーエラー、タイムアウト、セッション切れ）のユーザー体験はプロジェクト固有の設計決定。未定義だとエラー時に無反応になり、ユーザーが操作を繰り返す原因になる。
 
-**採用方針:** `htmx:responseError` / `htmx:sendError` イベントでグローバルにエラー通知を表示する。通知用のトースト領域とイベントハンドラは `internal/view/layout/App.templ` の `<body>` 末尾に配置する。
+**採用方針:** `htmx:responseError` / `htmx:sendError` イベントでグローバルにエラー通知（トースト）を表示する。通知用のトースト領域とイベントハンドラは `internal/view/layout/App.templ` の `<body>` 末尾に配置する。
+
+> ⚠️ **前提（§7 と必ずセット）:** このハンドラが機能するのは §7 の `responseHandling` で `[45]..` に **`error: true`** が付いている場合のみ。付いていないと 4xx/5xx で `htmx:responseError` が**発火せず、本ハンドラは一切動かない**（＝無言失敗。別プロジェクト〈Laravel〉KDCS_PRJ-265 バグ⑦の真因）。✅ `error: true` は §7 で適用済み（2026-06-25）。
+
+> 📅 2026-06-25 適用済み（`App.templ` + `.error-toast` CSS）。トーストは **Alpine 非依存の純 JS** で実装する（Alpine 未ロード時もエラー表示できる）。クラスは**インライン検証エラーの `.error-message` とは別物の `.error-toast`** を使う（テストが `.error-message` を「フィールド検証エラーの有無」マーカーに使うため、レイアウト常設トーストが同クラスだと誤検知する。`.error-toast` は `mocks/html/style.css` に追加し `make sync-css`）。
 
 ```html
 <!-- internal/view/layout/App.templ の <body> 末尾 -->
-<div id="global-error-toast"
-     x-data="{ show: false, message: '' }"
-     @show-error.window="message = $event.detail.message; show = true; setTimeout(() => show = false, 5000)"
-     x-show="show"
-     class="error-message">
-  <span x-text="message"></span>
+<div id="global-error-toast" class="error-toast" role="alert" style="display:none;">
+  <span id="global-error-toast-text"></span>
 </div>
 
 <script>
-    // サーバーエラー（4xx/5xx）
-    document.addEventListener('htmx:responseError', function(event) {
-        const status = event.detail.xhr.status;
-        let message = 'サーバーエラーが発生しました。';
-        if (status === 403) message = 'アクセス権限がありません。';
-        if (status === 419) message = 'セッションが切れました。ページを再読み込みしてください。';
-        if (status >= 500) message = 'サーバーエラーが発生しました。しばらく後に再度お試しください。';
-        window.dispatchEvent(new CustomEvent('show-error', { detail: { message } }));
-    });
-
-    // ネットワークエラー（接続失敗・タイムアウト）
-    document.addEventListener('htmx:sendError', function(event) {
-        window.dispatchEvent(new CustomEvent('show-error', {
-            detail: { message: 'ネットワークエラーが発生しました。接続を確認してください。' }
-        }));
-    });
+    (function () {
+        var toast = document.getElementById('global-error-toast');
+        var msgEl = document.getElementById('global-error-toast-text');
+        var hideTimer = null;
+        function showError(message) {
+            if (!toast || !msgEl) return;
+            msgEl.textContent = message;
+            toast.style.display = '';
+            if (hideTimer) clearTimeout(hideTimer);
+            hideTimer = setTimeout(function () { toast.style.display = 'none'; }, 5000);
+        }
+        document.addEventListener('htmx:responseError', function (event) {
+            var status = event.detail.xhr ? event.detail.xhr.status : 0;
+            // 401（セッションタイムアウト）: トースト通知後、ログイン画面へ遷移する。
+            // 古い内容が残ったまま無言でログアウト状態になるのを防ぐ。
+            if (status === 401) {
+                if (window.__sessionExpiredHandled) return;   // 多重発火抑止
+                window.__sessionExpiredHandled = true;
+                showError('セッションが切れました。ログイン画面へ移動します。');
+                setTimeout(function () { window.location.href = '/login'; }, 1500);
+                return;
+            }
+            var message = '';
+            if (status === 403) message = 'アクセス権限がありません。';                 // 認可拒否（CSRF は 419 で分離＝補完②）
+            else if (status === 404) message = '対象が見つかりません。';
+            else if (status === 419) message = 'セッションが切れました。ページを再読み込みしてください。'; // CSRF/セッション（補完②）
+            else if (status >= 500) message = 'サーバーエラーが発生しました。しばらく後に再度お試しください。';
+            if (message) showError(message);
+        });
+        // ネットワークエラー（接続失敗・タイムアウト）
+        document.addEventListener('htmx:sendError', function () {
+            showError('ネットワークエラーが発生しました。接続を確認してください。');
+        });
+    })();
 </script>
 ```
 
-> **CSRF / セッション切れについての注記:** 419 はセッション切れ相当を想定したコード例である。CSRF 保護に用いるミドルウェアは未確定（Gin の CSRF ミドルウェアを採用予定だが採用ライブラリは要確認）であり、実際に返るステータスコードは採用ライブラリに合わせて調整すること。
+**サーバ側の補完①（401 セッションタイムアウト・HTMX 経路）✅ 2026-06-25 適用済み:** 旧 `internal/middleware/require_auth.go` は未認証時に **HX-Request の有無に関わらず一律 302 リダイレクト**していた。HTMX 経路では 302 がフォローされ**ログイン画面の HTML が部分領域に swap されて壊れる**ため、**HX-Request 有のときは本文なし 401 を返す**ように分岐した（上のフロント 401 分岐がトースト＋`/login` 遷移を担当）。非 HTMX は従来どおり 302。テストは `TestRequireAuth_未認証のHTMXは本文なし401`。
+
+```go
+// internal/middleware/require_auth.go（適用済み）
+func RequireAuth() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        if auth.UserID(c) <= 0 {
+            if c.GetHeader("HX-Request") != "" {
+                c.Status(http.StatusUnauthorized) // 本文なし 401（フロントが toast + /login 遷移）
+                c.Abort()
+                return
+            }
+            c.Redirect(http.StatusFound, "/login") // 通常ナビゲーションは従来どおり
+            c.Abort()
+            return
+        }
+        c.Next()
+    }
+}
+```
+
+**サーバ側の補完②（CSRF/セッション切れ — gorilla/csrf の 403 を 419 へ分離）✅ 2026-06-25 適用済み:** 別プロジェクト〈Laravel〉は CSRF/セッション切れを **419** で返すが、本プロジェクトの `gorilla/csrf` は**既定で 403** を返す（`internal/middleware/csrf.go`、KDCS_PRJ-273 バグ③ に相当）。一方 **403 は所有者外アクセス（BOLA）拒否でも使う**（`renderError(c, http.StatusForbidden)`）ため、**両者が 403 に混在するとフロントで「再読み込みすべき CSRF 失敗」と「権限なし」を区別できない**。そこで `gorilla/csrf` に `csrf.ErrorHandler` を設定し、CSRF 失敗を **419（`middleware.StatusCSRFExpired`）** で返して認可 403 と分離した。要件 8.2（「拒否し状態変更しない」）はステータスを規定しないため、403→419 はこの要件の範囲内（design/tasks のステータス記述と CSRF 系テスト 6 本を 419 へ更新済み）。
+
+```go
+// internal/middleware/csrf.go（適用済み: CSRF 失敗を 419 にして認可 403 と分離）
+const StatusCSRFExpired = 419 // Page Expired（HTTP 標準外・Laravel 由来の慣習値）
+
+protect := csrf.Protect(
+    csrfAuthKey(cfg.SessionSecret),
+    csrf.Secure(isProd), csrf.Path("/"), csrf.SameSite(csrf.SameSiteLaxMode),
+    csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.Header.Get("HX-Request") != "" {
+            w.WriteHeader(StatusCSRFExpired) // HTMX: 本文なし。フロントの 419 分岐がトースト表示
+            return
+        }
+        // 非 HTMX フルページ送信: 素の 403 本文でなくログイン誘導を 419 で返す
+        w.WriteHeader(StatusCSRFExpired)
+        _, _ = w.Write([]byte("セッションが切れました。ログインし直してください。"))
+    })),
+)
+```
+
+> 補足: `419`（Page Expired）は HTTP 標準コードではなく Laravel 由来の慣習値。標準コードで揃えたい場合は 403 のまま `X-CSRF-Failed: 1` 等のカスタムヘッダで識別する代替もあったが、Laravel の番号体系に寄せ可読性を優先して 419 を採用した。要点は「CSRF 失敗」と「認可拒否」を**フロントが区別できる識別子を 1 つ用意する**こと。/api（Bearer・機械間）は CSRF 非適用のため本分岐の対象外（DeviceAuth が 401 を返す）。
 
 **ルール:**
-- エラー通知はトースト形式（画面上部に一時表示、5秒で自動消去）。スタイルは `.error-message` クラスを利用する。
-- 419（セッション切れ）はページ再読み込みを促すメッセージを表示する。
-- 422（バリデーションエラー）はセクション7の方針で swap 処理されるため、このハンドラでは対象外（`responseHandling` で `swap: true` に設定済み）。
+- エラー通知はトースト形式（画面上部に一時表示、5 秒で自動消去）。スタイルは `.error-toast` クラスを利用する（インライン検証エラーの `.error-message` とは別物）。
+- **401（セッション切れ）はトースト通知後 `/login` へ自動遷移**（多重発火は `window.__sessionExpiredHandled` で抑止）。サーバは HTMX 経路で本文なし 401 を返す（補完①）。
+- 403（認可拒否）はトーストのみで自動遷移しない（CSRF と混在しうるため。分離する場合は補完②）。
+- 419/404/5xx は各メッセージのトーストを表示（本文 swap はしない）。
+- 422（バリデーション）は §7 の方針で swap 処理されるため、このハンドラでは対象外（`responseHandling` で `swap: true`）。
 - 自動リトライは行わない（データ重複のリスクを回避）。
 
 ---

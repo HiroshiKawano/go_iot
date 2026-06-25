@@ -135,5 +135,10 @@
       });
     });
   </script>
+  <!-- HTMX グローバルエラー通知トースト（通常は非表示。実装 App.templ では htmx:responseError / htmx:sendError 受信で JS 表示）。
+       フィールド検証エラーの .error-message とは別物の .error-toast を使う（テストが error-message を検証マーカーに使うため衝突回避）。 -->
+  <div id="global-error-toast" class="error-toast" role="alert" x-show="false" x-cloak>
+    <span id="global-error-toast-text">エラーが発生しました。</span>
+  </div>
 </body>
 </html>

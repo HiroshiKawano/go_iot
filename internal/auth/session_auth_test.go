@@ -69,6 +69,29 @@ func TestUserIDFromSession_未設定なら0(t *testing.T) {
 	}
 }
 
+func TestPutFlash_PopFlashで読み取ると削除される(t *testing.T) {
+	sm := scs.New()
+	ctx := loadedCtx(t, sm)
+
+	PutFlash(ctx, sm, "デバイスを保存しました。")
+
+	if got := PopFlash(ctx, sm); got != "デバイスを保存しました。" {
+		t.Errorf("PopFlash 1 回目: got %q, want メッセージ", got)
+	}
+	// 1 回限り表示: 2 回目は空 (読み取り時に削除されている)
+	if got := PopFlash(ctx, sm); got != "" {
+		t.Errorf("PopFlash 2 回目: got %q, want 空 (1 回限り)", got)
+	}
+}
+
+func TestPopFlash_未設定なら空文字(t *testing.T) {
+	sm := scs.New()
+	ctx := loadedCtx(t, sm)
+	if got := PopFlash(ctx, sm); got != "" {
+		t.Errorf("PopFlash unset: got %q, want 空", got)
+	}
+}
+
 func TestApplySessionPolicy_本番はSecureCookie(t *testing.T) {
 	sm := scs.New()
 	applySessionPolicy(sm, &config.Config{AppEnv: "production"})

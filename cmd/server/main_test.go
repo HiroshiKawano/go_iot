@@ -70,19 +70,20 @@ func TestNewHTTPHandler_デバイスAPIは認証なしで401かつCSRF対象外(
 	req := httptest.NewRequest(http.MethodPost, "/api/sensor-data", nil)
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, req)
-	// CSRF(403) ではなく DeviceAuth(401) になること = /api が CSRF 対象外である証左
+	// CSRF(419) ではなく DeviceAuth(401) になること = /api が CSRF 対象外である証左
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("POST /api/sensor-data (no bearer) = %d, want 401", w.Code)
 	}
 }
 
-func TestNewHTTPHandler_WebのPOSTはCSRFトークン無しで403(t *testing.T) {
+func TestNewHTTPHandler_WebのPOSTはCSRFトークン無しで419(t *testing.T) {
 	app := newTestHandler(t)
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("email=a@b.com&password=x"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Errorf("POST /login (no csrf) = %d, want 403", w.Code)
+	// CSRF 失敗は BOLA 認可拒否 (403) と区別するため 419 (middleware.StatusCSRFExpired) を返す
+	if w.Code != 419 {
+		t.Errorf("POST /login (no csrf) = %d, want 419", w.Code)
 	}
 }
