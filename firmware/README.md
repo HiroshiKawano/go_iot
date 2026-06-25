@@ -108,7 +108,7 @@ go run ./cmd/sensor-sim -token <平文> -device 1 -count 0 -interval 5m -random
 
 ### 4-2. うまくいかない時（MAC 取得 / I2C アドレス特定 / シリアル採取）
 
-実機検証（眞境名さん案件）で得た再現手順。**実データ付きの詳細記録は [2cc_sdd/残作業.md](../2cc_sdd/残作業.md) 付録F**。
+実機検証（眞境名さん案件）で得た再現手順。**実データ付きの詳細記録は [2cc_sdd/センサーボード.md](../2cc_sdd/センサーボード.md) 付録F**。
 
 - **MAC アドレスを知りたい**: 書込不要で `esptool --port <port> --before no-reset --chip esp8266 read-mac`（**v5.3.0** を pip venv で）。`Invalid head of packet (0x2E)` が出たら**書込モードに入っていない**（チップが通常起動中）→ GPIO0 長押し+RST。または起動ログの `[WiFi] MAC: ...` を読む。
 - **`[SHT31] not found at 0x44` になる**: I2C アドレス違いが定番（**ADDR ピン High なら 0x45**）。`firmware/i2c_scanner/` を焼くと全ピン×全アドレスを総当たりして実アドレスを表示する → `config.h` の `SHT31_ADDR` を合わせる（実機実績は 0x45 だった）。

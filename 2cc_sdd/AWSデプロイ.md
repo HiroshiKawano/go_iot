@@ -1,6 +1,6 @@
 # AWS デプロイ手順（go_iot サーバ）— S: AWS MCP セットアップ / A: プロビジョニング〜受け入れ
 
-> 📂 **このファイルは [残作業.md](残作業.md) から AWS デプロイ部分（S 章・A 章・付録A〜E）を分離したもの**（2026-06-25）。ESP8266 実機書き込み（B 章）・現地実証/継続運用（C 章）・付録F〜H は [残作業.md](残作業.md) を参照。本文中の「§B」「C 章」「付録F〜H」への参照は [残作業.md](残作業.md) 内にある。
+> 📂 **このファイルは [センサーボード.md](センサーボード.md) から AWS デプロイ部分（S 章・A 章・付録A〜E）を分離したもの**（2026-06-25）。ESP8266 実機書き込み（B 章）・現地実証/継続運用（C 章）・付録F〜H は [センサーボード.md](センサーボード.md) を参照。本文中の「§B」「C 章」「付録F〜H」への参照は [センサーボード.md](センサーボード.md) 内にある。
 
 ## 目次・作業順序（S 章から上から順に実施する）
 
@@ -17,7 +17,7 @@
 | — | 付録D | 背景・方針・役割分担・構成図（環境構築後に読めばよい） | 参照 |
 | — | **付録E** | **実デプロイ実行記録（2026-06-23）— 実手順・成功手順・つまづき** | **参照（コマンドはこちら優先）** |
 
-> 🔗 **後続**: A 章完了（`https://<本番FQDN>/health` 200・device_id・Bearer トークン確定）後に [残作業.md](残作業.md) の **B 章（ESP8266 実機書込）→ C 章（現地実証・継続運用）** へ進む。
+> 🔗 **後続**: A 章完了（`https://<本番FQDN>/health` 200・device_id・Bearer トークン確定）後に [センサーボード.md](センサーボード.md) の **B 章（ESP8266 実機書込）→ C 章（現地実証・継続運用）** へ進む。
 
 ---
 
@@ -141,10 +141,10 @@ Knowledge MCP は**認証もアカウントも不要**な AWS 公式ドキュメ
 
 #### ② 次に：AI が人から聞き取る入力（① 完了後）
 
-**人がこの残作業.md を渡した AI に最初に打つ一言**（これでセットアップが動き出す。コピペ可）:
+**人がこの AWSデプロイ.md を渡した AI に最初に打つ一言**（これでセットアップが動き出す。コピペ可）:
 
 > ▶ **人 → AI**:
-> 「`2cc_sdd/残作業.md` に沿って AWS へデプロイを始めます。① の AWS アカウント作成・課金・MFA は完了済みです。まず §S 着手前ゲート② の入力表に従って、私が決めるべき入力を**一括で質問**してください。後段で確定する値（`<BUNDLE_ID>` 等）は聞かなくて結構です。」
+> 「`2cc_sdd/AWSデプロイ.md` に沿って AWS へデプロイを始めます。① の AWS アカウント作成・課金・MFA は完了済みです。まず §S 着手前ゲート② の入力表に従って、私が決めるべき入力を**一括で質問**してください。後段で確定する値（`<BUNDLE_ID>` 等）は聞かなくて結構です。」
 
 これを受けて AI は下表の不足を一括質問し、回答を控える（以降の章で参照する）。`<BUNDLE_ID>`/`<UBUNTU_BLUEPRINT_ID>`/プロファイル `go-iot-mcp` は ③（接続後）に AI が `get-bundles`/`get-blueprints`・IAM 発行で実値を確定するので、**人は「プラン階級（Micro-1GB 等）」だけ**決めればよい（**CPU アーキは本案件 amd64 で確定**）。
 
@@ -1957,7 +1957,7 @@ aws lightsail get-instance-port-states --instance-name <INSTANCE> --region <REGI
 
 ### ステップ4. 本番側で gen-token を実行し Bearer 発行（DB 直書き＝サーバ上）
 
-`cmd/gen-token` は **DB へ直接書き込む**ため、PostgreSQL に到達できる場所＝**本番サーバ上**で実行する。サーバには Go を入れない方針なので、`go run`（= `make gen-token`）は使えず、**A-3 で一緒にクロスコンパイルして配布済みの `gen-token` バイナリ**を使う（旧 残作業.md A-1 補足の「(a) gen-token バイナリも scp」経路。A-3 が gen-token バイナリを成果物に含めていることが本ステップの前提）。サーバ内コマンドの実行を AI に任せる経路は 2 つ：**(a) SSM Run Command 経由（AWS API MCP の範囲・監査が CloudTrail に乗る）**、**(b) SSH 経由（既定。汎用 shell/CLI で AI が `ssh` 実行、または人が SSH）**。
+`cmd/gen-token` は **DB へ直接書き込む**ため、PostgreSQL に到達できる場所＝**本番サーバ上**で実行する。サーバには Go を入れない方針なので、`go run`（= `make gen-token`）は使えず、**A-3 で一緒にクロスコンパイルして配布済みの `gen-token` バイナリ**を使う（旧版 A-1 補足の「(a) gen-token バイナリも scp」経路。A-3 が gen-token バイナリを成果物に含めていることが本ステップの前提）。サーバ内コマンドの実行を AI に任せる経路は 2 つ：**(a) SSM Run Command 経由（AWS API MCP の範囲・監査が CloudTrail に乗る）**、**(b) SSH 経由（既定。汎用 shell/CLI で AI が `ssh` 実行、または人が SSH）**。
 
 > **経路の判断**：低メモリ Lightsail は SSM Agent 常駐（数十 MB 級）が負担になるため、本プロジェクトは **デプロイ反復・サーバ内コマンドは SSH を既定**とする（A-3 方針と整合）。SSM は Lightsail ネイティブ非対応で、**ハイブリッドアクティベーションで managed node 化（Fleet Manager に `mi-` プレフィックスのノード ID で登録）**済みの場合のみ (a) を選べる（出典: AWS re:Post「Add a Lightsail instance to Systems Manager」・本文 403 で二次情報ベース・要確認）。どちらも `gen-token` は env（`DATABASE_URL` / `SESSION_SECRET`[production 時 32 文字以上] / `APP_ENV`）を `config.Load()` で読むため、systemd の EnvironmentFile を source してから実行する（source しないと `required env vars missing` で失敗）。
 
