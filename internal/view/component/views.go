@@ -38,15 +38,11 @@ type DeviceInfoView struct {
 }
 
 // DeviceChartAreaView はグラフ領域フラグメント (DeviceChartArea) の表示データ。
-// Period は active 判定用の現在期間 ("24h"/"3d"/"7d"/"30d")、View は表示形式 ("line"=折れ線 /
-// "candle"=30分足ローソク足)。温度/湿度 SVG は internal/chart が生成済みの文字列 (templ.Raw で
-// 埋め込む)。DeviceID は期間ボタン・形式トグルの hx-get/hx-push-url URL 用。
-// View 未設定 ("") は既定の折れ線扱い (chartViewActive 参照)。
+// Period は active 判定用の現在期間 ("24h"/"3d"/"7d"/"30d")、温度/湿度 SVG は internal/chart が
+// 生成済みの文字列 (templ.Raw で埋め込む)。DeviceID は期間ボタンの hx-get/hx-push-url URL 用。
 type DeviceChartAreaView struct {
 	DeviceID       int64
 	Period         string
-	View           string
-	CandleUnit     string // ローソク足の足ラベル ("15分足"/"30分足"/"1時間足"/"4時間足"、注記用。line 時は空)
 	TemperatureSVG string
 	HumiditySVG    string
 }
@@ -57,46 +53,12 @@ type chartPeriod struct {
 	Label string
 }
 
-// chartPeriods は期間切替の選択肢 (24h/2d/3d/7d/30d)。時系列順に並べる。
-// 2d (2日間=直近48時間) は30分足ローソク足が見やすい範囲として追加した。
+// chartPeriods は期間切替の選択肢 (24h/3d/7d/30d の 4 つ, R3.1)。時系列順に並べる。
 var chartPeriods = []chartPeriod{
 	{Value: "24h", Label: "24時間"},
-	{Value: "2d", Label: "2日間"},
 	{Value: "3d", Label: "3日間"},
 	{Value: "7d", Label: "7日間"},
 	{Value: "30d", Label: "30日間"},
-}
-
-// chartViewMode は表示形式トグル1個の定義 (Value=クエリ値, Label=表示文言)。
-type chartViewMode struct {
-	Value string
-	Label string
-}
-
-// chartViewModes は表示形式の選択肢 (折れ線 / ローソク足)。
-var chartViewModes = []chartViewMode{
-	{Value: "line", Label: "ライン"},
-	{Value: "candle", Label: "ローソク足"},
-}
-
-// chartViewActive はトグルボタン (mode) が現在の表示形式 (current) で active かを返す。
-// "candle" は current=="candle" のときのみ active。"line" は既定のため current が "" / "line"
-// (= candle 以外) のとき active とする (View 未設定は折れ線扱い)。
-func chartViewActive(mode, current string) bool {
-	if mode == "candle" {
-		return current == "candle"
-	}
-	return current != "candle"
-}
-
-// chartViewOrDefault は View 未設定 ("") を既定の "line" に正規化する (期間ボタンの
-// hx-get/hx-push-url 構築用)。期間ボタンは現在の表示形式を保持して往復するため、
-// URL に view を必ず含める (ローソク足表示中に期間を変えてもローソク足のまま)。
-func chartViewOrDefault(current string) string {
-	if current == "" {
-		return "line"
-	}
-	return current
 }
 
 // ReadingRow は最新計測テーブル1行分の表示データ (整形済み)。

@@ -486,32 +486,6 @@
 }
 /* .period-btn.active は pagination セクションで .pagination .current と束ねて定義 */
 
-/* 表示形式トグル (ライン / ローソク足)。見た目は期間ボタンと揃える。 */
-.chart-type-selector {
-  display: flex;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-}
-.chart-type-btn {
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: var(--fs-sm);
-}
-.chart-type-btn.active {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
-}
-/* ローソク足表示時の注記 (30分足・直近48時間・配色凡例) */
-.chart-note {
-  margin-top: var(--space-2);
-  color: var(--color-muted);
-  font-size: var(--fs-sm);
-}
-
 /* --- SVGグラフプレースホルダー --- */
 .chart-placeholder {
   background:

@@ -44,8 +44,6 @@ type fakeDeviceRepo struct {
 	recentErr      error
 	dailyAggs      []repository.ListDailySensorAggregatesRow // ListDailySensorAggregates 戻り値
 	dailyErr       error
-	candleRows     []repository.ListSensorCandlesRow // ListSensorCandles 戻り値 (ローソク足 OHLC)
-	candleErr      error
 	softDeleteErr  error
 	softDeleteID   int64 // 最後に論理削除を要求された id
 	softDeleted    bool  // SoftDeleteDevice 呼び出し記録
@@ -61,10 +59,6 @@ func (f *fakeDeviceRepo) ListRecentSensorReadings(_ context.Context, _ repositor
 
 func (f *fakeDeviceRepo) ListDailySensorAggregates(_ context.Context, _ repository.ListDailySensorAggregatesParams) ([]repository.ListDailySensorAggregatesRow, error) {
 	return f.dailyAggs, f.dailyErr
-}
-
-func (f *fakeDeviceRepo) ListSensorCandles(_ context.Context, _ repository.ListSensorCandlesParams) ([]repository.ListSensorCandlesRow, error) {
-	return f.candleRows, f.candleErr
 }
 
 func (f *fakeDeviceRepo) SoftDeleteDevice(_ context.Context, id int64) error {

@@ -31,37 +31,6 @@ import (
 // defaultPeriod は ?period 未指定時の既定期間。
 const defaultPeriod = "24h"
 
-// defaultView は ?view 未指定時の既定表示形式 (折れ線)。
-const defaultView = "line"
-
-// candleView は ?view=candle (30分足ローソク足) の値。
-const candleView = "candle"
-
-// candleBucketFor は期間に応じたローソク足1本の集計幅と表示ラベルを返す。
-// 期間が長いほど足を粗くし、本数 (約96〜360本) と描画/取得負荷を一定に抑える
-// (24時間=15分足/2日間=30分足/3日間=30分足/7日間=1時間足/30日間=2時間足)。
-func candleBucketFor(period string) (time.Duration, string) {
-	switch period {
-	case "2d":
-		return 30 * time.Minute, "30分足"
-	case "3d":
-		return 30 * time.Minute, "30分足"
-	case "7d":
-		return time.Hour, "1時間足"
-	case "30d":
-		return 2 * time.Hour, "2時間足"
-	default: // "24h"
-		return 15 * time.Minute, "15分足"
-	}
-}
-
-// candleOrigin はローソク足バケットを JST の暦日 (00:00) に整列させる date_bin の origin。
-// JST 真夜中の固定時点を基準にすることで、15分/30分/1時間/2時間いずれの足も JST 00:00 起点で
-// 整列する (バケット境界が UTC 起点だと2時間足等が JST 01:00 起点にずれるのを防ぐ)。
-func candleOrigin() pgtype.Timestamptz {
-	return pgconv.Timestamptz(time.Date(2000, 1, 1, 0, 0, 0, 0, jst))
-}
-
 // deviceShowTitleSuffix はフルページ <title> の接尾辞。
 const deviceShowTitleSuffix = " - 農業IoTシステム"
 
@@ -72,29 +41,20 @@ const deviceShowTitleSuffix = " - 農業IoTシステム"
 // (design Open Questions「接続 TZ=Asia/Tokyo を前提」= Out of Boundary。monthDayLabel 参照)。
 var jst = time.FixedZone("JST", 9*60*60)
 
-// chartQuery は期間切替フラグメント (Chart) の period/view クエリバインド。
-// period は 24h/3d/7d/30d 以外を binding で弾き 400 (R8.2)。view は任意 (未指定=既定 line)で、
-// line/candle 以外は 400。これにより view を持たない従来 URL とも互換を保つ。
+// chartQuery は期間切替フラグメント (Chart) の period クエリバインド。
+// 24h/3d/7d/30d 以外は binding で弾き 400 にする (R8.2)。
 type chartQuery struct {
-	Period string `form:"period" binding:"required,oneof=24h 2d 3d 7d 30d"`
-	View   string `form:"view" binding:"omitempty,oneof=line candle"`
+	Period string `form:"period" binding:"required,oneof=24h 3d 7d 30d"`
 }
 
-// isValidPeriod は period が許容値 (24h/2d/3d/7d/30d) か判定する (Show の任意 ?period 検証用)。
+// isValidPeriod は period が許容値 (24h/3d/7d/30d) か判定する (Show の任意 ?period 検証用)。
 func isValidPeriod(p string) bool {
-	return p == "24h" || p == "2d" || p == "3d" || p == "7d" || p == "30d"
-}
-
-// isValidView は view が許容値 (line/candle) か判定する (Show の任意 ?view 検証用)。
-func isValidView(v string) bool {
-	return v == defaultView || v == candleView
+	return p == "24h" || p == "3d" || p == "7d" || p == "30d"
 }
 
 // periodSince は period から取得開始時刻を返す (now 基準)。
 func periodSince(period string, now time.Time) time.Time {
 	switch period {
-	case "2d":
-		return now.Add(-48 * time.Hour)
 	case "3d":
 		return now.AddDate(0, 0, -3)
 	case "7d":
@@ -104,12 +64,6 @@ func periodSince(period string, now time.Time) time.Time {
 	default: // "24h"
 		return now.Add(-24 * time.Hour)
 	}
-}
-
-// isRawLinePeriod は折れ線モードで生データ詳細を出す期間か判定する (24時間/2日間)。
-// 3日間以上は日次集計 (max/min) 経路。2日間は48時間ぶんの生データで詳細な折れ線にする。
-func isRawLinePeriod(period string) bool {
-	return period == defaultPeriod || period == "2d"
 }
 
 // Show はデバイス詳細フルページを描画する (GET /devices/:device・RequireAuth 前提)。
@@ -134,14 +88,6 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 		return
 	}
 
-	viewMode := c.Query("view")
-	if viewMode == "" {
-		viewMode = defaultView
-	} else if !isValidView(viewMode) {
-		renderError(c, http.StatusBadRequest) // 不正 view
-		return
-	}
-
 	device, err := authz.RequireDeviceOwner(ctx, h.Repo, id, uid)
 	if err != nil {
 		renderDeviceReadError(c, err) // 不在/非所有とも 404 (R7.2 列挙防止)
@@ -160,7 +106,7 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 		return
 	}
 
-	chartArea, err := h.buildChartArea(ctx, id, period, viewMode, now)
+	chartArea, err := h.buildChartArea(ctx, id, period, now)
 	if err != nil {
 		renderError(c, http.StatusInternalServerError)
 		return
@@ -208,12 +154,7 @@ func (h *DeviceHandler) Chart(c *gin.Context) {
 		return
 	}
 
-	viewMode := q.View
-	if viewMode == "" {
-		viewMode = defaultView
-	}
-
-	chartArea, err := h.buildChartArea(ctx, id, q.Period, viewMode, now)
+	chartArea, err := h.buildChartArea(ctx, id, q.Period, now)
 	if err != nil {
 		renderError(c, http.StatusInternalServerError)
 		return
@@ -253,23 +194,13 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard") // 非 HTMX フォームは 303
 }
 
-// buildChartArea は view/period に応じてグラフデータを取得し、温度/湿度 SVG を生成した
-// グラフ領域 View を返す。
-//   - view=candle: 直近48時間の生データを30分バケットで OHLC 集計しローソク足 (期間に非連動)。
-//   - view=line  : 従来の折れ線。24h=生データ1系列、3d/7d/30d=日次 max/min の2系列
-//     (24h のみ生データ詳細・複数日は日次集計、という設計閾値に 3d を複数日側として乗せる)。
-func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period, view string, now time.Time) (component.DeviceChartAreaView, error) {
-	if view == candleView {
-		return h.buildCandleChartArea(ctx, deviceID, period, now)
-	}
-	return h.buildLineChartArea(ctx, deviceID, period, now)
-}
-
-// buildLineChartArea は折れ線グラフ (従来表示) のグラフ領域 View を構築する。
-func (h *DeviceHandler) buildLineChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
+// buildChartArea は period に応じてグラフデータを取得し、温度/湿度 SVG を生成した
+// グラフ領域 View を返す。24h=生データ1系列、3d/7d/30d=日次 max/min の2系列
+// (24h のみ生データ詳細・複数日は日次集計、という設計閾値に 3d を複数日側として乗せる)。
+func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	var tempSeries, humSeries []chart.Series
 
-	if isRawLinePeriod(period) {
+	if period == defaultPeriod {
 		rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
 			DeviceID:   deviceID,
 			RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
@@ -292,85 +223,9 @@ func (h *DeviceHandler) buildLineChartArea(ctx context.Context, deviceID int64, 
 	return component.DeviceChartAreaView{
 		DeviceID:       deviceID,
 		Period:         period,
-		View:           defaultView,
 		TemperatureSVG: chart.LineChartSVG("温度", "℃", tempSeries),
 		HumiditySVG:    chart.LineChartSVG("湿度", "%", humSeries),
 	}, nil
-}
-
-// buildCandleChartArea はローソク足のグラフ領域 View を構築する。
-// OHLC 集計は DB 側 (ListSensorCandles の date_bin) で行い、取得行を本数ぶん (30日×2時間足でも
-// 約360行) に抑える。期間連動: period に応じて足幅 (candleBucketFor) と取得開始時刻 (periodSince)
-// が変わる。バケットは JST 暦日 (candleOrigin) に整列する。
-func (h *DeviceHandler) buildCandleChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
-	bucket, unitLabel := candleBucketFor(period)
-	rows, err := h.Repo.ListSensorCandles(ctx, repository.ListSensorCandlesParams{
-		Bucket:   pgtype.Interval{Microseconds: bucket.Microseconds(), Valid: true},
-		Origin:   candleOrigin(),
-		DeviceID: deviceID,
-		Since:    pgconv.Timestamptz(periodSince(period, now)),
-	})
-	if err != nil {
-		return component.DeviceChartAreaView{}, err
-	}
-	tempCandles, humCandles := candlesFromRows(rows)
-
-	return component.DeviceChartAreaView{
-		DeviceID:       deviceID,
-		Period:         period,
-		View:           candleView,
-		CandleUnit:     unitLabel,
-		TemperatureSVG: chart.CandlestickSVG("温度", "℃", tempCandles),
-		HumiditySVG:    chart.CandlestickSVG("湿度", "%", humCandles),
-	}, nil
-}
-
-// candlesFromRows は DB 集計行 (ListSensorCandles) を温度/湿度のローソク足列へ写像する。
-// OHLC 値・bucket とも sqlc は interface{} 型で生成するため、aggregateToFloat / candleBucketTime
-// で安全変換する。X ラベルは bucket 開始時刻の JST "M/D HH:MM"。
-func candlesFromRows(rows []repository.ListSensorCandlesRow) (temp, hum []chart.Candle) {
-	temp = make([]chart.Candle, 0, len(rows))
-	hum = make([]chart.Candle, 0, len(rows))
-	for _, r := range rows {
-		label := candleBucketLabel(r.Bucket)
-		temp = append(temp, chart.Candle{
-			Label: label,
-			Open:  aggregateToFloat(r.OpenTemperature),
-			High:  aggregateToFloat(r.HighTemperature),
-			Low:   aggregateToFloat(r.LowTemperature),
-			Close: aggregateToFloat(r.CloseTemperature),
-		})
-		hum = append(hum, chart.Candle{
-			Label: label,
-			Open:  aggregateToFloat(r.OpenHumidity),
-			High:  aggregateToFloat(r.HighHumidity),
-			Low:   aggregateToFloat(r.LowHumidity),
-			Close: aggregateToFloat(r.CloseHumidity),
-		})
-	}
-	return temp, hum
-}
-
-// candleBucketLabel は date_bin が返す bucket 時点を JST "M/D HH:MM" に整形する。
-func candleBucketLabel(v interface{}) string {
-	t := candleBucketTime(v)
-	if t.IsZero() {
-		return ""
-	}
-	return t.In(jst).Format("1/2 15:04")
-}
-
-// candleBucketTime は sqlc が interface{} で返す bucket (timestamptz) を time.Time へ変換する。
-// 本番 pgx は timestamptz を interface{} 宛に time.Time で、保険として pgtype.Timestamptz も受ける。
-func candleBucketTime(v interface{}) time.Time {
-	switch t := v.(type) {
-	case time.Time:
-		return t
-	case pgtype.Timestamptz:
-		return t.Time
-	default:
-		return time.Time{}
-	}
 }
 
 // rawSeries は 24h 生データ行を温度/湿度それぞれ1系列 (折れ線) へ写像する。

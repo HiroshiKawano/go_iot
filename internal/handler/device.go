@@ -45,7 +45,6 @@ type DeviceRepo interface {
 	ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]repository.SensorReading, error)
 	ListRecentSensorReadings(ctx context.Context, arg repository.ListRecentSensorReadingsParams) ([]repository.SensorReading, error)
 	ListDailySensorAggregates(ctx context.Context, arg repository.ListDailySensorAggregatesParams) ([]repository.ListDailySensorAggregatesRow, error)
-	ListSensorCandles(ctx context.Context, arg repository.ListSensorCandlesParams) ([]repository.ListSensorCandlesRow, error)
 	SoftDeleteDevice(ctx context.Context, id int64) error
 }
 
