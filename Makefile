@@ -1,4 +1,4 @@
-.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status sqlc templ sync-css db-snapshot clean
+.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status seed seed-testsensor gen-token sensor-sim sqlc templ sync-css db-snapshot clean
 
 # .env を読み込む (存在すれば)
 ifneq (,$(wildcard .env))
@@ -52,6 +52,9 @@ migrate-create: ## 新規マイグレーション作成 (例: make migrate-creat
 
 seed: ## 開発用テストデータを投入 (既存のアプリデータは削除される)
 	go run ./cmd/seed
+
+seed-testsensor: ## 表示テスト用「沖縄テストセンサー」を別デバイスで追加 (既存データは削除しない)
+	go run ./cmd/seed-testsensor
 
 gen-token: ## デバイスAPI用トークン発行 (例: make gen-token user=1 name=ハウスA温湿度計)
 	go run ./cmd/gen-token -user=$(user) -name="$(name)"
