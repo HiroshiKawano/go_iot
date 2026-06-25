@@ -282,6 +282,83 @@ func (q *Queries) ListRecentSensorReadings(ctx context.Context, arg ListRecentSe
 	return items, nil
 }
 
+const listSensorCandles = `-- name: ListSensorCandles :many
+SELECT
+    date_bin($1::interval, recorded_at, $2::timestamptz) AS bucket,
+    (array_agg(temperature ORDER BY recorded_at ASC))[1]  AS open_temperature,
+    MAX(temperature)                                       AS high_temperature,
+    MIN(temperature)                                       AS low_temperature,
+    (array_agg(temperature ORDER BY recorded_at DESC))[1] AS close_temperature,
+    (array_agg(humidity ORDER BY recorded_at ASC))[1]     AS open_humidity,
+    MAX(humidity)                                          AS high_humidity,
+    MIN(humidity)                                          AS low_humidity,
+    (array_agg(humidity ORDER BY recorded_at DESC))[1]     AS close_humidity
+  FROM sensor_readings
+ WHERE device_id   = $3
+   AND recorded_at >= $4
+   AND deleted_at IS NULL
+ GROUP BY bucket
+ ORDER BY bucket ASC
+`
+
+type ListSensorCandlesParams struct {
+	Bucket   pgtype.Interval    `json:"bucket"`
+	Origin   pgtype.Timestamptz `json:"origin"`
+	DeviceID int64              `json:"device_id"`
+	Since    pgtype.Timestamptz `json:"since"`
+}
+
+type ListSensorCandlesRow struct {
+	Bucket           interface{} `json:"bucket"`
+	OpenTemperature  interface{} `json:"open_temperature"`
+	HighTemperature  interface{} `json:"high_temperature"`
+	LowTemperature   interface{} `json:"low_temperature"`
+	CloseTemperature interface{} `json:"close_temperature"`
+	OpenHumidity     interface{} `json:"open_humidity"`
+	HighHumidity     interface{} `json:"high_humidity"`
+	LowHumidity      interface{} `json:"low_humidity"`
+	CloseHumidity    interface{} `json:"close_humidity"`
+}
+
+// ローソク足用: 指定期間の計測を可変 bucket 幅 (15分/30分/1時間/2時間) で OHLC 集計する。
+// DB 側で集計するため取得行は本数ぶん (30日×2時間足でも約360行) に収まる。
+// open=バケット内最初, close=最後, high=最大, low=最小 (recorded_at 昇順基準)。
+// バケット境界は origin (JST 暦日 00:00) に整列させる。
+func (q *Queries) ListSensorCandles(ctx context.Context, arg ListSensorCandlesParams) ([]ListSensorCandlesRow, error) {
+	rows, err := q.db.Query(ctx, listSensorCandles,
+		arg.Bucket,
+		arg.Origin,
+		arg.DeviceID,
+		arg.Since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSensorCandlesRow
+	for rows.Next() {
+		var i ListSensorCandlesRow
+		if err := rows.Scan(
+			&i.Bucket,
+			&i.OpenTemperature,
+			&i.HighTemperature,
+			&i.LowTemperature,
+			&i.CloseTemperature,
+			&i.OpenHumidity,
+			&i.HighHumidity,
+			&i.LowHumidity,
+			&i.CloseHumidity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSensorReadingsPaginated = `-- name: ListSensorReadingsPaginated :many
 SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
  WHERE device_id   = $1

@@ -526,14 +526,16 @@ func TestChart_3dは日次集計で取得(t *testing.T) {
 	}
 }
 
-func TestChart_candleは30分足ローソク足で取得(t *testing.T) {
+func TestChart_candleはローソク足で取得(t *testing.T) {
 	repo := showDeviceRepo()
-	// 09:00 JST (00:00 UTC) 始点。同一30分バケットに2点 (始値25→終値26=上昇) + 次バケットに1点。
-	base := time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)
-	repo.recentReadings = []repository.SensorReading{
-		sensorRow(1, base.Add(0*time.Minute), 25.00, 70.00),
-		sensorRow(1, base.Add(10*time.Minute), 26.00, 68.00), // 同バケット
-		sensorRow(1, base.Add(40*time.Minute), 24.00, 72.00), // 次バケット
+	// OHLC 集計は DB 側 (ListSensorCandles) なので、集計済み行を直接注入する。
+	// interface{} フィールドは aggregateToFloat が float64 を受けるため float でよい。
+	base := time.Date(2026, 6, 24, 9, 0, 0, 0, jst)
+	repo.candleRows = []repository.ListSensorCandlesRow{
+		{Bucket: base, OpenTemperature: 25.0, HighTemperature: 26.0, LowTemperature: 24.5, CloseTemperature: 25.8,
+			OpenHumidity: 70.0, HighHumidity: 71.0, LowHumidity: 67.0, CloseHumidity: 68.0},
+		{Bucket: base.Add(15 * time.Minute), OpenTemperature: 25.8, HighTemperature: 27.0, LowTemperature: 25.7, CloseTemperature: 27.0,
+			OpenHumidity: 68.0, HighHumidity: 69.0, LowHumidity: 66.0, CloseHumidity: 66.5},
 	}
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
@@ -568,7 +570,7 @@ func TestCandleBucketFor_期間に応じた足を返す(t *testing.T) {
 		{"2d", 30 * time.Minute, "30分足"},
 		{"3d", 30 * time.Minute, "30分足"},
 		{"7d", time.Hour, "1時間足"},
-		{"30d", 4 * time.Hour, "4時間足"},
+		{"30d", 2 * time.Hour, "2時間足"},
 	}
 	for _, c := range cases {
 		gotBucket, gotLabel := candleBucketFor(c.period)
@@ -598,6 +600,17 @@ func TestChart_2dは生データで取得し2日間がactive(t *testing.T) {
 	// 生データの時刻ラベル(JST)が出る (13:00/14:00)
 	if !strings.Contains(body, "13:00") || !strings.Contains(body, "14:00") {
 		t.Errorf("2d 生データの時刻ラベル(JST)が無い:\n%s", body)
+	}
+}
+
+func TestChart_candleのDBエラーは500(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.candleErr = errInjected
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := hxGet(r, "/devices/1/chart?period=30d&view=candle")
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status=%d, want 500", w.Code)
 	}
 }
 

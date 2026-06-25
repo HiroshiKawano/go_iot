@@ -38,8 +38,8 @@ const defaultView = "line"
 const candleView = "candle"
 
 // candleBucketFor は期間に応じたローソク足1本の集計幅と表示ラベルを返す。
-// 期間が長いほど足を粗くし、本数 (約96〜180本) と描画負荷を一定に抑える
-// (24時間=15分足/2日間=30分足/3日間=30分足/7日間=1時間足/30日間=4時間足)。
+// 期間が長いほど足を粗くし、本数 (約96〜360本) と描画/取得負荷を一定に抑える
+// (24時間=15分足/2日間=30分足/3日間=30分足/7日間=1時間足/30日間=2時間足)。
 func candleBucketFor(period string) (time.Duration, string) {
 	switch period {
 	case "2d":
@@ -49,10 +49,17 @@ func candleBucketFor(period string) (time.Duration, string) {
 	case "7d":
 		return time.Hour, "1時間足"
 	case "30d":
-		return 4 * time.Hour, "4時間足"
+		return 2 * time.Hour, "2時間足"
 	default: // "24h"
 		return 15 * time.Minute, "15分足"
 	}
+}
+
+// candleOrigin はローソク足バケットを JST の暦日 (00:00) に整列させる date_bin の origin。
+// JST 真夜中の固定時点を基準にすることで、15分/30分/1時間/2時間いずれの足も JST 00:00 起点で
+// 整列する (バケット境界が UTC 起点だと2時間足等が JST 01:00 起点にずれるのを防ぐ)。
+func candleOrigin() pgtype.Timestamptz {
+	return pgconv.Timestamptz(time.Date(2000, 1, 1, 0, 0, 0, 0, jst))
 }
 
 // deviceShowTitleSuffix はフルページ <title> の接尾辞。
@@ -291,20 +298,22 @@ func (h *DeviceHandler) buildLineChartArea(ctx context.Context, deviceID int64, 
 	}, nil
 }
 
-// buildCandleChartArea は30分足ローソク足のグラフ領域 View を構築する。
-// 選択中の期間レンジ (periodSince) の生データ (昇順) を再利用し、Go 側で30分バケットの
-// OHLC へ畳み込む (専用 SQL は持たず、折れ線と同じ ListRecentSensorReadings を使う)。
-// 期間連動: 24時間=48本/2日間=96本/3日間=144本… と period に応じて本数が変わる。
+// buildCandleChartArea はローソク足のグラフ領域 View を構築する。
+// OHLC 集計は DB 側 (ListSensorCandles の date_bin) で行い、取得行を本数ぶん (30日×2時間足でも
+// 約360行) に抑える。期間連動: period に応じて足幅 (candleBucketFor) と取得開始時刻 (periodSince)
+// が変わる。バケットは JST 暦日 (candleOrigin) に整列する。
 func (h *DeviceHandler) buildCandleChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
-	rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
-		DeviceID:   deviceID,
-		RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
+	bucket, unitLabel := candleBucketFor(period)
+	rows, err := h.Repo.ListSensorCandles(ctx, repository.ListSensorCandlesParams{
+		Bucket:   pgtype.Interval{Microseconds: bucket.Microseconds(), Valid: true},
+		Origin:   candleOrigin(),
+		DeviceID: deviceID,
+		Since:    pgconv.Timestamptz(periodSince(period, now)),
 	})
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
 	}
-	bucket, unitLabel := candleBucketFor(period)
-	tempCandles, humCandles := buildCandleSeries(rows, bucket)
+	tempCandles, humCandles := candlesFromRows(rows)
 
 	return component.DeviceChartAreaView{
 		DeviceID:       deviceID,
@@ -316,52 +325,52 @@ func (h *DeviceHandler) buildCandleChartArea(ctx context.Context, deviceID int64
 	}, nil
 }
 
-// candleJSTOffsetSec は JST(UTC+9) の秒オフセット。バケット境界を JST の暦日 (00:00) に
-// 揃えるための補正に使う。Unix 秒は UTC 基準のため、この補正を足してから商を取ることで
-// 15分/30分/1時間/4時間いずれの足も JST の 00:00 起点で整列する (4時間足が UTC 基準だと
-// JST 01:00 起点にずれる問題を回避)。
-const candleJSTOffsetSec = int64(9 * 3600)
-
-// buildCandleSeries は昇順の生データを bucket 幅へ畳み込み、温度/湿度それぞれの
-// ローソク足 (OHLC) 列を返す。各バケットは 始値=最初・終値=最後 (昇順なので末尾上書き)・
-// 高値=最大・安値=最小。バケット境界は (Unix秒 + JSTオフセット) を bucket 幅で割った商で
-// 判定し、JST の暦日境界に整列させる。X ラベルはバケット開始時刻の JST "M/D HH:MM"。
-func buildCandleSeries(rows []repository.SensorReading, bucket time.Duration) (temp, hum []chart.Candle) {
-	bucketSec := int64(bucket / time.Second)
-	curKey := int64(-1)
-
+// candlesFromRows は DB 集計行 (ListSensorCandles) を温度/湿度のローソク足列へ写像する。
+// OHLC 値・bucket とも sqlc は interface{} 型で生成するため、aggregateToFloat / candleBucketTime
+// で安全変換する。X ラベルは bucket 開始時刻の JST "M/D HH:MM"。
+func candlesFromRows(rows []repository.ListSensorCandlesRow) (temp, hum []chart.Candle) {
+	temp = make([]chart.Candle, 0, len(rows))
+	hum = make([]chart.Candle, 0, len(rows))
 	for _, r := range rows {
-		t := pgconv.TimestamptzToTime(r.RecordedAt)
-		key := (t.Unix() + candleJSTOffsetSec) / bucketSec
-		tv := pgconv.NumericToFloat(r.Temperature)
-		hv := pgconv.NumericToFloat(r.Humidity)
-
-		if key != curKey {
-			startUnix := key*bucketSec - candleJSTOffsetSec
-			label := time.Unix(startUnix, 0).In(jst).Format("1/2 15:04")
-			temp = append(temp, chart.Candle{Label: label, Open: tv, High: tv, Low: tv, Close: tv})
-			hum = append(hum, chart.Candle{Label: label, Open: hv, High: hv, Low: hv, Close: hv})
-			curKey = key
-			continue
-		}
-		last := len(temp) - 1
-		temp[last] = updateCandle(temp[last], tv)
-		hum[last] = updateCandle(hum[last], hv)
+		label := candleBucketLabel(r.Bucket)
+		temp = append(temp, chart.Candle{
+			Label: label,
+			Open:  aggregateToFloat(r.OpenTemperature),
+			High:  aggregateToFloat(r.HighTemperature),
+			Low:   aggregateToFloat(r.LowTemperature),
+			Close: aggregateToFloat(r.CloseTemperature),
+		})
+		hum = append(hum, chart.Candle{
+			Label: label,
+			Open:  aggregateToFloat(r.OpenHumidity),
+			High:  aggregateToFloat(r.HighHumidity),
+			Low:   aggregateToFloat(r.LowHumidity),
+			Close: aggregateToFloat(r.CloseHumidity),
+		})
 	}
 	return temp, hum
 }
 
-// updateCandle は足 c に新しい値 v を取り込んだ新しい足を返す (終値更新・高値/安値拡張)。
-// 既存値を破壊せず関数的に更新する (呼び出し側でスライス要素へ再代入)。
-func updateCandle(c chart.Candle, v float64) chart.Candle {
-	c.Close = v
-	if v > c.High {
-		c.High = v
+// candleBucketLabel は date_bin が返す bucket 時点を JST "M/D HH:MM" に整形する。
+func candleBucketLabel(v interface{}) string {
+	t := candleBucketTime(v)
+	if t.IsZero() {
+		return ""
 	}
-	if v < c.Low {
-		c.Low = v
+	return t.In(jst).Format("1/2 15:04")
+}
+
+// candleBucketTime は sqlc が interface{} で返す bucket (timestamptz) を time.Time へ変換する。
+// 本番 pgx は timestamptz を interface{} 宛に time.Time で、保険として pgtype.Timestamptz も受ける。
+func candleBucketTime(v interface{}) time.Time {
+	switch t := v.(type) {
+	case time.Time:
+		return t
+	case pgtype.Timestamptz:
+		return t.Time
+	default:
+		return time.Time{}
 	}
-	return c
 }
 
 // rawSeries は 24h 生データ行を温度/湿度それぞれ1系列 (折れ線) へ写像する。

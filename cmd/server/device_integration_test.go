@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/HiroshiKawano/go_iot/internal/config"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
@@ -20,12 +21,13 @@ import (
 // (login 用の users を含む)。埋め込み Querier (nil) のため未実装メソッド呼び出しは panic。
 type fakeDeviceQuerier struct {
 	repository.Querier
-	byEmail map[string]repository.User
-	byID    map[int64]repository.User
-	devices map[int64]repository.Device
-	byMac   map[string]repository.Device
-	created repository.Device
-	updated repository.Device
+	byEmail    map[string]repository.User
+	byID       map[int64]repository.User
+	devices    map[int64]repository.Device
+	byMac      map[string]repository.Device
+	created    repository.Device
+	updated    repository.Device
+	candleRows []repository.ListSensorCandlesRow // ローソク足 (view=candle) 用 OHLC 行
 }
 
 func (f fakeDeviceQuerier) GetUserByEmail(_ context.Context, email string) (repository.User, error) {
@@ -76,6 +78,10 @@ func (f fakeDeviceQuerier) ListRecentSensorReadings(_ context.Context, _ reposit
 
 func (f fakeDeviceQuerier) ListDailySensorAggregates(_ context.Context, _ repository.ListDailySensorAggregatesParams) ([]repository.ListDailySensorAggregatesRow, error) {
 	return nil, nil
+}
+
+func (f fakeDeviceQuerier) ListSensorCandles(_ context.Context, _ repository.ListSensorCandlesParams) ([]repository.ListSensorCandlesRow, error) {
+	return f.candleRows, nil
 }
 
 func (f fakeDeviceQuerier) SoftDeleteDevice(_ context.Context, _ int64) error {
@@ -133,6 +139,59 @@ func deviceApp(devices map[int64]repository.Device, created, updated repository.
 	}
 	cfg := &config.Config{AppEnv: "development", SessionSecret: "0123456789abcdef0123456789abcdef"}
 	return newHTTPHandler(cfg, scs.New(), q, func(context.Context) error { return nil })
+}
+
+// candleApp はデバイス1と注入したローソク足 OHLC を備えた合成ハンドラを返す。
+func candleApp(candleRows []repository.ListSensorCandlesRow) http.Handler {
+	gin.SetMode(gin.TestMode)
+	hash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	u := repository.User{ID: 1, Name: "テストユーザー", Email: "test@example.com", PasswordHash: string(hash)}
+	q := fakeDeviceQuerier{
+		byEmail:    map[string]repository.User{"test@example.com": u},
+		byID:       map[int64]repository.User{1: u},
+		devices:    map[int64]repository.Device{1: {ID: 1, UserID: 1, Name: "ハウスA温湿度計", MacAddress: "AA:BB:CC:DD:EE:01", IsActive: true}},
+		byMac:      map[string]repository.Device{},
+		candleRows: candleRows,
+	}
+	cfg := &config.Config{AppEnv: "development", SessionSecret: "0123456789abcdef0123456789abcdef"}
+	return newHTTPHandler(cfg, scs.New(), q, func(context.Context) error { return nil })
+}
+
+// TestIntegration_ローソク足ビューが30日間2時間足で描画 はフルHTTPスタック (ルーティング+
+// session+view=candle バインド) を通して、注入した OHLC からローソク足フラグメントが描画され、
+// 期間連動 (30日間=2時間足・期間 active) になることを検証する (OHLC 集計 SQL 自体は DB 側のため
+// 別途 live 検証)。
+func TestIntegration_ローソク足ビューが30日間2時間足で描画(t *testing.T) {
+	base := time.Date(2026, 6, 1, 0, 0, 0, 0, time.FixedZone("JST", 9*3600))
+	rows := []repository.ListSensorCandlesRow{
+		{Bucket: base, OpenTemperature: 25.0, HighTemperature: 26.0, LowTemperature: 24.0, CloseTemperature: 25.5,
+			OpenHumidity: 80.0, HighHumidity: 82.0, LowHumidity: 78.0, CloseHumidity: 79.0},
+		{Bucket: base.Add(2 * time.Hour), OpenTemperature: 25.5, HighTemperature: 27.0, LowTemperature: 25.0, CloseTemperature: 26.8,
+			OpenHumidity: 79.0, HighHumidity: 80.0, LowHumidity: 75.0, CloseHumidity: 76.0},
+	}
+	app := candleApp(rows)
+	cookies := loginCookies(t, app)
+
+	req := httptest.NewRequest(http.MethodGet, "/devices/1/chart?period=30d&view=candle", nil)
+	req.Header.Set("HX-Request", "true")
+	for _, ck := range cookies {
+		req.AddCookie(ck)
+	}
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{"2時間足", "<rect", "period-btn active"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("candle フラグメントに %q が含まれない:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "<html") {
+		t.Errorf("フラグメントに <html> が含まれている (レイアウト付与):\n%s", body)
+	}
 }
 
 func getWithCookies(app http.Handler, path string, cookies []*http.Cookie) *httptest.ResponseRecorder {

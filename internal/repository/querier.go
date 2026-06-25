@@ -46,6 +46,11 @@ type Querier interface {
 	ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]SensorReading, error)
 	// 24時間グラフ用: 指定時刻以降の生データを昇順で取得
 	ListRecentSensorReadings(ctx context.Context, arg ListRecentSensorReadingsParams) ([]SensorReading, error)
+	// ローソク足用: 指定期間の計測を可変 bucket 幅 (15分/30分/1時間/2時間) で OHLC 集計する。
+	// DB 側で集計するため取得行は本数ぶん (30日×2時間足でも約360行) に収まる。
+	// open=バケット内最初, close=最後, high=最大, low=最小 (recorded_at 昇順基準)。
+	// バケット境界は origin (JST 暦日 00:00) に整列させる。
+	ListSensorCandles(ctx context.Context, arg ListSensorCandlesParams) ([]ListSensorCandlesRow, error)
 	// センサーデータ履歴画面のテーブル用 (期間指定 + ページング)
 	ListSensorReadingsPaginated(ctx context.Context, arg ListSensorReadingsPaginatedParams) ([]SensorReading, error)
 	// ダッシュボードのアラート通知バナー表示用

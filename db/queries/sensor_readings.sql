@@ -44,6 +44,28 @@ SELECT
  GROUP BY DATE(recorded_at)
  ORDER BY DATE(recorded_at) ASC;
 
+-- name: ListSensorCandles :many
+-- ローソク足用: 指定期間の計測を可変 bucket 幅 (15分/30分/1時間/2時間) で OHLC 集計する。
+-- DB 側で集計するため取得行は本数ぶん (30日×2時間足でも約360行) に収まる。
+-- open=バケット内最初, close=最後, high=最大, low=最小 (recorded_at 昇順基準)。
+-- バケット境界は origin (JST 暦日 00:00) に整列させる。
+SELECT
+    date_bin(sqlc.arg(bucket)::interval, recorded_at, sqlc.arg(origin)::timestamptz) AS bucket,
+    (array_agg(temperature ORDER BY recorded_at ASC))[1]  AS open_temperature,
+    MAX(temperature)                                       AS high_temperature,
+    MIN(temperature)                                       AS low_temperature,
+    (array_agg(temperature ORDER BY recorded_at DESC))[1] AS close_temperature,
+    (array_agg(humidity ORDER BY recorded_at ASC))[1]     AS open_humidity,
+    MAX(humidity)                                          AS high_humidity,
+    MIN(humidity)                                          AS low_humidity,
+    (array_agg(humidity ORDER BY recorded_at DESC))[1]     AS close_humidity
+  FROM sensor_readings
+ WHERE device_id   = sqlc.arg(device_id)
+   AND recorded_at >= sqlc.arg(since)
+   AND deleted_at IS NULL
+ GROUP BY bucket
+ ORDER BY bucket ASC;
+
 -- name: GetSensorReadingsSummary :one
 -- センサーデータ履歴画面の集計ボックス用
 SELECT
