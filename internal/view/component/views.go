@@ -38,11 +38,14 @@ type DeviceInfoView struct {
 }
 
 // DeviceChartAreaView はグラフ領域フラグメント (DeviceChartArea) の表示データ。
-// Period は active 判定用の現在期間 ("24h"/"3d"/"7d"/"30d")、温度/湿度 SVG は internal/chart が
-// 生成済みの文字列 (templ.Raw で埋め込む)。DeviceID は期間ボタンの hx-get/hx-push-url URL 用。
+// Period は active 判定用の現在期間 ("24h"/"3d"/"7d"/"30d")、View は表示形式 ("line"=折れ線 /
+// "candle"=30分足ローソク足)。温度/湿度 SVG は internal/chart が生成済みの文字列 (templ.Raw で
+// 埋め込む)。DeviceID は期間ボタン・形式トグルの hx-get/hx-push-url URL 用。
+// View 未設定 ("") は既定の折れ線扱い (chartViewActive 参照)。
 type DeviceChartAreaView struct {
 	DeviceID       int64
 	Period         string
+	View           string
 	TemperatureSVG string
 	HumiditySVG    string
 }
@@ -59,6 +62,28 @@ var chartPeriods = []chartPeriod{
 	{Value: "3d", Label: "3日間"},
 	{Value: "7d", Label: "7日間"},
 	{Value: "30d", Label: "30日間"},
+}
+
+// chartViewMode は表示形式トグル1個の定義 (Value=クエリ値, Label=表示文言)。
+type chartViewMode struct {
+	Value string
+	Label string
+}
+
+// chartViewModes は表示形式の選択肢 (折れ線 / ローソク足)。
+var chartViewModes = []chartViewMode{
+	{Value: "line", Label: "ライン"},
+	{Value: "candle", Label: "ローソク足"},
+}
+
+// chartViewActive はトグルボタン (mode) が現在の表示形式 (current) で active かを返す。
+// "candle" は current=="candle" のときのみ active。"line" は既定のため current が "" / "line"
+// (= candle 以外) のとき active とする (View 未設定は折れ線扱い)。
+func chartViewActive(mode, current string) bool {
+	if mode == "candle" {
+		return current == "candle"
+	}
+	return current != "candle"
 }
 
 // ReadingRow は最新計測テーブル1行分の表示データ (整形済み)。

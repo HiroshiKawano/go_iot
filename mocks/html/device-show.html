@@ -56,7 +56,15 @@
       </section>
 
       <section class="card">
-        <h2>期間選択</h2>
+        <h2>表示形式</h2>
+        <!-- 表示形式トグル: ライン(折れ線) / ローソク足(30分足・直近48時間)。実装側は HTMX の <button>。
+             ローソク足は上昇=水色 / 下落=ピンク で描画する。 -->
+        <div class="chart-type-selector">
+          <a href="?view=line" class="chart-type-btn active">ライン</a>
+          <a href="?view=candle" class="chart-type-btn">ローソク足</a>
+        </div>
+
+        <h2 class="u-mbs-6">期間選択</h2>
         <!-- R24: 期間切替はフィルタ操作のため <a href="?period="> で実装（hx-boost / URL状態保持） -->
         <div class="period-selector">
           <a href="?period=24h" class="period-btn active">24時間</a>

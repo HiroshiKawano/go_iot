@@ -78,6 +78,49 @@ func TestDeviceChartArea_デフォルト24hがactive(t *testing.T) {
 	assertContains(t, html, `hx-get="/devices/3/chart?period=24h"`)
 }
 
+func TestDeviceChartArea_表示形式トグルとデフォルトはラインactive(t *testing.T) {
+	// View 未設定 (既定の折れ線) でも表示形式トグルが描画され、ライン側が active になる。
+	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 5, Period: "24h"}))
+
+	assertContains(t, html, "chart-type-selector")
+	assertContains(t, html, "ライン")
+	assertContains(t, html, "ローソク足")
+
+	// 既定 (View 未設定=折れ線) は ライン が active・ローソク足 は非 active
+	if seg := buttonFor(html, "ライン"); !strings.Contains(seg, "active") {
+		t.Errorf("ラインボタンに active が付いていない: %q", seg)
+	}
+	if seg := buttonFor(html, "ローソク足"); strings.Contains(seg, "active") {
+		t.Errorf("ローソク足ボタンに active が付いている: %q", seg)
+	}
+	// ローソク足トグルは view=candle を取得する HTMX 属性を持つ (templ は属性内の & を &amp; にエスケープ)
+	assertContains(t, html, `hx-get="/devices/5/chart?period=24h&amp;view=candle"`)
+	// 折れ線なので注記 (30分足…) は出ない
+	if strings.Contains(html, "30分足") {
+		t.Errorf("折れ線表示なのにローソク足の注記が含まれる:\n%s", html)
+	}
+}
+
+func TestDeviceChartArea_ローソク足でcandle_activeかつ期間は非activeかつ注記(t *testing.T) {
+	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 9, Period: "24h", View: "candle"}))
+
+	// ローソク足が active・ライン は非 active
+	if seg := buttonFor(html, "ローソク足"); !strings.Contains(seg, "active") {
+		t.Errorf("ローソク足ボタンに active が付いていない: %q", seg)
+	}
+	if seg := buttonFor(html, "ライン"); strings.Contains(seg, "active") {
+		t.Errorf("ラインボタンに active が付いている: %q", seg)
+	}
+	// ローソク足は期間に連動しないため、期間ボタンは1つも active にしない
+	if got := strings.Count(html, "period-btn active"); got != 0 {
+		t.Errorf(`"period-btn active" の数 = %d, want 0`+"\n%s", got, html)
+	}
+	// 期間セレクタ自体は残す (折れ線へ戻る導線)
+	assertContains(t, html, "period-selector")
+	// 30分足・直近48時間の注記を表示
+	assertContains(t, html, "30分足")
+}
+
 func TestDeviceChartArea_期間3dでactiveとHTMX属性(t *testing.T) {
 	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 8, Period: "3d"}))
 

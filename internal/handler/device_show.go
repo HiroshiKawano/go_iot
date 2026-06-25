@@ -31,6 +31,18 @@ import (
 // defaultPeriod は ?period 未指定時の既定期間。
 const defaultPeriod = "24h"
 
+// defaultView は ?view 未指定時の既定表示形式 (折れ線)。
+const defaultView = "line"
+
+// candleView は ?view=candle (30分足ローソク足) の値。
+const candleView = "candle"
+
+// candleWindow はローソク足表示の対象期間 (直近48時間・30分足で最大96本)。
+const candleWindow = 48 * time.Hour
+
+// candleBucket はローソク足1本の集計幅 (30分足)。
+const candleBucket = 30 * time.Minute
+
 // deviceShowTitleSuffix はフルページ <title> の接尾辞。
 const deviceShowTitleSuffix = " - 農業IoTシステム"
 
@@ -41,15 +53,22 @@ const deviceShowTitleSuffix = " - 農業IoTシステム"
 // (design Open Questions「接続 TZ=Asia/Tokyo を前提」= Out of Boundary。monthDayLabel 参照)。
 var jst = time.FixedZone("JST", 9*60*60)
 
-// chartQuery は期間切替フラグメント (Chart) の period クエリバインド。
-// 24h/3d/7d/30d 以外は binding で弾き 400 にする (R8.2)。
+// chartQuery は期間切替フラグメント (Chart) の period/view クエリバインド。
+// period は 24h/3d/7d/30d 以外を binding で弾き 400 (R8.2)。view は任意 (未指定=既定 line)で、
+// line/candle 以外は 400。これにより view を持たない従来 URL とも互換を保つ。
 type chartQuery struct {
 	Period string `form:"period" binding:"required,oneof=24h 3d 7d 30d"`
+	View   string `form:"view" binding:"omitempty,oneof=line candle"`
 }
 
 // isValidPeriod は period が許容値 (24h/3d/7d/30d) か判定する (Show の任意 ?period 検証用)。
 func isValidPeriod(p string) bool {
 	return p == "24h" || p == "3d" || p == "7d" || p == "30d"
+}
+
+// isValidView は view が許容値 (line/candle) か判定する (Show の任意 ?view 検証用)。
+func isValidView(v string) bool {
+	return v == defaultView || v == candleView
 }
 
 // periodSince は period から取得開始時刻を返す (now 基準)。
@@ -88,6 +107,14 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 		return
 	}
 
+	viewMode := c.Query("view")
+	if viewMode == "" {
+		viewMode = defaultView
+	} else if !isValidView(viewMode) {
+		renderError(c, http.StatusBadRequest) // 不正 view
+		return
+	}
+
 	device, err := authz.RequireDeviceOwner(ctx, h.Repo, id, uid)
 	if err != nil {
 		renderDeviceReadError(c, err) // 不在/非所有とも 404 (R7.2 列挙防止)
@@ -106,7 +133,7 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 		return
 	}
 
-	chartArea, err := h.buildChartArea(ctx, id, period, now)
+	chartArea, err := h.buildChartArea(ctx, id, period, viewMode, now)
 	if err != nil {
 		renderError(c, http.StatusInternalServerError)
 		return
@@ -154,7 +181,12 @@ func (h *DeviceHandler) Chart(c *gin.Context) {
 		return
 	}
 
-	chartArea, err := h.buildChartArea(ctx, id, q.Period, now)
+	viewMode := q.View
+	if viewMode == "" {
+		viewMode = defaultView
+	}
+
+	chartArea, err := h.buildChartArea(ctx, id, q.Period, viewMode, now)
 	if err != nil {
 		renderError(c, http.StatusInternalServerError)
 		return
@@ -194,10 +226,20 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard") // 非 HTMX フォームは 303
 }
 
-// buildChartArea は period に応じてグラフデータを取得し、温度/湿度 SVG を生成した
-// グラフ領域 View を返す。24h=生データ1系列、3d/7d/30d=日次 max/min の2系列
-// (24h のみ生データ詳細・複数日は日次集計、という設計閾値に 3d を複数日側として乗せる)。
-func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
+// buildChartArea は view/period に応じてグラフデータを取得し、温度/湿度 SVG を生成した
+// グラフ領域 View を返す。
+//   - view=candle: 直近48時間の生データを30分バケットで OHLC 集計しローソク足 (期間に非連動)。
+//   - view=line  : 従来の折れ線。24h=生データ1系列、3d/7d/30d=日次 max/min の2系列
+//     (24h のみ生データ詳細・複数日は日次集計、という設計閾値に 3d を複数日側として乗せる)。
+func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period, view string, now time.Time) (component.DeviceChartAreaView, error) {
+	if view == candleView {
+		return h.buildCandleChartArea(ctx, deviceID, period, now)
+	}
+	return h.buildLineChartArea(ctx, deviceID, period, now)
+}
+
+// buildLineChartArea は折れ線グラフ (従来表示) のグラフ領域 View を構築する。
+func (h *DeviceHandler) buildLineChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	var tempSeries, humSeries []chart.Series
 
 	if period == defaultPeriod {
@@ -223,9 +265,74 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 	return component.DeviceChartAreaView{
 		DeviceID:       deviceID,
 		Period:         period,
+		View:           defaultView,
 		TemperatureSVG: chart.LineChartSVG("温度", "℃", tempSeries),
 		HumiditySVG:    chart.LineChartSVG("湿度", "%", humSeries),
 	}, nil
+}
+
+// buildCandleChartArea は30分足ローソク足のグラフ領域 View を構築する。
+// 直近48時間の生データ (昇順) を再利用し、Go 側で30分バケットの OHLC へ畳み込む
+// (専用 SQL は持たず、24h 折れ線と同じ ListRecentSensorReadings を期間だけ広げて使う)。
+// period は折れ線へ戻る際の状態保持用にそのまま透過する (ローソク足自体は period 非連動)。
+func (h *DeviceHandler) buildCandleChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
+	rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
+		DeviceID:   deviceID,
+		RecordedAt: pgconv.Timestamptz(now.Add(-candleWindow)),
+	})
+	if err != nil {
+		return component.DeviceChartAreaView{}, err
+	}
+	tempCandles, humCandles := buildCandleSeries(rows)
+
+	return component.DeviceChartAreaView{
+		DeviceID:       deviceID,
+		Period:         period,
+		View:           candleView,
+		TemperatureSVG: chart.CandlestickSVG("温度", "℃", tempCandles),
+		HumiditySVG:    chart.CandlestickSVG("湿度", "%", humCandles),
+	}, nil
+}
+
+// buildCandleSeries は昇順の生データを30分バケットへ畳み込み、温度/湿度それぞれの
+// ローソク足 (OHLC) 列を返す。各バケットは 始値=最初・終値=最後 (昇順なので末尾上書き)・
+// 高値=最大・安値=最小。バケット境界は Unix 秒の30分商で判定する (JST は +9時間=整数時間
+// オフセットのため30分境界は :00/:30 に一致)。X ラベルはバケット開始時刻の JST "M/D HH:MM"。
+func buildCandleSeries(rows []repository.SensorReading) (temp, hum []chart.Candle) {
+	bucketSec := int64(candleBucket / time.Second)
+	curKey := int64(-1)
+
+	for _, r := range rows {
+		t := pgconv.TimestamptzToTime(r.RecordedAt)
+		key := t.Unix() / bucketSec
+		tv := pgconv.NumericToFloat(r.Temperature)
+		hv := pgconv.NumericToFloat(r.Humidity)
+
+		if key != curKey {
+			label := time.Unix(key*bucketSec, 0).In(jst).Format("1/2 15:04")
+			temp = append(temp, chart.Candle{Label: label, Open: tv, High: tv, Low: tv, Close: tv})
+			hum = append(hum, chart.Candle{Label: label, Open: hv, High: hv, Low: hv, Close: hv})
+			curKey = key
+			continue
+		}
+		last := len(temp) - 1
+		temp[last] = updateCandle(temp[last], tv)
+		hum[last] = updateCandle(hum[last], hv)
+	}
+	return temp, hum
+}
+
+// updateCandle は足 c に新しい値 v を取り込んだ新しい足を返す (終値更新・高値/安値拡張)。
+// 既存値を破壊せず関数的に更新する (呼び出し側でスライス要素へ再代入)。
+func updateCandle(c chart.Candle, v float64) chart.Candle {
+	c.Close = v
+	if v > c.High {
+		c.High = v
+	}
+	if v < c.Low {
+		c.Low = v
+	}
+	return c
 }
 
 // rawSeries は 24h 生データ行を温度/湿度それぞれ1系列 (折れ線) へ写像する。

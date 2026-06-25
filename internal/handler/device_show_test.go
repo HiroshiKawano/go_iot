@@ -526,6 +526,58 @@ func TestChart_3dは日次集計で取得(t *testing.T) {
 	}
 }
 
+func TestChart_candleは30分足ローソク足で取得(t *testing.T) {
+	repo := showDeviceRepo()
+	// 09:00 JST (00:00 UTC) 始点。同一30分バケットに2点 (始値25→終値26=上昇) + 次バケットに1点。
+	base := time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, base.Add(0*time.Minute), 25.00, 70.00),
+		sensorRow(1, base.Add(10*time.Minute), 26.00, 68.00), // 同バケット
+		sensorRow(1, base.Add(40*time.Minute), 24.00, 72.00), // 次バケット
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := hxGet(r, "/devices/1/chart?period=24h&view=candle")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	if !activeButtonHas(body, "ローソク足") {
+		t.Errorf("ローソク足 がアクティブでない:\n%s", body)
+	}
+	// ローソク足は期間に連動しないため、期間ボタンは active にしない
+	if strings.Contains(body, "period-btn active") {
+		t.Errorf("ローソク足表示中に期間ボタンが active になっている:\n%s", body)
+	}
+	// 実体 (<rect) と注記 (30分足) が描画される
+	if !strings.Contains(body, "<rect") {
+		t.Errorf("ローソク足の実体 <rect> が描画されていない:\n%s", body)
+	}
+	if !strings.Contains(body, "30分足") {
+		t.Errorf("ローソク足の注記 (30分足…) が無い:\n%s", body)
+	}
+}
+
+func TestChart_不正なviewは400(t *testing.T) {
+	repo := showDeviceRepo()
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := hxGet(r, "/devices/1/chart?period=24h&view=bogus")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status=%d, want 400 (不正 view は binding で弾く)", w.Code)
+	}
+}
+
+func TestShow_不正なviewは400(t *testing.T) {
+	repo := showDeviceRepo()
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1?view=bogus")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status=%d, want 400 (不正 view)", w.Code)
+	}
+}
+
 func TestChart_グラフデータ取得のDBエラーは500(t *testing.T) {
 	repo := showDeviceRepo()
 	repo.dailyErr = errInjected

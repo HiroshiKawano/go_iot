@@ -2,25 +2,41 @@ package component
 
 import "fmt"
 
-// DeviceChartArea は期間セレクタ + 温度/湿度グラフを内包するグラフ領域フラグメント
-// (mocks/html/device-show.html の期間選択カードを HTMX 化)。期間ボタンは chartPeriods
-// (24h/3d/7d/30d) を時系列順に描画する。
+// DeviceChartArea は表示形式トグル + 期間セレクタ + 温度/湿度グラフを内包するグラフ領域フラグメント
+// (mocks/html/device-show.html の表示形式・期間選択カードを HTMX 化)。
 //
-// 期間リンク (<a href="?period=">) を <button type="button"> に置換し、フルフラグメント swap
-// (§10-D) で active 状態をサーバー側往復する: hx-get でフラグメントを取得し、hx-target
-// "#device-chart-area" に hx-swap="innerHTML" で差し替え、hx-push-url には**フルページ URL**
-// (/devices/{id}?period=) を積む (フラグメント URL を push するとリロード時に部分 HTML だけ
-// 返る不具合を避ける)。active は状態クラスを templ.KV で付与 (class のみ・id はスタイル非使用, §43)。
+// 表示形式トグル (chartViewModes: ライン/ローソク足) と期間ボタン (chartPeriods: 24h/3d/7d/30d) を
+// それぞれ <button type="button"> で描画し、フルフラグメント swap (§10-D) で active 状態をサーバー側
+// 往復する: hx-get でフラグメントを取得し hx-target "#device-chart-area" に hx-swap="innerHTML" で
+// 差し替え、hx-push-url には**フルページ URL** (/devices/{id}?…) を積む。
+//
+// 期間ボタンの URL は ?period= のみ (view は未指定=既定 line)。これにより view を持たない従来 URL と
+// 互換を保ち、ローソク足表示中に期間ボタンを押すと折れ線へ戻る。ローソク足は期間に連動しない
+// (常に直近48時間・30分足) ため、view=candle のとき期間ボタンは active にしない (chartViewActive 参照)。
 //
 // このフラグメント自身は #device-chart-area ラッパーを持たない (ラッパーは DeviceShow 側。
 // innerHTML swap で wrapper が二重生成されるのを避ける)。最新計測テーブルは期間に連動しないため
 // ここには含めない (R3.4/5.4)。SVG は internal/chart 生成の安全な自前文字列を @templ.Raw で埋め込む。
 templ DeviceChartArea(v DeviceChartAreaView) {
+	<h2>表示形式</h2>
+	<div class="chart-type-selector">
+		for _, m := range chartViewModes {
+			<button
+				type="button"
+				class={ "chart-type-btn", templ.KV("active", chartViewActive(m.Value, v.View)) }
+				hx-get={ fmt.Sprintf("/devices/%d/chart?period=%s&view=%s", v.DeviceID, v.Period, m.Value) }
+				hx-target="#device-chart-area"
+				hx-swap="innerHTML"
+				hx-push-url={ fmt.Sprintf("/devices/%d?period=%s&view=%s", v.DeviceID, v.Period, m.Value) }
+			>{ m.Label }</button>
+		}
+	</div>
+	<h2 class="u-mbs-6">期間選択</h2>
 	<div class="period-selector">
 		for _, p := range chartPeriods {
 			<button
 				type="button"
-				class={ "period-btn", templ.KV("active", p.Value == v.Period) }
+				class={ "period-btn", templ.KV("active", v.View != "candle" && p.Value == v.Period) }
 				hx-get={ fmt.Sprintf("/devices/%d/chart?period=%s", v.DeviceID, p.Value) }
 				hx-target="#device-chart-area"
 				hx-swap="innerHTML"
@@ -36,4 +52,7 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 	<div id="humidity-chart" class="chart-wrapper">
 		@templ.Raw(v.HumiditySVG)
 	</div>
+	if v.View == "candle" {
+		<p class="chart-note">30分足（直近48時間）・上昇=水色／下落=ピンク</p>
+	}
 }
