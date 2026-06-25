@@ -549,12 +549,32 @@ func TestChart_candleは30分足ローソク足で取得(t *testing.T) {
 	if !activeButtonHas(body, "24時間") {
 		t.Errorf("ローソク足表示中に選択期間 24時間 が active でない:\n%s", body)
 	}
-	// 実体 (<rect) と注記 (30分足) が描画される
+	// 実体 (<rect) と注記 (24時間=15分足) が描画される
 	if !strings.Contains(body, "<rect") {
 		t.Errorf("ローソク足の実体 <rect> が描画されていない:\n%s", body)
 	}
-	if !strings.Contains(body, "30分足") {
-		t.Errorf("ローソク足の注記 (30分足…) が無い:\n%s", body)
+	if !strings.Contains(body, "15分足") {
+		t.Errorf("ローソク足の注記 (24時間=15分足) が無い:\n%s", body)
+	}
+}
+
+func TestCandleBucketFor_期間に応じた足を返す(t *testing.T) {
+	cases := []struct {
+		period string
+		bucket time.Duration
+		label  string
+	}{
+		{"24h", 15 * time.Minute, "15分足"},
+		{"2d", 30 * time.Minute, "30分足"},
+		{"3d", 30 * time.Minute, "30分足"},
+		{"7d", time.Hour, "1時間足"},
+		{"30d", 4 * time.Hour, "4時間足"},
+	}
+	for _, c := range cases {
+		gotBucket, gotLabel := candleBucketFor(c.period)
+		if gotBucket != c.bucket || gotLabel != c.label {
+			t.Errorf("candleBucketFor(%q) = (%v, %q), want (%v, %q)", c.period, gotBucket, gotLabel, c.bucket, c.label)
+		}
 	}
 }
 

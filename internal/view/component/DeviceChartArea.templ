@@ -13,7 +13,9 @@ import "fmt"
 // 期間ボタンの URL は ?period=&view= を必ず含め、現在の表示形式 (line/candle) を保持して往復する
 // (ローソク足表示中に期間を変えてもローソク足のまま)。折れ線・ローソク足とも期間連動するため、
 // 期間ボタンは表示形式に関わらず現在期間 (v.Period) のものを active にする。
-// ローソク足は選択中の期間レンジを30分足で描画する (24時間=48本/2日間=96本/…)。
+// ローソク足は選択中の期間レンジを、期間に応じた足で描画する
+// (24時間=15分足/2日間=30分足/3日間=30分足/7日間=1時間足/30日間=4時間足、いずれも約96〜180本)。
+// 足ラベルは v.CandleUnit (handler が決定) を注記に表示する。
 //
 // このフラグメント自身は #device-chart-area ラッパーを持たない (ラッパーは DeviceShow 側。
 // innerHTML swap で wrapper が二重生成されるのを避ける)。最新計測テーブルは期間に連動しないため
@@ -54,6 +56,6 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 		@templ.Raw(v.HumiditySVG)
 	</div>
 	if v.View == "candle" {
-		<p class="chart-note">30分足（選択中の期間）・上昇=水色／下落=ピンク</p>
+		<p class="chart-note">{ v.CandleUnit }（選択中の期間）・上昇=水色／下落=ピンク</p>
 	}
 }

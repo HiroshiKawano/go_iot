@@ -103,7 +103,7 @@ func TestDeviceChartArea_表示形式トグルとデフォルトはラインacti
 }
 
 func TestDeviceChartArea_ローソク足でcandle_activeかつ期間連動かつ注記(t *testing.T) {
-	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 9, Period: "2d", View: "candle"}))
+	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 9, Period: "2d", View: "candle", CandleUnit: "30分足"}))
 
 	// ローソク足が active・ライン は非 active
 	if seg := buttonFor(html, "ローソク足"); !strings.Contains(seg, "active") {

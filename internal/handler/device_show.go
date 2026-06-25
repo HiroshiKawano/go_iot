@@ -37,8 +37,23 @@ const defaultView = "line"
 // candleView は ?view=candle (30分足ローソク足) の値。
 const candleView = "candle"
 
-// candleBucket はローソク足1本の集計幅 (30分足)。
-const candleBucket = 30 * time.Minute
+// candleBucketFor は期間に応じたローソク足1本の集計幅と表示ラベルを返す。
+// 期間が長いほど足を粗くし、本数 (約96〜180本) と描画負荷を一定に抑える
+// (24時間=15分足/2日間=30分足/3日間=30分足/7日間=1時間足/30日間=4時間足)。
+func candleBucketFor(period string) (time.Duration, string) {
+	switch period {
+	case "2d":
+		return 30 * time.Minute, "30分足"
+	case "3d":
+		return 30 * time.Minute, "30分足"
+	case "7d":
+		return time.Hour, "1時間足"
+	case "30d":
+		return 4 * time.Hour, "4時間足"
+	default: // "24h"
+		return 15 * time.Minute, "15分足"
+	}
+}
 
 // deviceShowTitleSuffix はフルページ <title> の接尾辞。
 const deviceShowTitleSuffix = " - 農業IoTシステム"
@@ -288,33 +303,42 @@ func (h *DeviceHandler) buildCandleChartArea(ctx context.Context, deviceID int64
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
 	}
-	tempCandles, humCandles := buildCandleSeries(rows)
+	bucket, unitLabel := candleBucketFor(period)
+	tempCandles, humCandles := buildCandleSeries(rows, bucket)
 
 	return component.DeviceChartAreaView{
 		DeviceID:       deviceID,
 		Period:         period,
 		View:           candleView,
+		CandleUnit:     unitLabel,
 		TemperatureSVG: chart.CandlestickSVG("温度", "℃", tempCandles),
 		HumiditySVG:    chart.CandlestickSVG("湿度", "%", humCandles),
 	}, nil
 }
 
-// buildCandleSeries は昇順の生データを30分バケットへ畳み込み、温度/湿度それぞれの
+// candleJSTOffsetSec は JST(UTC+9) の秒オフセット。バケット境界を JST の暦日 (00:00) に
+// 揃えるための補正に使う。Unix 秒は UTC 基準のため、この補正を足してから商を取ることで
+// 15分/30分/1時間/4時間いずれの足も JST の 00:00 起点で整列する (4時間足が UTC 基準だと
+// JST 01:00 起点にずれる問題を回避)。
+const candleJSTOffsetSec = int64(9 * 3600)
+
+// buildCandleSeries は昇順の生データを bucket 幅へ畳み込み、温度/湿度それぞれの
 // ローソク足 (OHLC) 列を返す。各バケットは 始値=最初・終値=最後 (昇順なので末尾上書き)・
-// 高値=最大・安値=最小。バケット境界は Unix 秒の30分商で判定する (JST は +9時間=整数時間
-// オフセットのため30分境界は :00/:30 に一致)。X ラベルはバケット開始時刻の JST "M/D HH:MM"。
-func buildCandleSeries(rows []repository.SensorReading) (temp, hum []chart.Candle) {
-	bucketSec := int64(candleBucket / time.Second)
+// 高値=最大・安値=最小。バケット境界は (Unix秒 + JSTオフセット) を bucket 幅で割った商で
+// 判定し、JST の暦日境界に整列させる。X ラベルはバケット開始時刻の JST "M/D HH:MM"。
+func buildCandleSeries(rows []repository.SensorReading, bucket time.Duration) (temp, hum []chart.Candle) {
+	bucketSec := int64(bucket / time.Second)
 	curKey := int64(-1)
 
 	for _, r := range rows {
 		t := pgconv.TimestamptzToTime(r.RecordedAt)
-		key := t.Unix() / bucketSec
+		key := (t.Unix() + candleJSTOffsetSec) / bucketSec
 		tv := pgconv.NumericToFloat(r.Temperature)
 		hv := pgconv.NumericToFloat(r.Humidity)
 
 		if key != curKey {
-			label := time.Unix(key*bucketSec, 0).In(jst).Format("1/2 15:04")
+			startUnix := key*bucketSec - candleJSTOffsetSec
+			label := time.Unix(startUnix, 0).In(jst).Format("1/2 15:04")
 			temp = append(temp, chart.Candle{Label: label, Open: tv, High: tv, Low: tv, Close: tv})
 			hum = append(hum, chart.Candle{Label: label, Open: hv, High: hv, Low: hv, Close: hv})
 			curKey = key

@@ -46,6 +46,7 @@ type DeviceChartAreaView struct {
 	DeviceID       int64
 	Period         string
 	View           string
+	CandleUnit     string // ローソク足の足ラベル ("15分足"/"30分足"/"1時間足"/"4時間足"、注記用。line 時は空)
 	TemperatureSVG string
 	HumiditySVG    string
 }
