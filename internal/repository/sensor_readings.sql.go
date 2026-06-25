@@ -171,7 +171,7 @@ type ListDailySensorAggregatesRow struct {
 	SampleCount    int64          `json:"sample_count"`
 }
 
-// 7日/30日グラフ用: 日別の平均/最大/最小を集計
+// 3日/7日/30日グラフ用: 日別の平均/最大/最小を集計 (24h以外の複数日はこの集計経路)
 func (q *Queries) ListDailySensorAggregates(ctx context.Context, arg ListDailySensorAggregatesParams) ([]ListDailySensorAggregatesRow, error) {
 	rows, err := q.db.Query(ctx, listDailySensorAggregates, arg.DeviceID, arg.RecordedAt)
 	if err != nil {

@@ -35,7 +35,7 @@ type Querier interface {
 	// device_id が NULL の場合は全デバイス対象
 	ListAlertHistoriesPaginated(ctx context.Context, arg ListAlertHistoriesPaginatedParams) ([]ListAlertHistoriesPaginatedRow, error)
 	ListAlertRulesByDevice(ctx context.Context, deviceID int64) ([]AlertRule, error)
-	// 7日/30日グラフ用: 日別の平均/最大/最小を集計
+	// 3日/7日/30日グラフ用: 日別の平均/最大/最小を集計 (24h以外の複数日はこの集計経路)
 	ListDailySensorAggregates(ctx context.Context, arg ListDailySensorAggregatesParams) ([]ListDailySensorAggregatesRow, error)
 	ListDeviceTokensByUser(ctx context.Context, userID int64) ([]ListDeviceTokensByUserRow, error)
 	ListDevicesByUser(ctx context.Context, userID int64) ([]Device, error)

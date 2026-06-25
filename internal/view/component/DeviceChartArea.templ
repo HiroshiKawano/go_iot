@@ -3,7 +3,8 @@ package component
 import "fmt"
 
 // DeviceChartArea は期間セレクタ + 温度/湿度グラフを内包するグラフ領域フラグメント
-// (mocks/html/device-show.html 行60-75 を HTMX 化)。
+// (mocks/html/device-show.html の期間選択カードを HTMX 化)。期間ボタンは chartPeriods
+// (24h/3d/7d/30d) を時系列順に描画する。
 //
 // 期間リンク (<a href="?period=">) を <button type="button"> に置換し、フルフラグメント swap
 // (§10-D) で active 状態をサーバー側往復する: hx-get でフラグメントを取得し、hx-target

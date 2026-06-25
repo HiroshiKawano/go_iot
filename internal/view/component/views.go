@@ -38,7 +38,7 @@ type DeviceInfoView struct {
 }
 
 // DeviceChartAreaView はグラフ領域フラグメント (DeviceChartArea) の表示データ。
-// Period は active 判定用の現在期間 ("24h"/"7d"/"30d")、温度/湿度 SVG は internal/chart が
+// Period は active 判定用の現在期間 ("24h"/"3d"/"7d"/"30d")、温度/湿度 SVG は internal/chart が
 // 生成済みの文字列 (templ.Raw で埋め込む)。DeviceID は期間ボタンの hx-get/hx-push-url URL 用。
 type DeviceChartAreaView struct {
 	DeviceID       int64
@@ -53,9 +53,10 @@ type chartPeriod struct {
 	Label string
 }
 
-// chartPeriods は期間切替の選択肢 (24h/7d/30d の 3 つのみ, R3.1)。
+// chartPeriods は期間切替の選択肢 (24h/3d/7d/30d の 4 つ, R3.1)。時系列順に並べる。
 var chartPeriods = []chartPeriod{
 	{Value: "24h", Label: "24時間"},
+	{Value: "3d", Label: "3日間"},
 	{Value: "7d", Label: "7日間"},
 	{Value: "30d", Label: "30日間"},
 }

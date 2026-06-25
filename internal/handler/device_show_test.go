@@ -246,6 +246,52 @@ func TestShow_period7dで日次集計と7dアクティブ(t *testing.T) {
 	}
 }
 
+func TestShow_period3dで日次集計と3dアクティブ(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.dailyAggs = []repository.ListDailySensorAggregatesRow{
+		dailyAggRow(time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC), 30.0, 18.0, 70.0, 40.0),
+		dailyAggRow(time.Date(2026, 4, 19, 0, 0, 0, 0, time.UTC), 31.0, 19.0, 72.0, 42.0),
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1?period=3d")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !activeButtonHas(body, "3日間") {
+		t.Errorf("3日間 がアクティブでない:\n%s", body)
+	}
+	// 3d は複数日扱い=日次2系列 → 凡例 (最高/最低) と日付ラベルが出る (24h の生データ経路ではない)
+	for _, want := range []string{"最高", "最低", "04-18", "04-19", "31.0", "18.0"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("3d グラフに %q が含まれていない", want)
+		}
+	}
+}
+
+// periodSince の純粋関数を期間別に直接検証する。fake repo は取得開始時刻 (params の RecordedAt) を
+// 破棄するため、ハンドラ経由テストでは 3d→-3日 の写像ミスを捕捉できない。ここで写像そのものを固定する。
+func TestPeriodSince_期間ごとの取得開始時刻(t *testing.T) {
+	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		period string
+		want   time.Time
+	}{
+		{"24h", now.Add(-24 * time.Hour)},
+		{"3d", now.AddDate(0, 0, -3)},
+		{"7d", now.AddDate(0, 0, -7)},
+		{"30d", now.AddDate(0, 0, -30)},
+		{"", now.Add(-24 * time.Hour)},    // 既定 (空) は 24h
+		{"bad", now.Add(-24 * time.Hour)}, // 不正値も既定 24h にフォールバック
+	}
+	for _, c := range cases {
+		if got := periodSince(c.period, now); !got.Equal(c.want) {
+			t.Errorf("periodSince(%q) = %v, want %v", c.period, got, c.want)
+		}
+	}
+}
+
 func TestShow_計測0件で空グラフとテーブル空メッセージ(t *testing.T) {
 	repo := showDeviceRepo() // latest/recent ともに空
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
@@ -453,6 +499,30 @@ func TestChart_24hは生データで取得(t *testing.T) {
 	}
 	if !strings.Contains(body, "13:00") || !strings.Contains(body, "14:00") {
 		t.Errorf("24h 生データの時刻ラベル(JST)が無い:\n%s", body)
+	}
+}
+
+func TestChart_3dは日次集計で取得(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.dailyAggs = []repository.ListDailySensorAggregatesRow{
+		dailyAggRow(time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC), 30.0, 18.0, 70.0, 40.0),
+		dailyAggRow(time.Date(2026, 4, 19, 0, 0, 0, 0, time.UTC), 31.0, 19.0, 72.0, 42.0),
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	// oneof バインディングが 3d を受理し (400 にならず)、複数日=日次集計経路を通る
+	w := hxGet(r, "/devices/1/chart?period=3d")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (3d は許容値・R8.2)", w.Code)
+	}
+	body := w.Body.String()
+	if !activeButtonHas(body, "3日間") {
+		t.Errorf("3日間 がアクティブでない:\n%s", body)
+	}
+	for _, want := range []string{"最高", "最低", "04-18"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("3d グラフに %q が含まれていない (日次集計経路)", want)
+		}
 	}
 }
 

@@ -22,7 +22,7 @@
 ### ルーティングとハンドラ
 
 - **GET /devices/{device}** → `DeviceHandler.Show` → `internal/view/page/DeviceShow.templ`（フルページ初期表示。デフォルト期間24h）
-- **GET /devices/{device}/chart?period={24h|7d|30d}** → `DeviceHandler.Chart` → `internal/view/component/DeviceChartArea.templ`（HTMX フラグメント。温度グラフ + 湿度グラフ + 期間セレクタを一括差し替え）
+- **GET /devices/{device}/chart?period={24h|3d|7d|30d}** → `DeviceHandler.Chart` → `internal/view/component/DeviceChartArea.templ`（HTMX フラグメント。温度グラフ + 湿度グラフ + 期間セレクタを一括差し替え）
 - **DELETE /devices/{device}** → `DeviceHandler.Delete` → 論理削除（`SoftDeleteDevice` sqlc クエリ）→ HX-Redirect /dashboard またはフルページリダイレクト
 
 ### デバイス情報パネル
@@ -33,16 +33,16 @@
 
 ### 期間切替HTMX機構（本セッション技術的中心）
 
-- 期間ボタン: 24時間 / 7日間 / 30日間（R22-2 ネイティブselect相当。Tom Select不要。3値のみ）
+- 期間ボタン: 24時間 / 3日間 / 7日間 / 30日間（R22-2 ネイティブselect相当。Tom Select不要。時系列順の4値）
 - 各ボタンに `hx-get="/devices/{device}/chart?period=24h"` + `hx-target="#device-chart-area"` + `hx-swap="innerHTML"` を付与
 - レスポンスは`DeviceChartArea.templ`（温度グラフ`#temperature-chart` + 湿度グラフ`#humidity-chart` + 期間ボタン群を内包）
 - アクティブ期間ボタンの active状態（`.active` 等）をサーバー側で判定し、レスポンスに含める（フルフラグメント swap で選択状態を往復、§10-D）
-- Handler内でクエリパラメータ `period` をバリデーション（required, oneof=24h 7d 30d）
+- Handler内でクエリパラメータ `period` をバリデーション（required, oneof=24h 3d 7d 30d）
 
 ### SVGグラフ生成（サーバーサイド）
 
 - 24時間グラフ: `sensor_readings` 生データ（温度・湿度）を取得し、横軸時間・縦軸℃/% の SVG を生成（システム構成図.md参照）
-- 7日/30日グラフ: `ListDailySensorAggregates` sqlcクエリで日次集計（GROUP BY DATE(recorded_at)、MAX/MIN集計）を取得
+- 3日/7日/30日グラフ（24h以外の複数日）: `ListDailySensorAggregates` sqlcクエリで日次集計（GROUP BY DATE(recorded_at)、MAX/MIN集計）を取得
 - 集計結果の MAX/MIN は nullable な pgtype.Numeric のため pgconv.NumericToFloat() で安全に変換（実装現状サマリ §5.2 の関数名）
 - SVG 出力は templ の `@templ.Raw(svgString)` で埋め込み（HTML エスケープ回避）
 - SVG 自作生成の技術仕様（線色・フォント・軸ラベル等）は システム構成図.md「サーバサイド SVG グラフ自作」を参照。詳細レイアウト・色/フォントはこのセッション設計フェーズで確定
@@ -76,7 +76,7 @@
 ### バリデーションとエラーハンドリング
 
 - `/devices/{device}` の device パラメータは ParseInt で int64 に変換。不正な場合 400 Bad Request
-- `/devices/{device}/chart?period=...` の period クエリ: Handler 内で `c.ShouldBindQuery` + `binding:"required,oneof=24h 7d 30d"`
+- `/devices/{device}/chart?period=...` の period クエリ: Handler 内で `c.ShouldBindQuery` + `binding:"required,oneof=24h 3d 7d 30d"`
 - グラフデータが 0 件の場合、空のグラフ SVG（「データはまだありません」のテキスト付き）を返す
 - HTMX リクエスト判定: `c.GetHeader("HX-Request") != ""` で分岐（フルページ vs フラグメント）
 
@@ -112,8 +112,8 @@
 ## 受け入れ基準（概略）
 
 1. **フルページ初期表示（GET /devices/{device}?）** が正常に動作。デバイス名・MAC・最終通信・デフォルト24hグラフ・最新計測10件が表示される
-2. **期間切替HTMX** が正常に動作。24h / 7d / 30d ボタンのいずれかをクリックすると、グラフが差し替わり、アクティブボタンの状態がサーバーから往復される
-3. **SVG グラフ生成** が正常に動作。24h グラフは温度・湿度のデータ点を線でつないだ線グラフ。7d / 30d は日次集計値（MAX/MIN）を表示。軸ラベル・凡例を含む
+2. **期間切替HTMX** が正常に動作。24h / 3d / 7d / 30d ボタンのいずれかをクリックすると、グラフが差し替わり、アクティブボタンの状態がサーバーから往復される
+3. **SVG グラフ生成** が正常に動作。24h グラフは温度・湿度のデータ点を線でつないだ線グラフ。3d / 7d / 30d は日次集計値（MAX/MIN）を表示。軸ラベル・凡例を含む
 4. **最新計測テーブル** が固定10件で表示される。期間ボタン操作でグラフは変わるが、テーブルは「常に最新10件」で更新されない
 5. **削除機能** が正常に動作。[削除]ボタン → モーダル表示 → 確認 → DELETE リクエスト発火 → 削除成功後 /dashboard へリダイレクト
 6. **バリデーション・エラーハンドリング** が正常。不正な device ID / period パラメータに対して 400 / 422 を返す

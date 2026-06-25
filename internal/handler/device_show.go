@@ -42,19 +42,21 @@ const deviceShowTitleSuffix = " - 農業IoTシステム"
 var jst = time.FixedZone("JST", 9*60*60)
 
 // chartQuery は期間切替フラグメント (Chart) の period クエリバインド。
-// 24h/7d/30d 以外は binding で弾き 400 にする (R8.2)。
+// 24h/3d/7d/30d 以外は binding で弾き 400 にする (R8.2)。
 type chartQuery struct {
-	Period string `form:"period" binding:"required,oneof=24h 7d 30d"`
+	Period string `form:"period" binding:"required,oneof=24h 3d 7d 30d"`
 }
 
-// isValidPeriod は period が許容値 (24h/7d/30d) か判定する (Show の任意 ?period 検証用)。
+// isValidPeriod は period が許容値 (24h/3d/7d/30d) か判定する (Show の任意 ?period 検証用)。
 func isValidPeriod(p string) bool {
-	return p == "24h" || p == "7d" || p == "30d"
+	return p == "24h" || p == "3d" || p == "7d" || p == "30d"
 }
 
 // periodSince は period から取得開始時刻を返す (now 基準)。
 func periodSince(period string, now time.Time) time.Time {
 	switch period {
+	case "3d":
+		return now.AddDate(0, 0, -3)
 	case "7d":
 		return now.AddDate(0, 0, -7)
 	case "30d":
@@ -127,7 +129,7 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 }
 
 // Chart は期間切替のグラフ領域フラグメントのみを返す (GET /devices/:device/chart・RequireAuth 前提)。
-// 非数値 ID→400、period バリデーション (required,oneof=24h 7d 30d・不正→400)、所有者認可
+// 非数値 ID→400、period バリデーション (required,oneof=24h 3d 7d 30d・不正→400)、所有者認可
 // (不在/非所有→404 列挙防止) を行い、期間別 SVG を再生成してグラフ領域 component を 200 で返す。
 // 最新計測テーブルは期間に連動しないため返さない (R3.4/5.4)。アクティブ期間はサーバー側で往復する。
 func (h *DeviceHandler) Chart(c *gin.Context) {
@@ -193,7 +195,8 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 }
 
 // buildChartArea は period に応じてグラフデータを取得し、温度/湿度 SVG を生成した
-// グラフ領域 View を返す。24h=生データ1系列、7d/30d=日次 max/min の2系列。
+// グラフ領域 View を返す。24h=生データ1系列、3d/7d/30d=日次 max/min の2系列
+// (24h のみ生データ詳細・複数日は日次集計、という設計閾値に 3d を複数日側として乗せる)。
 func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	var tempSeries, humSeries []chart.Series
 
@@ -310,7 +313,7 @@ func hourMinuteLabel(ts pgtype.Timestamptz) string {
 	return pgconv.TimestamptzToTime(ts).In(jst).Format("15:04")
 }
 
-// monthDayLabel は集計日を 7d/30d グラフの X ラベル "MM-DD" に整形する。
+// monthDayLabel は集計日を 3d/7d/30d グラフの X ラベル "MM-DD" に整形する。
 // ReadingDate は DB の DATE(recorded_at) バケット (時点ではなく日付値) であり、その日境界は
 // DB セッション TZ 依存 (design Out of Boundary / Open Question)。ここでは TZ 変換せず日付を
 // そのまま表示する (Date の .In() はかえって境界をずらすため適用しない)。

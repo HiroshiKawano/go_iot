@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// Point は 1 データ点。Label は X 軸ラベル用文字列（24h: "14:30" / 7d・30d: "06-08"）、
+// Point は 1 データ点。Label は X 軸ラベル用文字列（24h: "14:30" / 3d・7d・30d: "06-08"）、
 // Y は数値（温度℃ または 湿度%）。
 type Point struct {
 	Label string

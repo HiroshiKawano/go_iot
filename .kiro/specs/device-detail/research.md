@@ -36,7 +36,7 @@
 | 必要能力 | 既存資産 | 状態 |
 |---|---|---|
 | HTMX 本体 + CSRF 自動付与 | `App.templ`（htmx.min.js + `htmx:configRequest`→X-CSRF-Token + csrf meta） | ✅ **既に配線済み** |
-| period バリデーション（oneof 24h/7d/30d） | `ShouldBind*` + binding タグの前例（auth/device） | ✅ パターン流用（`ShouldBindQuery`） |
+| period バリデーション（oneof 24h/3d/7d/30d） | `ShouldBind*` + binding タグの前例（auth/device） | ✅ パターン流用（`ShouldBindQuery`） |
 | グラフ領域フラグメント返却エンドポイント | — | **Missing**（`DeviceHandler.Chart` 新規） |
 | フラグメント描画（レイアウト無しで component 直 Render） | `renderPage` はあるが **component 直 Render helper は無し** | **Missing**（小: `comp.Render(ctx, c.Writer)` or `renderComponent` 追加） |
 | `DeviceChartArea` component templ（温度+湿度グラフ+期間ボタン） | — | **Missing** |
@@ -47,7 +47,7 @@
 | 必要能力 | 既存資産 | 状態 |
 |---|---|---|
 | 24h 生データ（昇順） | `ListRecentSensorReadings(deviceID, recordedAt>=)` ASC | ✅ |
-| 7d/30d 日次集計（avg/max/min/count） | `ListDailySensorAggregates(deviceID, recordedAt>=)` | ✅ |
+| 3d/7d/30d 日次集計（avg/max/min/count） | `ListDailySensorAggregates(deviceID, recordedAt>=)` | ✅ |
 | nullable 集計値の安全変換 | `pgconv.NumericToFloat(n)` | ✅ |
 | **SVG 自作生成ロジック**（線描画・スケーリング・軸ラベル・凡例） | **前例ゼロ**（service は alert_evaluator のみ） | **Missing（最大の新規能力）** |
 | SVG 配置先（service / chart パッケージ / view） | structure.md「service 層の線引き未定（初 HTMX 後に確定）」 | Constraint / **要設計判断** |
@@ -134,7 +134,7 @@
 5. **テーブルを swap 範囲外に保つ id 設計**: `#device-chart-area` の innerHTML swap に `latest-readings-table` を**含めない**配置（HTMX実装ガイド §3 id 一覧 / §4 device-show）。
 
 ### Research Needed（design で詰める不確実点）
-- **SVG 視覚仕様**: 温度/湿度の線色・フォント・寸法（viewBox）・縦軸スケーリング（auto min/max）・24h 線グラフ vs 7d/30d の max/min 表現（帯 or 2線）・軸ラベル書式。出典: `システム構成図.md`「サーバサイド SVG グラフ自作」。
+- **SVG 視覚仕様**: 温度/湿度の線色・フォント・寸法（viewBox）・縦軸スケーリング（auto min/max）・24h 線グラフ vs 3d/7d/30d の max/min 表現（帯 or 2線）・軸ラベル書式。出典: `システム構成図.md`「サーバサイド SVG グラフ自作」。
 - **日次集計のタイムゾーン**: `DATE(recorded_at)` の日境界（UTC か JST か）。timestamptz 格納のため日付グルーピング結果に影響。
 - **最新10件クエリの命名/形**: `ListLatestSensorReadings`（`WHERE device_id=$1 ORDER BY recorded_at DESC LIMIT 10`）等。既存 `ListRecentSensorReadings`（時刻以降・昇順）と紛らわしいため命名注意。
 - **アクティブ往復の具体 markup**: フルフラグメント swap での `.active` 付与方式（HTMX実装ガイド §10-D）。
@@ -155,13 +155,13 @@
 
 1. **SVG 配置 = 新規 `internal/chart` 純粋パッケージ**（spec-init の `service/device_service.go` 案から変更）。理由: SVG 生成は表示ロジックであり業務ロジックではない（`service/alert_evaluator.go` のような業務判定とは別物）。`timefmt`・`pgconv` と同じ「stdlib のみ依存の純粋ユーティリティ」パターンに合わせ、gin/DB/templ 非依存・table-driven で単体テスト可能にする。`service` 層は真の業務ロジック用に温存（structure.md の「線引き未定」に対し、本画面は service 不要＝handler が query 組立＋chart 呼出＋view 構築を担うと結論）。
 2. **device ID 非数値 = 400**（R8.1 準拠。HTMX実装ガイド §9 の Delete 例も `c.String(400,...)`）。S4 の Show/Edit は 404 を採用しており**画面間で不一致が残る**が、本 spec は R8.1 に従い 400 とする（S4 の 404 統一は本 spec のスコープ外＝別途検討）。
-3. **期間 URL 反映（R3-5）= `hx-push-url` をフルページ URL に向ける**。期間ボタンは `hx-get="/devices/{id}/chart?period={p}"`（フラグメント取得）だが `hx-push-url="/devices/{id}?period={p}"`（**フルページ URL** を push）とする。フラグメント URL を push するとリロード時に部分 HTML だけ返る不具合になるため。`Show` ハンドラは任意の `?period`（oneof 24h/7d/30d・既定 24h・不正は 400）を読んで初期描画する。これでモック R24（URL 状態保持）と spec-init（/chart フラグメント方式）を矛盾なく統合。
+3. **期間 URL 反映（R3-5）= `hx-push-url` をフルページ URL に向ける**。期間ボタンは `hx-get="/devices/{id}/chart?period={p}"`（フラグメント取得）だが `hx-push-url="/devices/{id}?period={p}"`（**フルページ URL** を push）とする。フラグメント URL を push するとリロード時に部分 HTML だけ返る不具合になるため。`Show` ハンドラは任意の `?period`（oneof 24h/3d/7d/30d・既定 24h・不正は 400）を読んで初期描画する。これでモック R24（URL 状態保持）と spec-init（/chart フラグメント方式）を矛盾なく統合。
 4. **DELETE 応答分岐**: `c.GetHeader("HX-Request") != ""` → `HX-Redirect: /dashboard` + 200／非 HTMX（フォーム `_method=delete`→MethodOverride）→ `c.Redirect(303, "/dashboard")`（HTMX実装ガイド §9 のパターンを踏襲）。
 5. **削除確認モーダルの Alpine スコープ**: `App.templ` の body は `x-data="{ navOpen:false }"` 固定のため、DeviceShow 側で**ネスト `x-data="{ deleteModalOpen:false }"` の div** を設け、その**内側**に削除ボタン（`@click="deleteModalOpen=true"`）とモーダル（`x-show="deleteModalOpen"`）を**両方**置く（§62「x-data スコープ外モーダルの Alpine エラー」回避）。確認ボタンは `hx-delete="/devices/{id}"`（§24 推奨）。
 6. **最新10件クエリ新設**: `ListLatestSensorReadings(deviceID) → ORDER BY recorded_at DESC LIMIT 10`。既存 `ListRecentSensorReadings`（時刻以降・昇順）と紛らわしいため `Latest` で明確化。`db/queries/sensor_readings.sql` 追記 → `make sqlc` 再生成。
 7. **絶対時刻整形を `timefmt` に追加**: `DateTimeJP(t)`→"2006-01-02 15:04:05"（最終通信）、`DateTimeMinuteJP(t)`→"2006-01-02 15:04"（テーブル）。dashboard が `RelativeJP` を使うのと同じく view-pure 整形を timefmt に集約。
 8. **フラグメント描画ヘルパ**: 既存 `renderPage`（フルページ）に加え、HTMX フラグメント用に `renderComponent(c, comp)`（status 200・`comp.Render`）を handler パッケージに追加（Chart のレイアウト無し返却用）。
-9. **Generalization/Simplification**: 温度・湿度グラフは同一の線グラフ描画関数（系列色・単位・スケールをパラメータ化）で共通化し、24h（生データ1系列）/ 7d・30d（日次 max・min の2系列）を同一 `chart.LineChartSVG` で表現。service 層・独自 Repository interface は新設せず（speculative abstraction 回避）、既存 `repository.Querier`（DB ポート）と `DeviceRepo` 拡張で完結。
+9. **Generalization/Simplification**: 温度・湿度グラフは同一の線グラフ描画関数（系列色・単位・スケールをパラメータ化）で共通化し、24h（生データ1系列）/ 3d・7d・30d（日次 max・min の2系列）を同一 `chart.LineChartSVG` で表現。service 層・独自 Repository interface は新設せず（speculative abstraction 回避）、既存 `repository.Querier`（DB ポート）と `DeviceRepo` 拡張で完結。
 
 ## Open Questions / Risks（design 内で対処）
 - **日次集計のタイムゾーン**: 既存 `ListDailySensorAggregates` の `DATE(recorded_at)` は DB セッション TZ 依存。JST 日境界を期待する場合は接続 TZ=Asia/Tokyo を前提とする（本 spec ではクエリの TZ 挙動を変更しない＝Out of Boundary。要 TZ 確認を申し送り）。

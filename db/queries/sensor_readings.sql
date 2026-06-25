@@ -27,7 +27,7 @@ SELECT * FROM sensor_readings
  ORDER BY recorded_at ASC;
 
 -- name: ListDailySensorAggregates :many
--- 7日/30日グラフ用: 日別の平均/最大/最小を集計
+-- 3日/7日/30日グラフ用: 日別の平均/最大/最小を集計 (24h以外の複数日はこの集計経路)
 SELECT
     DATE(recorded_at)                       AS reading_date,
     AVG(temperature)::NUMERIC(5, 2)         AS avg_temperature,

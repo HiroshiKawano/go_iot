@@ -541,7 +541,7 @@ SELECT * FROM sensor_readings
  ORDER BY recorded_at ASC;
 ```
 
-### デバイス詳細グラフ用（日次集計 — 7日/30日表示）
+### デバイス詳細グラフ用（日次集計 — 3日/7日/30日表示）
 
 ```sql
 -- name: ListDailySensorAggregates :many
