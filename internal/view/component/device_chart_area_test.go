@@ -49,10 +49,11 @@ func TestDeviceChartArea_期間7dでactiveとidとHTMX属性(t *testing.T) {
 	}
 
 	// HTMX 属性: フラグメント取得 + #device-chart-area を innerHTML swap + フルページ URL を push
-	assertContains(t, html, `hx-get="/devices/12/chart?period=7d"`)
+	// 期間ボタンは現在の表示形式を保持するため view を必ず含む (&amp; は templ の属性エスケープ)
+	assertContains(t, html, `hx-get="/devices/12/chart?period=7d&amp;view=line"`)
 	assertContains(t, html, `hx-target="#device-chart-area"`)
 	assertContains(t, html, `hx-swap="innerHTML"`)
-	assertContains(t, html, `hx-push-url="/devices/12?period=7d"`)
+	assertContains(t, html, `hx-push-url="/devices/12?period=7d&amp;view=line"`)
 
 	// グラフ領域 id（HTMX 専用 id）と SVG の @templ.Raw 埋め込み（エスケープされない生 SVG）
 	assertContains(t, html, `id="temperature-chart"`)
@@ -75,7 +76,7 @@ func TestDeviceChartArea_デフォルト24hがactive(t *testing.T) {
 	if got := strings.Count(html, "period-btn active"); got != 1 {
 		t.Errorf(`"period-btn active" の数 = %d, want 1`, got)
 	}
-	assertContains(t, html, `hx-get="/devices/3/chart?period=24h"`)
+	assertContains(t, html, `hx-get="/devices/3/chart?period=24h&amp;view=line"`)
 }
 
 func TestDeviceChartArea_表示形式トグルとデフォルトはラインactive(t *testing.T) {
@@ -101,8 +102,8 @@ func TestDeviceChartArea_表示形式トグルとデフォルトはラインacti
 	}
 }
 
-func TestDeviceChartArea_ローソク足でcandle_activeかつ期間は非activeかつ注記(t *testing.T) {
-	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 9, Period: "24h", View: "candle"}))
+func TestDeviceChartArea_ローソク足でcandle_activeかつ期間連動かつ注記(t *testing.T) {
+	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 9, Period: "2d", View: "candle"}))
 
 	// ローソク足が active・ライン は非 active
 	if seg := buttonFor(html, "ローソク足"); !strings.Contains(seg, "active") {
@@ -111,14 +112,28 @@ func TestDeviceChartArea_ローソク足でcandle_activeかつ期間は非active
 	if seg := buttonFor(html, "ライン"); strings.Contains(seg, "active") {
 		t.Errorf("ラインボタンに active が付いている: %q", seg)
 	}
-	// ローソク足は期間に連動しないため、期間ボタンは1つも active にしない
-	if got := strings.Count(html, "period-btn active"); got != 0 {
-		t.Errorf(`"period-btn active" の数 = %d, want 0`+"\n%s", got, html)
+	// ローソク足も期間連動するため、選択中の期間 (2日間) が active になる (ちょうど1つ)
+	if seg := buttonFor(html, "2日間"); !strings.Contains(seg, "active") {
+		t.Errorf("2日間ボタンに active が付いていない: %q", seg)
 	}
-	// 期間セレクタ自体は残す (折れ線へ戻る導線)
-	assertContains(t, html, "period-selector")
-	// 30分足・直近48時間の注記を表示
+	if got := strings.Count(html, "period-btn active"); got != 1 {
+		t.Errorf(`"period-btn active" の数 = %d, want 1`+"\n%s", got, html)
+	}
+	// 期間ボタンは表示形式 (candle) を保持して往復する
+	assertContains(t, html, `hx-get="/devices/9/chart?period=7d&amp;view=candle"`)
+	// 30分足の注記を表示
 	assertContains(t, html, "30分足")
+}
+
+func TestDeviceChartArea_2日間ボタンが選択肢に含まれる(t *testing.T) {
+	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 4, Period: "2d"}))
+
+	assertContains(t, html, "2日間")
+	// 既定 (line) で 2日間 を選択中なら 2日間 が active
+	if seg := buttonFor(html, "2日間"); !strings.Contains(seg, "active") {
+		t.Errorf("2日間ボタンに active が付いていない: %q", seg)
+	}
+	assertContains(t, html, `hx-get="/devices/4/chart?period=2d&amp;view=line"`)
 }
 
 func TestDeviceChartArea_期間3dでactiveとHTMX属性(t *testing.T) {
@@ -137,7 +152,7 @@ func TestDeviceChartArea_期間3dでactiveとHTMX属性(t *testing.T) {
 		t.Errorf(`"period-btn active" の数 = %d, want 1`+"\n%s", got, html)
 	}
 
-	// HTMX 属性は 3d クエリでフラグメント取得・フルページ URL を push
-	assertContains(t, html, `hx-get="/devices/8/chart?period=3d"`)
-	assertContains(t, html, `hx-push-url="/devices/8?period=3d"`)
+	// HTMX 属性は 3d クエリでフラグメント取得・フルページ URL を push (view を保持)
+	assertContains(t, html, `hx-get="/devices/8/chart?period=3d&amp;view=line"`)
+	assertContains(t, html, `hx-push-url="/devices/8?period=3d&amp;view=line"`)
 }

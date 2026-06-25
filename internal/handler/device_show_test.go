@@ -545,9 +545,9 @@ func TestChart_candleは30分足ローソク足で取得(t *testing.T) {
 	if !activeButtonHas(body, "ローソク足") {
 		t.Errorf("ローソク足 がアクティブでない:\n%s", body)
 	}
-	// ローソク足は期間に連動しないため、期間ボタンは active にしない
-	if strings.Contains(body, "period-btn active") {
-		t.Errorf("ローソク足表示中に期間ボタンが active になっている:\n%s", body)
+	// ローソク足も期間連動するため、選択中の期間 (24時間) が active になる
+	if !activeButtonHas(body, "24時間") {
+		t.Errorf("ローソク足表示中に選択期間 24時間 が active でない:\n%s", body)
 	}
 	// 実体 (<rect) と注記 (30分足) が描画される
 	if !strings.Contains(body, "<rect") {
@@ -555,6 +555,29 @@ func TestChart_candleは30分足ローソク足で取得(t *testing.T) {
 	}
 	if !strings.Contains(body, "30分足") {
 		t.Errorf("ローソク足の注記 (30分足…) が無い:\n%s", body)
+	}
+}
+
+func TestChart_2dは生データで取得し2日間がactive(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 20, 4, 0, 0, 0, time.UTC), 27.00, 60.00),
+		sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	// 2d は許容値 (400 にならず)、生データ折れ線経路 (24h と同様)
+	w := hxGet(r, "/devices/1/chart?period=2d")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (2d は許容値)", w.Code)
+	}
+	body := w.Body.String()
+	if !activeButtonHas(body, "2日間") {
+		t.Errorf("2日間 がアクティブでない:\n%s", body)
+	}
+	// 生データの時刻ラベル(JST)が出る (13:00/14:00)
+	if !strings.Contains(body, "13:00") || !strings.Contains(body, "14:00") {
+		t.Errorf("2d 生データの時刻ラベル(JST)が無い:\n%s", body)
 	}
 }
 

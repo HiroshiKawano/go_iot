@@ -37,9 +37,6 @@ const defaultView = "line"
 // candleView は ?view=candle (30分足ローソク足) の値。
 const candleView = "candle"
 
-// candleWindow はローソク足表示の対象期間 (直近48時間・30分足で最大96本)。
-const candleWindow = 48 * time.Hour
-
 // candleBucket はローソク足1本の集計幅 (30分足)。
 const candleBucket = 30 * time.Minute
 
@@ -57,13 +54,13 @@ var jst = time.FixedZone("JST", 9*60*60)
 // period は 24h/3d/7d/30d 以外を binding で弾き 400 (R8.2)。view は任意 (未指定=既定 line)で、
 // line/candle 以外は 400。これにより view を持たない従来 URL とも互換を保つ。
 type chartQuery struct {
-	Period string `form:"period" binding:"required,oneof=24h 3d 7d 30d"`
+	Period string `form:"period" binding:"required,oneof=24h 2d 3d 7d 30d"`
 	View   string `form:"view" binding:"omitempty,oneof=line candle"`
 }
 
-// isValidPeriod は period が許容値 (24h/3d/7d/30d) か判定する (Show の任意 ?period 検証用)。
+// isValidPeriod は period が許容値 (24h/2d/3d/7d/30d) か判定する (Show の任意 ?period 検証用)。
 func isValidPeriod(p string) bool {
-	return p == "24h" || p == "3d" || p == "7d" || p == "30d"
+	return p == "24h" || p == "2d" || p == "3d" || p == "7d" || p == "30d"
 }
 
 // isValidView は view が許容値 (line/candle) か判定する (Show の任意 ?view 検証用)。
@@ -74,6 +71,8 @@ func isValidView(v string) bool {
 // periodSince は period から取得開始時刻を返す (now 基準)。
 func periodSince(period string, now time.Time) time.Time {
 	switch period {
+	case "2d":
+		return now.Add(-48 * time.Hour)
 	case "3d":
 		return now.AddDate(0, 0, -3)
 	case "7d":
@@ -83,6 +82,12 @@ func periodSince(period string, now time.Time) time.Time {
 	default: // "24h"
 		return now.Add(-24 * time.Hour)
 	}
+}
+
+// isRawLinePeriod は折れ線モードで生データ詳細を出す期間か判定する (24時間/2日間)。
+// 3日間以上は日次集計 (max/min) 経路。2日間は48時間ぶんの生データで詳細な折れ線にする。
+func isRawLinePeriod(period string) bool {
+	return period == defaultPeriod || period == "2d"
 }
 
 // Show はデバイス詳細フルページを描画する (GET /devices/:device・RequireAuth 前提)。
@@ -242,7 +247,7 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 func (h *DeviceHandler) buildLineChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	var tempSeries, humSeries []chart.Series
 
-	if period == defaultPeriod {
+	if isRawLinePeriod(period) {
 		rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
 			DeviceID:   deviceID,
 			RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
@@ -272,13 +277,13 @@ func (h *DeviceHandler) buildLineChartArea(ctx context.Context, deviceID int64, 
 }
 
 // buildCandleChartArea は30分足ローソク足のグラフ領域 View を構築する。
-// 直近48時間の生データ (昇順) を再利用し、Go 側で30分バケットの OHLC へ畳み込む
-// (専用 SQL は持たず、24h 折れ線と同じ ListRecentSensorReadings を期間だけ広げて使う)。
-// period は折れ線へ戻る際の状態保持用にそのまま透過する (ローソク足自体は period 非連動)。
+// 選択中の期間レンジ (periodSince) の生データ (昇順) を再利用し、Go 側で30分バケットの
+// OHLC へ畳み込む (専用 SQL は持たず、折れ線と同じ ListRecentSensorReadings を使う)。
+// 期間連動: 24時間=48本/2日間=96本/3日間=144本… と period に応じて本数が変わる。
 func (h *DeviceHandler) buildCandleChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
 		DeviceID:   deviceID,
-		RecordedAt: pgconv.Timestamptz(now.Add(-candleWindow)),
+		RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
 	})
 	if err != nil {
 		return component.DeviceChartAreaView{}, err

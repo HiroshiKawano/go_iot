@@ -10,9 +10,10 @@ import "fmt"
 // 往復する: hx-get でフラグメントを取得し hx-target "#device-chart-area" に hx-swap="innerHTML" で
 // 差し替え、hx-push-url には**フルページ URL** (/devices/{id}?…) を積む。
 //
-// 期間ボタンの URL は ?period= のみ (view は未指定=既定 line)。これにより view を持たない従来 URL と
-// 互換を保ち、ローソク足表示中に期間ボタンを押すと折れ線へ戻る。ローソク足は期間に連動しない
-// (常に直近48時間・30分足) ため、view=candle のとき期間ボタンは active にしない (chartViewActive 参照)。
+// 期間ボタンの URL は ?period=&view= を必ず含め、現在の表示形式 (line/candle) を保持して往復する
+// (ローソク足表示中に期間を変えてもローソク足のまま)。折れ線・ローソク足とも期間連動するため、
+// 期間ボタンは表示形式に関わらず現在期間 (v.Period) のものを active にする。
+// ローソク足は選択中の期間レンジを30分足で描画する (24時間=48本/2日間=96本/…)。
 //
 // このフラグメント自身は #device-chart-area ラッパーを持たない (ラッパーは DeviceShow 側。
 // innerHTML swap で wrapper が二重生成されるのを避ける)。最新計測テーブルは期間に連動しないため
@@ -36,11 +37,11 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 		for _, p := range chartPeriods {
 			<button
 				type="button"
-				class={ "period-btn", templ.KV("active", v.View != "candle" && p.Value == v.Period) }
-				hx-get={ fmt.Sprintf("/devices/%d/chart?period=%s", v.DeviceID, p.Value) }
+				class={ "period-btn", templ.KV("active", p.Value == v.Period) }
+				hx-get={ fmt.Sprintf("/devices/%d/chart?period=%s&view=%s", v.DeviceID, p.Value, chartViewOrDefault(v.View)) }
 				hx-target="#device-chart-area"
 				hx-swap="innerHTML"
-				hx-push-url={ fmt.Sprintf("/devices/%d?period=%s", v.DeviceID, p.Value) }
+				hx-push-url={ fmt.Sprintf("/devices/%d?period=%s&view=%s", v.DeviceID, p.Value, chartViewOrDefault(v.View)) }
 			>{ p.Label }</button>
 		}
 	</div>
@@ -53,6 +54,6 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 		@templ.Raw(v.HumiditySVG)
 	</div>
 	if v.View == "candle" {
-		<p class="chart-note">30分足（直近48時間）・上昇=水色／下落=ピンク</p>
+		<p class="chart-note">30分足（選択中の期間）・上昇=水色／下落=ピンク</p>
 	}
 }

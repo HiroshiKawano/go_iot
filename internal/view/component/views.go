@@ -56,9 +56,11 @@ type chartPeriod struct {
 	Label string
 }
 
-// chartPeriods は期間切替の選択肢 (24h/3d/7d/30d の 4 つ, R3.1)。時系列順に並べる。
+// chartPeriods は期間切替の選択肢 (24h/2d/3d/7d/30d)。時系列順に並べる。
+// 2d (2日間=直近48時間) は30分足ローソク足が見やすい範囲として追加した。
 var chartPeriods = []chartPeriod{
 	{Value: "24h", Label: "24時間"},
+	{Value: "2d", Label: "2日間"},
 	{Value: "3d", Label: "3日間"},
 	{Value: "7d", Label: "7日間"},
 	{Value: "30d", Label: "30日間"},
@@ -84,6 +86,16 @@ func chartViewActive(mode, current string) bool {
 		return current == "candle"
 	}
 	return current != "candle"
+}
+
+// chartViewOrDefault は View 未設定 ("") を既定の "line" に正規化する (期間ボタンの
+// hx-get/hx-push-url 構築用)。期間ボタンは現在の表示形式を保持して往復するため、
+// URL に view を必ず含める (ローソク足表示中に期間を変えてもローソク足のまま)。
+func chartViewOrDefault(current string) string {
+	if current == "" {
+		return "line"
+	}
+	return current
 }
 
 // ReadingRow は最新計測テーブル1行分の表示データ (整形済み)。
