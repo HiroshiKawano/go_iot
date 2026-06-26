@@ -87,8 +87,10 @@ func TestRenderComponent_フラグメントを200でHTML描画しレイアウト
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 
 	renderComponent(c, component.DeviceChartArea(component.DeviceChartAreaView{
-		DeviceID: 1, Period: "24h",
-		TemperatureSVG: "<svg></svg>", HumiditySVG: "<svg></svg>",
+		DeviceID: 1, Period: "24h", HasData: true,
+		TemperatureOptionJSON: "{}", HumidityOptionJSON: "{}",
+		TemperatureUnit: "℃", HumidityUnit: "%",
+		TemperatureColor: "#e8590c", HumidityColor: "#1971c2",
 	}))
 
 	if w.Code != http.StatusOK {
@@ -132,16 +134,35 @@ func TestShow_200で情報と既定24hアクティブと最新計測(t *testing.
 		"<h1>デバイス詳細: ハウスA温湿度計</h1>", // 見出し (デバイス名)
 		"AA:BB:CC:DD:EE:01",          // MAC
 		"2026-04-20 14:30:00",        // 最終通信 JST 絶対表記 (05:30 UTC→14:30 JST)
-		`id="device-chart-area"`,     // グラフ領域ラッパー
-		"<svg",                       // サーバー生成 SVG
-		`id="latest-readings-table"`, // 最新計測テーブル
-		"2026-04-20 14:30",           // テーブルの計測日時 (分まで・JST)
-		"28.50",                      // 最新計測の温度値
-		"65.30",                      // 最新計測の湿度値
+		`id="device-chart-area"`,            // グラフ領域ラッパー
+		`id="temperature-chart"`,            // 温度 ECharts コンテナ
+		`id="humidity-chart"`,               // 湿度 ECharts コンテナ
+		`id="temperature-chart-option"`,     // 温度 option script
+		`id="humidity-chart-option"`,        // 湿度 option script
+		"data-echarts",                      // ECharts 初期化対象マーカー
+		`id="latest-readings-table"`,        // 最新計測テーブル
+		"2026-04-20 14:30",                  // テーブルの計測日時 (分まで・JST)
+		"28.50",                             // 最新計測の温度値
+		"65.30",                             // 最新計測の湿度値
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("詳細ページに %q が含まれていない", want)
 		}
+	}
+	// コンテナ id は DOM 内で一意 (温/湿それぞれ 1 個。option script の id とは別物)
+	if got := strings.Count(body, `id="temperature-chart"`); got != 1 {
+		t.Errorf(`id="temperature-chart" が %d 個 (want 1・一意)`, got)
+	}
+	if got := strings.Count(body, `id="humidity-chart"`); got != 1 {
+		t.Errorf(`id="humidity-chart" が %d 個 (want 1・一意)`, got)
+	}
+	// option script は温/湿の 2 本
+	if got := strings.Count(body, `type="application/json"`); got != 2 {
+		t.Errorf("option script の数 = %d, want 2 (温度/湿度)", got)
+	}
+	// 旧 SVG 描画は撤去済み (グラフは ECharts コンテナへ移行)
+	if strings.Contains(body, "<polyline") {
+		t.Errorf("旧 SVG 折れ線 (<polyline) が残存している:\n%s", body)
 	}
 	// 既定 24h がアクティブ
 	if !activeButtonHas(body, "24時間") {
@@ -149,6 +170,41 @@ func TestShow_200で情報と既定24hアクティブと最新計測(t *testing.
 	}
 	if strings.Count(body, "period-btn active") != 1 {
 		t.Errorf(`"period-btn active" が 1 個でない: %d`, strings.Count(body, "period-btn active"))
+	}
+}
+
+// TestShow_ECharts配線がフルページに揃う は、デバイス詳細フルページに ECharts 移行の配線一式
+// (self-host アセット読込 + グローバル init/dispose/connect + コンテナ + option script) が
+// 揃うことをエンドツーエンドで検証する回帰ガード (R5.3 self-host・R6.1/6.2 init/dispose/connect)。
+func TestShow_ECharts配線がフルページに揃う(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 20, 4, 0, 0, 0, time.UTC), 27.00, 60.00),
+		sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+	body := w.Body.String()
+
+	for _, want := range []string{
+		"/static/js/echarts.min.js", // self-host アセットを <head> で読込 (R5)
+		"echarts.init",              // 描画インスタンス生成
+		"getInstanceByDom",          // 既存検出 → dispose (再描画・リーク防止 R6)
+		"echarts.connect",           // 温湿度連動 (R3.3)
+		"htmx:beforeSwap",           // swap 前破棄 (R6.2)
+		"htmx:afterSwap",            // swap 後再初期化
+		`id="temperature-chart"`,    // 温度コンテナ
+		`id="humidity-chart"`,       // 湿度コンテナ
+		`id="temperature-chart-option"`, // 温度 option script
+		`id="humidity-chart-option"`,    // 湿度 option script
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("ECharts 配線 %q がフルページに無い", want)
+		}
 	}
 }
 
@@ -225,13 +281,9 @@ func TestShow_period7dは生データ折れ線と7dアクティブ(t *testing.T)
 	if !activeButtonHas(body, "7日間") {
 		t.Errorf("7日間 がアクティブでない:\n%s", body)
 	}
-	// 生データ1系列 → 日付付き時刻ラベル "M/D HH:MM" が出る。日次集計2系列の経路は通らない。
-	// (Y軸の「最高/最低」見出し①②は生データでも出るため、日次経路の判定は破線系列の有無で行う)
+	// 生データ1系列 → 日付付き時刻ラベル "M/D HH:MM" が option JSON の xAxis に出る。
 	if !strings.Contains(body, "4/18 14:00") || !strings.Contains(body, "4/19 14:00") {
 		t.Errorf("7d 生データの日付時刻ラベル(JST)が無い:\n%s", body)
-	}
-	if strings.Contains(body, "stroke-dasharray") {
-		t.Errorf("7d は生データ折れ線のはずだが日次集計の破線系列(最低)が含まれる:\n%s", body)
 	}
 }
 
@@ -251,13 +303,9 @@ func TestShow_period3dは生データ折れ線と3dアクティブ(t *testing.T)
 	if !activeButtonHas(body, "3日間") {
 		t.Errorf("3日間 がアクティブでない:\n%s", body)
 	}
-	// 3d は 24h と同じ生データ折れ線。日付付き時刻ラベルが出て、日次集計2系列の経路は通らない。
-	// (Y軸の「最高/最低」見出し①②は生データでも出るため、日次経路の判定は破線系列の有無で行う)
+	// 3d は 24h と同じ生データ折れ線。日付付き時刻ラベルが option JSON の xAxis に出る。
 	if !strings.Contains(body, "4/18 14:00") || !strings.Contains(body, "4/19 14:00") {
 		t.Errorf("3d 生データの日付時刻ラベル(JST)が無い:\n%s", body)
-	}
-	if strings.Contains(body, "stroke-dasharray") {
-		t.Errorf("3d は生データ折れ線のはずだが日次集計の破線系列(最低)が含まれる:\n%s", body)
 	}
 }
 
@@ -297,6 +345,15 @@ func TestShow_計測0件で空グラフとテーブル空メッセージ(t *test
 	}
 	if !strings.Contains(body, "データはまだありません") {
 		t.Error("空グラフメッセージがない")
+	}
+	// 空データでは option script を出さない (ECharts 初期化対象がない)。
+	// 注: App レイアウトのグローバル初期化スクリプトに [data-echarts] セレクタ文字列が
+	// 常駐するため、コンテナ有無は ECharts マウント div そのものの有無で判定する。
+	if strings.Contains(body, `type="application/json"`) {
+		t.Errorf("空データなのに option script が出力されている:\n%s", body)
+	}
+	if strings.Contains(body, `<div id="temperature-chart"`) || strings.Contains(body, `<div id="humidity-chart"`) {
+		t.Errorf("空データなのに ECharts コンテナ div が出力されている:\n%s", body)
 	}
 }
 
@@ -418,13 +475,25 @@ func TestChart_HXリクエストでグラフ領域フラグメントのみ返す
 	if !activeButtonHas(body, "7日間") {
 		t.Errorf("7日間 がアクティブでない:\n%s", body)
 	}
-	// 温度/湿度の2データSVG (role="img")。ホバー用オーバーレイ SVG (aria-hidden) は数えない。
-	if got := strings.Count(body, `role="img"`); got != 2 {
-		t.Errorf("データSVG (role=img) の数 = %d, want 2 (温度/湿度)", got)
+	// 温度/湿度の option script は 2 本だけ (フラグメントはレイアウト非包含のため他に json script なし)
+	if got := strings.Count(body, `type="application/json"`); got != 2 {
+		t.Errorf("option script の数 = %d, want 2 (温度/湿度)", got)
 	}
-	// 最新計測テーブルは期間非連動なので返さない
+	for _, want := range []string{`id="temperature-chart-option"`, `id="humidity-chart-option"`, "data-echarts"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("グラフフラグメントに %q が含まれていない:\n%s", want, body)
+		}
+	}
+	// 情報パネル・最新計測テーブルは期間非連動なので返さない
 	if strings.Contains(body, "latest-readings-table") {
 		t.Errorf("グラフフラグメントに latest-readings-table が含まれている:\n%s", body)
+	}
+	if strings.Contains(body, "device-info") {
+		t.Errorf("グラフフラグメントに情報パネル(device-info)が含まれている:\n%s", body)
+	}
+	// echarts.min.js は <head> で1回だけ読込む。期間切替フラグメントには出さない=再 DL させない (R5.3)
+	if strings.Contains(body, "echarts.min.js") {
+		t.Errorf("期間切替フラグメントに echarts.min.js が含まれている (再 DL させてしまう・R5.3):\n%s", body)
 	}
 }
 
@@ -510,13 +579,9 @@ func TestChart_3dは生データで取得(t *testing.T) {
 	if !activeButtonHas(body, "3日間") {
 		t.Errorf("3日間 がアクティブでない:\n%s", body)
 	}
-	// 生データ折れ線 → 日付付き時刻ラベル。日次集計2系列の経路は通らない。
-	// (Y軸の「最高/最低」見出し①②は生データでも出るため、日次経路の判定は破線系列の有無で行う)
+	// 生データ折れ線 → 日付付き時刻ラベルが option JSON の xAxis に出る。
 	if !strings.Contains(body, "4/18 14:00") {
 		t.Errorf("3d 生データの日付時刻ラベルが無い:\n%s", body)
-	}
-	if strings.Contains(body, "stroke-dasharray") {
-		t.Errorf("3d は生データ折れ線のはずだが日次集計の破線系列(最低)が含まれる:\n%s", body)
 	}
 }
 
@@ -537,17 +602,17 @@ func TestChart_30dは生データ折れ線で取得(t *testing.T) {
 	if !activeButtonHas(body, "30日間") {
 		t.Errorf("30日間 がアクティブでない:\n%s", body)
 	}
-	// 生データ単一系列 → 日付付き時刻ラベルと Y軸「最高/最低」見出し。日次集計2系列の破線は出ない。
+	// 生データ単一系列 → 日付付き時刻ラベルが option JSON の xAxis に出る。
+	// (最高/最低は ECharts の markPoint(type max/min) でクライアント描画されるため
+	//  サーバー JSON には日本語見出しは含まれない)
 	if !strings.Contains(body, "4/18 14:00") {
 		t.Errorf("30d 生データの日付時刻ラベルが無い:\n%s", body)
 	}
-	for _, want := range []string{"最高", "最低"} {
+	// markPoint(最高/最低) は option に含まれる
+	for _, want := range []string{`"type":"max"`, `"type":"min"`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("30d グラフに Y軸見出し %q が無い:\n%s", want, body)
+			t.Errorf("30d option に markPoint %q が無い:\n%s", want, body)
 		}
-	}
-	if strings.Contains(body, "stroke-dasharray") {
-		t.Errorf("30d は生データ折れ線のはずだが破線系列(日次最低)が含まれる:\n%s", body)
 	}
 }
 

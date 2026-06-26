@@ -1,6 +1,9 @@
 package layout
 
-import "github.com/HiroshiKawano/go_iot/internal/view/component"
+import (
+	"github.com/HiroshiKawano/go_iot/internal/view"
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
+)
 
 // AppLayoutData は認証後レイアウト App が必要とする共通データ。
 // 後続セッションの全画面がこの struct を共有して App を描画する。
@@ -34,6 +37,11 @@ templ App(data AppLayoutData) {
 			<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 			<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.x.x/dist/htmx.min.js"></script>
+			// Apache ECharts (self-host・外部 CDN 非依存・R5.1)。<head> で1回だけ読込み、
+			// 期間切替フラグメントには出さない (再 DL させない・R5.2/5.3)。AppLayoutData は経由せず
+			// view.JSURL() を直接呼ぶ (バージョンクエリでキャッシュバスティング)。device-show 以外は
+			// [data-echarts] 不在で初期化は no-op。
+			<script src={ view.JSURL() }></script>
 		</head>
 		<body x-data="{ navOpen: false }">
 			@component.SiteHeader(data.UserName, data.CSRFToken)
@@ -114,55 +122,66 @@ templ App(data AppLayoutData) {
 				initTomSelect();
 			</script>
 			<script>
-				// linkedCharts はデバイス詳細の温度・湿度 折れ線グラフを連動させる Alpine コンポーネント。
-				// どちらのグラフをホバーしても、マウス x から最寄りの計測点 index を求め、両グラフの
-				// 縦点線・横点線・ドット・値ツールチップ・時刻を同一 index で同時に表示する (④)。
-				// 温度 (cfg.t) と湿度 (cfg.h) は同一計測行から生成され時刻列が一致するため、共有 index で
-				// 双方を指せる。点列が空 (30d 日次集計や未受信) のときは何も表示しない。
-				// cfg: { t:[{x,y,t,v}], h:[{x,y,t,v}], tc:温度色, hc:湿度色 }
-				function linkedCharts(cfg) {
-					cfg = cfg || {};
-					return {
-						series: { t: cfg.t || [], h: cfg.h || [] },
-						colors: { t: cfg.tc || '#e8590c', h: cfg.hc || '#1971c2' },
-						active: false,
-						cx: 0,                       // 縦線の x (SVG 720x240 座標)。両グラフ共有
-						cy: { t: 0, h: 0 },          // 各グラフのドット y
-						valueText: { t: '', h: '' }, // 各グラフの値ツールチップ文言
-						timeText: '',                // 時刻 (両グラフ共通)
-						onMove(e, key) {
-							var pts = this.series[key];
-							if (!pts || !pts.length) return;
-							var rect = e.currentTarget.getBoundingClientRect();
-							if (!rect.width) return;
-							var svgX = (e.clientX - rect.left) / rect.width * 720;
-							var idx = 0;
-							for (var i = 1; i < pts.length; i++) {
-								if (Math.abs(pts[i].x - svgX) < Math.abs(pts[idx].x - svgX)) idx = i;
-							}
-							// 時刻列が一致するため、同 index で温度・湿度の双方を更新する (連動)。
-							this.cx = pts[idx].x;
-							this.timeText = pts[idx].t;
-							this.updatePane('t', idx, '℃');
-							this.updatePane('h', idx, '%');
-							this.active = true;
-						},
-						updatePane(key, idx, unit) {
-							var p = this.series[key][idx];
-							if (!p) return;
-							this.cy[key] = p.y;
-							this.valueText[key] = p.v.toFixed(1) + unit;
-						},
-						onLeave: function() { this.active = false; },
-						tipStyle: function(key) {
-							return 'left:' + (this.cx / 720 * 100) + '%; top:' + (this.cy[key] / 240 * 100) +
-								'%; color:' + this.colors[key] + '; border-color:' + this.colors[key];
-						},
-						timeStyle: function(key) {
-							return 'left:' + (this.cx / 720 * 100) + '%; color:' + this.colors[key];
+				// EChartsInitializer: デバイス詳細の温度・湿度グラフ (Apache ECharts) を
+				// init/dispose/connect/endLabel/sampling までグローバルに一括管理する (旧 linkedCharts の置換)。
+				// 描画対象は [data-echarts] コンテナ (#temperature-chart/#humidity-chart)。option JSON は
+				// 兄弟の option script (id は "<コンテナ id>-option") から JSON.parse する (§10-E)。
+				// device-show 以外の認証画面は [data-echarts] 不在で全 no-op。JS/ECharts 未ロード時も no-op (R8.2)。
+				(function() {
+					// 1 コンテナを初期化: option を parse → 既存破棄 → init → endLabel/sampling 付与 → setOption。
+					// option script 不在 (空データ) や壊れた JSON は null を返して skip (防御的)。
+					function initContainer(el) {
+						if (typeof echarts === 'undefined') return null;
+						var optionEl = document.getElementById(el.id + '-option');
+						if (!optionEl) return null;
+						var option;
+						try {
+							option = JSON.parse(optionEl.textContent);
+						} catch (e) {
+							return null;
 						}
-					};
-				}
+						// 既存インスタンスがあれば破棄してから作り直す (再描画・リーク防止・R6)。
+						var existing = echarts.getInstanceByDom(el);
+						if (existing) existing.dispose();
+						var inst = echarts.init(el);
+						// クライアント付与: 右端の現在値ラベル (endLabel・R2.3) と間引き (lttb・R7.1)。
+						// 単位はコンテナの data-unit から取る ("℃"/"%")。
+						var unit = el.getAttribute('data-unit') || '';
+						if (option.series && option.series[0]) {
+							option.series[0].endLabel = {
+								show: true,
+								formatter: function(p) { return p.value + unit; }
+							};
+							option.series[0].sampling = 'lttb';
+						}
+						inst.setOption(option);
+						return inst;
+					}
+					// scope 配下の [data-echarts] を初期化し、得た2インスタンスを connect で連動させる (R3.3)。
+					function initScope(scope) {
+						if (typeof echarts === 'undefined') return;
+						var root = scope || document;
+						var instances = [];
+						root.querySelectorAll('[data-echarts]').forEach(function(el) {
+							var inst = initContainer(el);
+							if (inst) instances.push(inst);
+						});
+						if (instances.length > 1) echarts.connect(instances);
+					}
+					// scope 配下の既存インスタンスを破棄する (swap 前のリーク防止・R6.2)。
+					function disposeScope(scope) {
+						if (typeof echarts === 'undefined') return;
+						var root = scope || document;
+						root.querySelectorAll('[data-echarts]').forEach(function(el) {
+							var inst = echarts.getInstanceByDom(el);
+							if (inst) inst.dispose();
+						});
+					}
+					// 初回描画 (R8.1) と、期間切替フラグメント swap の前後 (破棄→再初期化) でフックする。
+					document.addEventListener('DOMContentLoaded', function() { initScope(document); });
+					document.addEventListener('htmx:beforeSwap', function(e) { disposeScope(e.detail.target); });
+					document.addEventListener('htmx:afterSwap', function(e) { initScope(e.detail.target); });
+				})();
 			</script>
 		</body>
 	</html>

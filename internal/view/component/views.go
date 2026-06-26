@@ -38,28 +38,33 @@ type DeviceInfoView struct {
 }
 
 // DeviceChartAreaView はグラフ領域フラグメント (DeviceChartArea) の表示データ。
-// Period は active 判定用の現在期間 ("24h"/"3d"/"7d"/"30d")、温度/湿度 SVG は internal/chart が
-// 生成済みの文字列 (templ.Raw で埋め込む)。DeviceID は期間ボタンの hx-get/hx-push-url URL 用。
-// TemperatureHoverJSON/HumidityHoverJSON は折れ線ホバー (十字ポインター+値/時刻ツールチップ) 用の
-// 各点座標 JSON ([]chart.HoverPoint を整形)。生データ折れ線 (24h/3d/7d) のみ点列を持ち、
-// 日次集計 (30d) や空データは "[]" (ホバー無効)。
+// Period は active 判定用の現在期間 ("24h"/"3d"/"7d"/"30d")、DeviceID は期間ボタンの
+// hx-get/hx-push-url URL 用。
+//
+// グラフは Apache ECharts (クライアント描画) へ移行済み: 温度/湿度それぞれの option JSON
+// (internal/chart が go-echarts で構築・HTML 安全) を <script type="application/json"> で供給し、
+// Unit/Color は ECharts コンテナの data-unit/data-color へ渡す (endLabel formatter・線色用)。
+// HasData=false (計測 0 件) のときは option を構築せず空メッセージのみ描画する。
 type DeviceChartAreaView struct {
-	DeviceID             int64
-	Period               string
-	TemperatureSVG       string
-	HumiditySVG          string
-	TemperatureHoverJSON string
-	HumidityHoverJSON    string
+	DeviceID              int64
+	Period                string
+	HasData               bool
+	TemperatureOptionJSON string // <script type="application/json"> 埋込用 HTML 安全 JSON
+	HumidityOptionJSON    string
+	TemperatureUnit       string // "℃" (data-unit へ)
+	HumidityUnit          string // "%"
+	TemperatureColor      string // "#e8590c" (data-color へ)
+	HumidityColor         string // "#1971c2"
 }
 
-// hoverData はホバー点列 JSON を Alpine の x-data へ安全に埋め込むためのヘルパ。
-// handler は常に "[]" 以上の有効 JSON を渡すが、未設定 ("") のときも JS が壊れないよう
-// 空配列 "[]" にフォールバックする (linkedCharts({t: [], h: []}) を成立させる)。
-func hoverData(s string) string {
-	if s == "" {
-		return "[]"
-	}
-	return s
+// optionScript は ECharts option JSON を <script type="application/json"> でクライアントへ
+// 安全供給するためのスクリプトタグ文字列を返す (§10-E)。templ は <script> 要素内の式
+// (@templ.Raw 等) を解釈せずリテラル出力してしまうため、スクリプトタグごと組み立てて
+// templ 側で @templ.Raw に渡す。jsonStr は internal/chart が encoding/json で HTML 安全化
+// 済み (< > & は \uXXXX) のため </script> は出現しえず、Raw 出力でも XSS にならない。
+// id は静的な定数 ("temperature-chart-option" 等) のみを渡す前提。
+func optionScript(id, jsonStr string) string {
+	return `<script type="application/json" id="` + id + `">` + jsonStr + `</script>`
 }
 
 // chartPeriod は期間切替ボタン1個の定義 (Value=クエリ値, Label=表示文言)。

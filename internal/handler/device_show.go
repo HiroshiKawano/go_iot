@@ -1,13 +1,12 @@
 // device_show.go はデバイス詳細画面 (GET /devices/:device)・期間切替フラグメント
 // (GET /devices/:device/chart)・論理削除 (DELETE /devices/:device) の HTTP 境界を担う。
 // device.go の DeviceHandler を共有し (S4 と同 struct・別ファイル)、リクエスト解釈・
-// 所有者認可写像・行→表示 primitive 写像・SVG 生成 (internal/chart) の呼出・templ 描画に集中する。
+// 所有者認可写像・行→表示 primitive 写像・ECharts option 構築 (internal/chart) の呼出・templ 描画に集中する。
 // 業務ロジックは持たない (service 層なし)。
 package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -34,6 +33,15 @@ const defaultPeriod = "24h"
 
 // deviceShowTitleSuffix はフルページ <title> の接尾辞。
 const deviceShowTitleSuffix = " - 農業IoTシステム"
+
+// グラフの単位と系列色 (ECharts コンテナの data-unit/data-color、option の lineStyle.color)。
+// 温度=暖色 / 湿度=寒色。モック (mocks/html/style.css) の配色を踏襲する (R2.4)。
+const (
+	tempChartUnit     = "℃"
+	humidityChartUnit = "%"
+	tempLineColor     = "#e8590c"
+	humidityLineColor = "#1971c2"
+)
 
 // jst は表示用の日本標準時 (UTC+9)。timestamptz は時点 (instant) のため、農場運営者の
 // ローカル時刻で見せるには表示直前に JST へ変換する (R2.4/R5.3 の日本向け絶対表記)。
@@ -204,10 +212,11 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard") // 非 HTMX フォームは 303
 }
 
-// buildChartArea は period に応じてグラフデータを取得し、温度/湿度 SVG を生成した
-// グラフ領域 View を返す。全期間 (24h/3d/7d/30d) とも生データ1系列 (実測値の折れ線) で描き、
-// 統一的に「最高/最低」見出し・右端の現在値・十字ポインターのホバー連動を付与する。
-// X ラベルは 24h が "HH:MM"、複数日 (3d/7d/30d) は日跨ぎのため "M/D HH:MM" (過密時は間引き)。
+// buildChartArea は period に応じてグラフデータを取得し、温度/湿度の ECharts option JSON を
+// 構築したグラフ領域 View を返す。全期間 (24h/3d/7d/30d) とも生データ1系列 (実測値の折れ線)。
+// X ラベルは 24h が "HH:MM"、複数日 (3d/7d/30d) は日跨ぎのため "M/D HH:MM"。
+// 計測 0 件のときは option を構築せず HasData=false (空メッセージのみ・templ 側で分岐)。
+// 描画/対話 (十字ホバー・最高最低・現在値・温湿度連動) はクライアントの ECharts が担う (S5)。
 func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
 		DeviceID:   deviceID,
@@ -216,32 +225,37 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
 	}
+
+	// 計測 0 件: option を構築せず空メッセージのみ (HasData=false)。
+	if len(rows) == 0 {
+		return component.DeviceChartAreaView{
+			DeviceID: deviceID,
+			Period:   period,
+			HasData:  false,
+		}, nil
+	}
+
 	tempSeries, humSeries := rawSeries(rows, rawLabelFor(period))
-	// 生データ折れ線にホバー (十字ポインター+値/時刻) 用の点列を持たせる。
-	tempHover := hoverJSON(chart.LineChartHoverPoints(tempSeries))
-	humHover := hoverJSON(chart.LineChartHoverPoints(humSeries))
+	tempOpt, err := chart.LineOptionJSON(tempSeries, tempChartUnit, tempLineColor)
+	if err != nil {
+		return component.DeviceChartAreaView{}, err
+	}
+	humOpt, err := chart.LineOptionJSON(humSeries, humidityChartUnit, humidityLineColor)
+	if err != nil {
+		return component.DeviceChartAreaView{}, err
+	}
 
 	return component.DeviceChartAreaView{
-		DeviceID:             deviceID,
-		Period:               period,
-		TemperatureSVG:       chart.LineChartSVG("温度", "℃", tempSeries),
-		HumiditySVG:          chart.LineChartSVG("湿度", "%", humSeries),
-		TemperatureHoverJSON: tempHover,
-		HumidityHoverJSON:    humHover,
+		DeviceID:              deviceID,
+		Period:                period,
+		HasData:               true,
+		TemperatureOptionJSON: tempOpt,
+		HumidityOptionJSON:    humOpt,
+		TemperatureUnit:       tempChartUnit,
+		HumidityUnit:          humidityChartUnit,
+		TemperatureColor:      tempLineColor,
+		HumidityColor:         humidityLineColor,
 	}, nil
-}
-
-// hoverJSON は折れ線ホバーの点列を JSON 文字列へ整形する (templ の x-data へ埋め込む)。
-// 点が無い場合は "[]" を返す (Alpine 側でホバー無効)。
-func hoverJSON(pts []chart.HoverPoint) string {
-	if len(pts) == 0 {
-		return "[]"
-	}
-	b, err := json.Marshal(pts)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
 }
 
 // rawSeries は生データ行を温度/湿度それぞれ1系列 (折れ線) へ写像する。

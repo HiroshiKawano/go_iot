@@ -14,7 +14,15 @@ import "fmt"
 //
 // このフラグメント自身は #device-chart-area ラッパーを持たない (ラッパーは DeviceShow 側。
 // innerHTML swap で wrapper が二重生成されるのを避ける)。最新計測テーブルは期間に連動しないため
-// ここには含めない (R3.4/5.4)。SVG は internal/chart 生成の安全な自前文字列を @templ.Raw で埋め込む。
+// ここには含めない (R3.4/5.4)。
+//
+// グラフ描画は Apache ECharts (クライアント) へ移行: 器 (.linked-charts / .chart-wrapper /
+// <h2>) はモック準拠で維持し (feedback_mock_graph_rendering_exception)、内側に ECharts の
+// マウント先 #temperature-chart / #humidity-chart (data-echarts + data-unit/data-color) と、
+// 兄弟の <script type="application/json"> で option JSON を安全供給する (§10-E・@templ.Raw は
+// internal/chart が encoding/json で HTML 安全化済みの文字列のため安全)。App.templ の
+// グローバル初期化スクリプトが data-echarts コンテナを走査して描画する (S5)。
+// HasData=false (計測 0 件) のときは option を出さず「データはまだありません」ブロックのみ。
 templ DeviceChartArea(v DeviceChartAreaView) {
 	<div class="period-selector">
 		for _, p := range chartPeriods {
@@ -28,36 +36,20 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 			>{ p.Label }</button>
 		}
 	</div>
-	// 温度グラフと湿度グラフを 1 つの Alpine コンポーネント linkedCharts (App.templ 定義) で束ね、
-	// どちらをホバーしても両グラフの縦線・ドット・値/時刻を同一時刻 index で連動させる (④)。
-	// 温度/湿度は同一計測行から生成され点列の時刻が一致するため、共有 index で双方を指せる。
-	// mouseleave は親に置き、温度↔湿度の移動中も連動表示を維持する (グラフ外へ出たら消える)。
-	<div
-		class="linked-charts"
-		x-data={ "linkedCharts({t: " + hoverData(v.TemperatureHoverJSON) + ", h: " + hoverData(v.HumidityHoverJSON) + ", tc: '#e8590c', hc: '#1971c2'})" }
-		@mouseleave="onLeave()"
-	>
-		<h2 class="u-mbs-6">温度グラフ</h2>
-		<div id="temperature-chart" class="chart-wrapper" @mousemove="onMove($event, 't')">
-			@templ.Raw(v.TemperatureSVG)
-			<svg class="chart-hover" viewBox="0 0 720 240" preserveAspectRatio="none" x-show="active" x-cloak aria-hidden="true">
-				<line class="ch-vline" :x1="cx" :x2="cx" y1="16" y2="208"></line>
-				<line class="ch-hline" :x1="cx-8" :x2="cx+8" :y1="cy.t" :y2="cy.t"></line>
-				<circle class="ch-dot" :cx="cx" :cy="cy.t" r="3" :fill="colors.t"></circle>
-			</svg>
-			<div class="chart-hover-tip" x-show="active" x-cloak :style="tipStyle('t')" x-text="valueText.t"></div>
-			<div class="chart-hover-time" x-show="active" x-cloak :style="timeStyle('t')" x-text="timeText"></div>
+	if v.HasData {
+		<div class="linked-charts">
+			<h2 class="u-mbs-6">温度グラフ</h2>
+			<div class="chart-wrapper">
+				<div id="temperature-chart" data-echarts data-unit={ v.TemperatureUnit } data-color={ v.TemperatureColor }></div>
+				@templ.Raw(optionScript("temperature-chart-option", v.TemperatureOptionJSON))
+			</div>
+			<h2 class="u-mbs-6">湿度グラフ</h2>
+			<div class="chart-wrapper">
+				<div id="humidity-chart" data-echarts data-unit={ v.HumidityUnit } data-color={ v.HumidityColor }></div>
+				@templ.Raw(optionScript("humidity-chart-option", v.HumidityOptionJSON))
+			</div>
 		</div>
-		<h2 class="u-mbs-6">湿度グラフ</h2>
-		<div id="humidity-chart" class="chart-wrapper" @mousemove="onMove($event, 'h')">
-			@templ.Raw(v.HumiditySVG)
-			<svg class="chart-hover" viewBox="0 0 720 240" preserveAspectRatio="none" x-show="active" x-cloak aria-hidden="true">
-				<line class="ch-vline" :x1="cx" :x2="cx" y1="16" y2="208"></line>
-				<line class="ch-hline" :x1="cx-8" :x2="cx+8" :y1="cy.h" :y2="cy.h"></line>
-				<circle class="ch-dot" :cx="cx" :cy="cy.h" r="3" :fill="colors.h"></circle>
-			</svg>
-			<div class="chart-hover-tip" x-show="active" x-cloak :style="tipStyle('h')" x-text="valueText.h"></div>
-			<div class="chart-hover-time" x-show="active" x-cloak :style="timeStyle('h')" x-text="timeText"></div>
-		</div>
-	</div>
+	} else {
+		<div class="chart-placeholder">データはまだありません</div>
+	}
 }

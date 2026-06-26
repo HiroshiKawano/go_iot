@@ -22,10 +22,15 @@ func buttonFor(html, label string) string {
 
 func TestDeviceChartArea_期間7dでactiveとidとHTMX属性(t *testing.T) {
 	v := DeviceChartAreaView{
-		DeviceID:       12,
-		Period:         "7d",
-		TemperatureSVG: `<svg id="temp-svg"></svg>`,
-		HumiditySVG:    `<svg id="humid-svg"></svg>`,
+		DeviceID:              12,
+		Period:                "7d",
+		HasData:               true,
+		TemperatureOptionJSON: `{"series":[{"type":"line"}]}`,
+		HumidityOptionJSON:    `{"series":[{"type":"line"}]}`,
+		TemperatureUnit:       "℃",
+		HumidityUnit:          "%",
+		TemperatureColor:      "#e8590c",
+		HumidityColor:         "#1971c2",
 	}
 	html := render(t, DeviceChartArea(v))
 
@@ -54,15 +59,40 @@ func TestDeviceChartArea_期間7dでactiveとidとHTMX属性(t *testing.T) {
 	assertContains(t, html, `hx-swap="innerHTML"`)
 	assertContains(t, html, `hx-push-url="/devices/12?period=7d"`)
 
-	// グラフ領域 id（HTMX 専用 id）と SVG の @templ.Raw 埋め込み（エスケープされない生 SVG）
+	// ECharts コンテナ id（初期化対象マーカー data-echarts + 単位/色の data-*）
 	assertContains(t, html, `id="temperature-chart"`)
 	assertContains(t, html, `id="humidity-chart"`)
-	assertContains(t, html, `<svg id="temp-svg"></svg>`)
-	assertContains(t, html, `<svg id="humid-svg"></svg>`)
+	assertContains(t, html, "data-echarts")
+	assertContains(t, html, `data-unit="℃"`)
+	assertContains(t, html, `data-unit="%"`)
+	assertContains(t, html, `data-color="#e8590c"`)
+	assertContains(t, html, `data-color="#1971c2"`)
+
+	// option JSON は <script type="application/json"> で安全供給（@templ.Raw で生の JSON）
+	assertContains(t, html, `<script type="application/json" id="temperature-chart-option">`)
+	assertContains(t, html, `<script type="application/json" id="humidity-chart-option">`)
+	assertContains(t, html, `{"series":[{"type":"line"}]}`)
 
 	// 最新計測テーブルは差し替え対象外（フラグメントに含めない）
 	if strings.Contains(html, "latest-readings-table") {
 		t.Errorf("グラフ領域フラグメントに latest-readings-table が含まれている:\n%s", html)
+	}
+}
+
+// HasData=false のときはグラフ scaffold を出さず「データはまだありません」ブロックのみ。
+func TestDeviceChartArea_データ無しは空メッセージのみ(t *testing.T) {
+	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 5, Period: "24h", HasData: false}))
+
+	// 期間セレクタは常に出る
+	assertContains(t, html, "period-selector")
+	assertContains(t, html, "データはまだありません")
+
+	// option script / data-echarts コンテナは出さない
+	if strings.Contains(html, `type="application/json"`) {
+		t.Errorf("データ無しなのに option script が出ている:\n%s", html)
+	}
+	if strings.Contains(html, "data-echarts") {
+		t.Errorf("データ無しなのに data-echarts コンテナが出ている:\n%s", html)
 	}
 }
 

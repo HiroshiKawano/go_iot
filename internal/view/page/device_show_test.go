@@ -21,10 +21,15 @@ func baseDeviceShowView() DeviceShowView {
 			EditURL:      "/devices/1/edit",
 		},
 		ChartArea: component.DeviceChartAreaView{
-			DeviceID:       1,
-			Period:         "24h",
-			TemperatureSVG: `<svg id="temp-svg"></svg>`,
-			HumiditySVG:    `<svg id="humid-svg"></svg>`,
+			DeviceID:              1,
+			Period:                "24h",
+			HasData:               true,
+			TemperatureOptionJSON: `{"series":[{"type":"line"}]}`,
+			HumidityOptionJSON:    `{"series":[{"type":"line"}]}`,
+			TemperatureUnit:       "℃",
+			HumidityUnit:          "%",
+			TemperatureColor:      "#e8590c",
+			HumidityColor:         "#1971c2",
 		},
 		Latest: component.LatestReadingsView{
 			DeviceID: 1,
@@ -52,7 +57,8 @@ func TestDeviceShowPage_見出しと3部品を統合描画(t *testing.T) {
 	// グラフ領域: ラッパー #device-chart-area は DeviceShow が提供し、内側に DeviceChartArea
 	assertContains(t, html, `id="device-chart-area"`)
 	assertContains(t, html, `id="temperature-chart"`)
-	assertContains(t, html, `<svg id="temp-svg"></svg>`)
+	assertContains(t, html, `id="humidity-chart"`)
+	assertContains(t, html, `<script type="application/json" id="temperature-chart-option">`)
 	assertContains(t, html, "24時間")
 
 	// 最新計測テーブル（3.2）

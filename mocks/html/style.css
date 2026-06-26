@@ -511,6 +511,13 @@
 .chart-wrapper {
   position: relative;
 }
+/* ECharts マウント先 (#temperature-chart/#humidity-chart) は明示高さが必須
+   (高さ 0 のコンテナには描画されない)。id/data-* はスタイルに使わない方針のため、
+   器クラス .chart-wrapper 直下の div へ与える。横幅は 100% (block) のため、平たく見えないよう
+   高さを十分に確保して折れ線の縦変化を読み取りやすくする。 */
+.chart-wrapper > div {
+  height: 450px;
+}
 /* 本体グラフ SVG は幅いっぱい・viewBox の縦横比 (720:240) で表示し、オーバーレイと寸法を揃える。 */
 .chart-wrapper > svg:not(.chart-hover) {
   display: block;

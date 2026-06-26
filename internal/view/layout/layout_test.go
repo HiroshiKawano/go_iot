@@ -81,6 +81,76 @@ func TestApp_TomSelectアセットと422swap設定を加算(t *testing.T) {
 	assertContains(t, html, `name="csrf-token"`)
 }
 
+func TestApp_EChartsアセットをheadで1回読込(t *testing.T) {
+	data := AppLayoutData{
+		Title:     "デバイス詳細 - 農業IoTシステム",
+		UserName:  "テストユーザー",
+		CSRFToken: "tok-1",
+		CSSURL:    "/static/css/style.css?v=dev",
+	}
+	html := render(t, App(data))
+
+	// self-host した echarts.min.js を <head> で読み込む (外部 CDN ではなく自サーバ・R5.1)
+	assertContains(t, html, "/static/js/echarts.min.js")
+	// 1回だけ読み込む (R5.2・期間切替フラグメントには出さない=再 DL させない R5.3)
+	if got := strings.Count(html, "/static/js/echarts.min.js"); got != 1 {
+		t.Errorf("echarts.min.js の読込回数 = %d, want 1", got)
+	}
+	// <head> 内に置かれている (body より前)
+	head := html[:strings.Index(html, "</head>")]
+	if !strings.Contains(head, "/static/js/echarts.min.js") {
+		t.Errorf("echarts.min.js が <head> 内に無い:\n%s", head)
+	}
+}
+
+func TestApp_EChartsグローバル初期化スクリプトを同梱(t *testing.T) {
+	data := AppLayoutData{
+		Title:     "デバイス詳細 - 農業IoTシステム",
+		UserName:  "テストユーザー",
+		CSRFToken: "tok-2",
+		CSSURL:    "/static/css/style.css?v=dev",
+	}
+	html := render(t, App(data))
+
+	// init/dispose/connect/endLabel/sampling をグローバルに集約 (旧 linkedCharts の置換)。
+	// [data-echarts] コンテナを走査して描画 (id/data-* で初期化・R2.3/3.3/6/7)。
+	for _, marker := range []string{
+		"[data-echarts]",   // 初期化対象セレクタ
+		"echarts.init",     // 描画インスタンス生成
+		"getInstanceByDom", // 既存インスタンス検出 (再描画・リーク防止 R6)
+		"dispose",          // 破棄 (R6)
+		"echarts.connect",  // 温湿度2インスタンス連動 (R3.3)
+		"DOMContentLoaded", // 初回読込時の初期化 (R8.1)
+		"htmx:afterSwap",   // 期間切替フラグメント swap 後の初期化
+		"htmx:beforeSwap",  // swap 前の破棄 (リーク防止 R6)
+		"endLabel",         // 右端の現在値 (R2.3)
+		"data-unit",        // endLabel formatter 用の単位
+		"lttb",             // 30日相当のダウンサンプリング (R7.1)
+	} {
+		assertContains(t, html, marker)
+	}
+}
+
+func TestApp_旧linkedChartsを撤去(t *testing.T) {
+	data := AppLayoutData{
+		Title:     "ダッシュボード - 農業IoTシステム",
+		UserName:  "テストユーザー",
+		CSRFToken: "tok-3",
+		CSSURL:    "/static/css/style.css?v=dev",
+	}
+	html := render(t, App(data))
+
+	// 旧 Alpine ベースの自作ホバー連動 (linkedCharts 関数) は ECharts へ移行済みで撤去。
+	// 関数定義の不在を検証する (移行を説明するコメント中の言及は許容)。
+	if strings.Contains(html, "function linkedCharts") {
+		t.Errorf("旧 linkedCharts 関数が App に残存している (ECharts へ移行済み):\n%s", html)
+	}
+	// Alpine 自作ホバー連動の DOM フック (x-data linkedCharts 呼出) も残っていないこと
+	if strings.Contains(html, "linkedCharts(") {
+		t.Errorf("linkedCharts() の呼出/定義が残存している:\n%s", html)
+	}
+}
+
 func TestGuest_カードでchildrenを描画(t *testing.T) {
 	var buf bytes.Buffer
 	ctx := templ.WithChildren(context.Background(), templ.Raw("<p>子要素</p>"))
