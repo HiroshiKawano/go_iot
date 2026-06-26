@@ -239,14 +239,13 @@ func TestShow_period7dは生データ折れ線と7dアクティブ(t *testing.T)
 	if !activeButtonHas(body, "7日間") {
 		t.Errorf("7日間 がアクティブでない:\n%s", body)
 	}
-	// 生データ1系列 → 日付付き時刻ラベル "M/D HH:MM" が出る。日次集計の凡例 (最高/最低) は出ない。
+	// 生データ1系列 → 日付付き時刻ラベル "M/D HH:MM" が出る。日次集計2系列の経路は通らない。
+	// (Y軸の「最高/最低」見出し①②は生データでも出るため、日次経路の判定は破線系列の有無で行う)
 	if !strings.Contains(body, "4/18 14:00") || !strings.Contains(body, "4/19 14:00") {
 		t.Errorf("7d 生データの日付時刻ラベル(JST)が無い:\n%s", body)
 	}
-	for _, ng := range []string{"最高", "最低"} {
-		if strings.Contains(body, ng) {
-			t.Errorf("7d は生データ折れ線のはずだが日次集計の凡例 %q が含まれる:\n%s", ng, body)
-		}
+	if strings.Contains(body, "stroke-dasharray") {
+		t.Errorf("7d は生データ折れ線のはずだが日次集計の破線系列(最低)が含まれる:\n%s", body)
 	}
 }
 
@@ -266,14 +265,13 @@ func TestShow_period3dは生データ折れ線と3dアクティブ(t *testing.T)
 	if !activeButtonHas(body, "3日間") {
 		t.Errorf("3日間 がアクティブでない:\n%s", body)
 	}
-	// 3d は 24h と同じ生データ折れ線。日付付き時刻ラベルが出て、日次集計の凡例は出ない。
+	// 3d は 24h と同じ生データ折れ線。日付付き時刻ラベルが出て、日次集計2系列の経路は通らない。
+	// (Y軸の「最高/最低」見出し①②は生データでも出るため、日次経路の判定は破線系列の有無で行う)
 	if !strings.Contains(body, "4/18 14:00") || !strings.Contains(body, "4/19 14:00") {
 		t.Errorf("3d 生データの日付時刻ラベル(JST)が無い:\n%s", body)
 	}
-	for _, ng := range []string{"最高", "最低"} {
-		if strings.Contains(body, ng) {
-			t.Errorf("3d は生データ折れ線のはずだが日次集計の凡例 %q が含まれる:\n%s", ng, body)
-		}
+	if strings.Contains(body, "stroke-dasharray") {
+		t.Errorf("3d は生データ折れ線のはずだが日次集計の破線系列(最低)が含まれる:\n%s", body)
 	}
 }
 
@@ -526,12 +524,13 @@ func TestChart_3dは生データで取得(t *testing.T) {
 	if !activeButtonHas(body, "3日間") {
 		t.Errorf("3日間 がアクティブでない:\n%s", body)
 	}
-	// 生データ折れ線 → 日付付き時刻ラベル。日次集計の凡例は出ない。
+	// 生データ折れ線 → 日付付き時刻ラベル。日次集計2系列の経路は通らない。
+	// (Y軸の「最高/最低」見出し①②は生データでも出るため、日次経路の判定は破線系列の有無で行う)
 	if !strings.Contains(body, "4/18 14:00") {
 		t.Errorf("3d 生データの日付時刻ラベルが無い:\n%s", body)
 	}
-	if strings.Contains(body, "最高") || strings.Contains(body, "最低") {
-		t.Errorf("3d は生データ折れ線のはずだが日次集計の凡例が含まれる:\n%s", body)
+	if strings.Contains(body, "stroke-dasharray") {
+		t.Errorf("3d は生データ折れ線のはずだが日次集計の破線系列(最低)が含まれる:\n%s", body)
 	}
 }
 

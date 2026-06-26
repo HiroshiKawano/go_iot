@@ -31,8 +31,8 @@ type Series struct {
 const (
 	svgWidth     = 720
 	svgHeight    = 240
-	marginLeft   = 48 // 左 Y 軸ラベル用余白
-	marginRight  = 16
+	marginLeft   = 68 // 左 Y 軸ラベル用余白 (「最高/最低」見出し+値を収める, ①②)
+	marginRight  = 56 // 右 余白。右端の現在値ラベル ("28.5℃" 等) を収める (⑤)
 	marginTop    = 16
 	marginBottom = 32 // 下 X 軸ラベル用余白
 
@@ -72,6 +72,9 @@ func LineChartSVG(title, unit string, series []Series) string {
 	yMin, yMax := dataRange(series)
 	scaleMin, scaleMax := paddedScale(yMin, yMax)
 	n := maxLen(series)
+	// 単一系列 (実測折れ線=24h/3d/7d) のみ「最高/最低」見出し (①②) と右端の現在値 (⑤) を出す。
+	// 日次2系列 (30d) は凡例で「最高/最低」を使うため見出しは重複回避で出さない。
+	single := len(series) == 1
 
 	yToPixel := func(y float64) float64 {
 		return plotTop + (scaleMax-y)/(scaleMax-scaleMin)*plotHeight
@@ -80,9 +83,12 @@ func LineChartSVG(title, unit string, series []Series) string {
 		return xAtIndex(i, n)
 	}
 
-	writeYAxisLabels(&b, unit, yMin, yMax, yToPixel)
+	writeYAxisLabels(&b, unit, yMin, yMax, yToPixel, single)
 	writeXAxisLabels(&b, labelSource(series), xAt)
 	writePolylines(&b, unit, series, xAt, yToPixel)
+	if single {
+		writeCurrentValue(&b, unit, series[0], xAt, yToPixel)
+	}
 	writeLegend(&b, unit, series)
 
 	b.WriteString("</svg>")
@@ -104,9 +110,39 @@ func writeEmptyState(b *strings.Builder) {
 }
 
 // writeYAxisLabels は左 Y 軸に最大値（上）・最小値（下）のラベルを unit 付きで書き出す。
-func writeYAxisLabels(b *strings.Builder, unit string, yMin, yMax float64, yToPixel func(float64) float64) {
+// single（単一系列）のときは「最高」「最低」の見出しを値の左に添える（①②）。
+// 日次2系列（30d）は凡例側で「最高/最低」を使うため、見出しなしの素の値ラベルにする。
+func writeYAxisLabels(b *strings.Builder, unit string, yMin, yMax float64, yToPixel func(float64) float64, single bool) {
+	if single {
+		writeYAxisLabel(b, yToPixel(yMax), "最高", formatNum(yMax)+unit)
+		writeYAxisLabel(b, yToPixel(yMin), "最低", formatNum(yMin)+unit)
+		return
+	}
 	writeAxisText(b, plotLeft-6, yToPixel(yMax), "end", formatNum(yMax)+unit)
 	writeAxisText(b, plotLeft-6, yToPixel(yMin), "end", formatNum(yMin)+unit)
+}
+
+// writeYAxisLabel は Y 軸ラベル1個を「見出し（小・薄字）＋値（やや大・太字）」の2 tspan で
+// 右寄せ書き出す（①②）。text-anchor="end" で右端（plotLeft-6）に揃えるため、見出し→値の順に
+// 左から並び、値が軸に最も近い位置になる。
+func writeYAxisLabel(b *strings.Builder, y float64, heading, value string) {
+	fmt.Fprintf(b,
+		`<text x="%d" y="%s" text-anchor="end" fill="%s" font-size="13"><tspan font-size="10">%s</tspan><tspan dx="3" font-weight="600">%s</tspan></text>`,
+		plotLeft-6, coord(y), axisColor, esc(heading), esc(value))
+}
+
+// writeCurrentValue は単一系列の最終点（＝最新の計測値）を折れ線の右端に系列色で書き出す（⑤）。
+// 折れ線の終端の少し右へ "28.5℃" のように現在値を添える（右余白 marginRight に収める）。
+func writeCurrentValue(b *strings.Builder, unit string, s Series, xAt func(int) float64, yToPixel func(float64) float64) {
+	if len(s.Points) == 0 {
+		return
+	}
+	last := s.Points[len(s.Points)-1]
+	x := xAt(len(s.Points)-1) + 4
+	y := yToPixel(last.Y)
+	fmt.Fprintf(b,
+		`<text x="%s" y="%s" text-anchor="start" dominant-baseline="middle" fill="%s" font-size="13" font-weight="600">%s</text>`,
+		coord(x), coord(y), lineColor(unit), esc(formatNum(last.Y)+unit))
 }
 
 // writeXAxisLabels は下 X 軸に間引いた点ラベルを書き出す。

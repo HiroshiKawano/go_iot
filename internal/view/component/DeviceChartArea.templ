@@ -28,32 +28,36 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 			>{ p.Label }</button>
 		}
 	</div>
-	<h2 class="u-mbs-6">温度グラフ</h2>
-	@chartHover("temperature-chart", v.TemperatureSVG, v.TemperatureHoverJSON, "#e8590c", "℃")
-	<h2 class="u-mbs-6">湿度グラフ</h2>
-	@chartHover("humidity-chart", v.HumiditySVG, v.HumidityHoverJSON, "#1971c2", "%")
-}
-
-// chartHover は折れ線グラフ1枚 (SVG) に、ホバー時の十字ポインター + 値/時刻ツールチップを
-// 重ねるラッパー。Alpine の hoverChart(App.templ 定義) に点列 (hoverJSON: SVG 720x240 座標+
-// 時刻+値) と色・単位を渡し、マウス移動で最寄りの計測点へスナップして表示する。
-// オーバーレイ SVG は本体と同じ viewBox 720x240・同じ寸法に重なるため、座標が常に一致する。
-// 点列が "[]" (30d 日次集計や未受信) のときホバーは無効 (onMove が即 return)。
-templ chartHover(id, svg, pointsJSON, color, unit string) {
+	// 温度グラフと湿度グラフを 1 つの Alpine コンポーネント linkedCharts (App.templ 定義) で束ね、
+	// どちらをホバーしても両グラフの縦線・ドット・値/時刻を同一時刻 index で連動させる (④)。
+	// 温度/湿度は同一計測行から生成され点列の時刻が一致するため、共有 index で双方を指せる。
+	// mouseleave は親に置き、温度↔湿度の移動中も連動表示を維持する (グラフ外へ出たら消える)。
 	<div
-		id={ id }
-		class="chart-wrapper"
-		x-data={ "hoverChart({points: " + pointsJSON + ", color: '" + color + "', unit: '" + unit + "'})" }
-		@mousemove="onMove($event)"
+		class="linked-charts"
+		x-data={ "linkedCharts({t: " + hoverData(v.TemperatureHoverJSON) + ", h: " + hoverData(v.HumidityHoverJSON) + ", tc: '#e8590c', hc: '#1971c2'})" }
 		@mouseleave="onLeave()"
 	>
-		@templ.Raw(svg)
-		<svg class="chart-hover" viewBox="0 0 720 240" preserveAspectRatio="none" x-show="active" x-cloak aria-hidden="true">
-			<line class="ch-vline" :x1="cx" :x2="cx" y1="16" y2="208"></line>
-			<line class="ch-hline" :x1="cx-8" :x2="cx+8" :y1="cy" :y2="cy"></line>
-			<circle class="ch-dot" :cx="cx" :cy="cy" r="3" :fill="color"></circle>
-		</svg>
-		<div class="chart-hover-tip" x-show="active" x-cloak :style="tipStyle" x-text="valueText"></div>
-		<div class="chart-hover-time" x-show="active" x-cloak :style="timeStyle" x-text="timeText"></div>
+		<h2 class="u-mbs-6">温度グラフ</h2>
+		<div id="temperature-chart" class="chart-wrapper" @mousemove="onMove($event, 't')">
+			@templ.Raw(v.TemperatureSVG)
+			<svg class="chart-hover" viewBox="0 0 720 240" preserveAspectRatio="none" x-show="active" x-cloak aria-hidden="true">
+				<line class="ch-vline" :x1="cx" :x2="cx" y1="16" y2="208"></line>
+				<line class="ch-hline" :x1="cx-8" :x2="cx+8" :y1="cy.t" :y2="cy.t"></line>
+				<circle class="ch-dot" :cx="cx" :cy="cy.t" r="3" :fill="colors.t"></circle>
+			</svg>
+			<div class="chart-hover-tip" x-show="active" x-cloak :style="tipStyle('t')" x-text="valueText.t"></div>
+			<div class="chart-hover-time" x-show="active" x-cloak :style="timeStyle('t')" x-text="timeText"></div>
+		</div>
+		<h2 class="u-mbs-6">湿度グラフ</h2>
+		<div id="humidity-chart" class="chart-wrapper" @mousemove="onMove($event, 'h')">
+			@templ.Raw(v.HumiditySVG)
+			<svg class="chart-hover" viewBox="0 0 720 240" preserveAspectRatio="none" x-show="active" x-cloak aria-hidden="true">
+				<line class="ch-vline" :x1="cx" :x2="cx" y1="16" y2="208"></line>
+				<line class="ch-hline" :x1="cx-8" :x2="cx+8" :y1="cy.h" :y2="cy.h"></line>
+				<circle class="ch-dot" :cx="cx" :cy="cy.h" r="3" :fill="colors.h"></circle>
+			</svg>
+			<div class="chart-hover-tip" x-show="active" x-cloak :style="tipStyle('h')" x-text="valueText.h"></div>
+			<div class="chart-hover-time" x-show="active" x-cloak :style="timeStyle('h')" x-text="timeText"></div>
+		</div>
 	</div>
 }

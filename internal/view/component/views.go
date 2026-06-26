@@ -52,6 +52,16 @@ type DeviceChartAreaView struct {
 	HumidityHoverJSON    string
 }
 
+// hoverData はホバー点列 JSON を Alpine の x-data へ安全に埋め込むためのヘルパ。
+// handler は常に "[]" 以上の有効 JSON を渡すが、未設定 ("") のときも JS が壊れないよう
+// 空配列 "[]" にフォールバックする (linkedCharts({t: [], h: []}) を成立させる)。
+func hoverData(s string) string {
+	if s == "" {
+		return "[]"
+	}
+	return s
+}
+
 // chartPeriod は期間切替ボタン1個の定義 (Value=クエリ値, Label=表示文言)。
 type chartPeriod struct {
 	Value string

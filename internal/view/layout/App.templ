@@ -114,44 +114,52 @@ templ App(data AppLayoutData) {
 				initTomSelect();
 			</script>
 			<script>
-				// hoverChart はデバイス詳細の折れ線グラフ用 Alpine コンポーネント。
-				// グラフ上のマウス x から最寄りの計測点 (cfg.points: SVG 720x240 座標+時刻+値) を選び、
-				// 全高の縦点線+短い横点線の十字ポインターと、値/時刻ツールチップを表示する。
-				// 点列が空 (30d 日次集計や未受信) のときは何も表示しない。
-				function hoverChart(cfg) {
+				// linkedCharts はデバイス詳細の温度・湿度 折れ線グラフを連動させる Alpine コンポーネント。
+				// どちらのグラフをホバーしても、マウス x から最寄りの計測点 index を求め、両グラフの
+				// 縦点線・横点線・ドット・値ツールチップ・時刻を同一 index で同時に表示する (④)。
+				// 温度 (cfg.t) と湿度 (cfg.h) は同一計測行から生成され時刻列が一致するため、共有 index で
+				// 双方を指せる。点列が空 (30d 日次集計や未受信) のときは何も表示しない。
+				// cfg: { t:[{x,y,t,v}], h:[{x,y,t,v}], tc:温度色, hc:湿度色 }
+				function linkedCharts(cfg) {
+					cfg = cfg || {};
 					return {
-						points: (cfg && cfg.points) || [],
-						color: (cfg && cfg.color) || '#495057',
-						unit: (cfg && cfg.unit) || '',
+						series: { t: cfg.t || [], h: cfg.h || [] },
+						colors: { t: cfg.tc || '#e8590c', h: cfg.hc || '#1971c2' },
 						active: false,
-						cx: 0,
-						cy: 0,
-						valueText: '',
-						timeText: '',
-						onMove(e) {
-							if (!this.points.length) return;
-							var rect = this.$el.getBoundingClientRect();
+						cx: 0,                       // 縦線の x (SVG 720x240 座標)。両グラフ共有
+						cy: { t: 0, h: 0 },          // 各グラフのドット y
+						valueText: { t: '', h: '' }, // 各グラフの値ツールチップ文言
+						timeText: '',                // 時刻 (両グラフ共通)
+						onMove(e, key) {
+							var pts = this.series[key];
+							if (!pts || !pts.length) return;
+							var rect = e.currentTarget.getBoundingClientRect();
 							if (!rect.width) return;
 							var svgX = (e.clientX - rect.left) / rect.width * 720;
-							var nearest = this.points[0];
-							for (var i = 1; i < this.points.length; i++) {
-								if (Math.abs(this.points[i].x - svgX) < Math.abs(nearest.x - svgX)) {
-									nearest = this.points[i];
-								}
+							var idx = 0;
+							for (var i = 1; i < pts.length; i++) {
+								if (Math.abs(pts[i].x - svgX) < Math.abs(pts[idx].x - svgX)) idx = i;
 							}
-							this.cx = nearest.x;
-							this.cy = nearest.y;
-							this.valueText = nearest.v.toFixed(1) + this.unit;
-							this.timeText = nearest.t;
+							// 時刻列が一致するため、同 index で温度・湿度の双方を更新する (連動)。
+							this.cx = pts[idx].x;
+							this.timeText = pts[idx].t;
+							this.updatePane('t', idx, '℃');
+							this.updatePane('h', idx, '%');
 							this.active = true;
 						},
-						onLeave: function() { this.active = false; },
-						get tipStyle() {
-							return 'left:' + (this.cx / 720 * 100) + '%; top:' + (this.cy / 240 * 100) +
-								'%; color:' + this.color + '; border-color:' + this.color;
+						updatePane(key, idx, unit) {
+							var p = this.series[key][idx];
+							if (!p) return;
+							this.cy[key] = p.y;
+							this.valueText[key] = p.v.toFixed(1) + unit;
 						},
-						get timeStyle() {
-							return 'left:' + (this.cx / 720 * 100) + '%; color:' + this.color;
+						onLeave: function() { this.active = false; },
+						tipStyle: function(key) {
+							return 'left:' + (this.cx / 720 * 100) + '%; top:' + (this.cy[key] / 240 * 100) +
+								'%; color:' + this.colors[key] + '; border-color:' + this.colors[key];
+						},
+						timeStyle: function(key) {
+							return 'left:' + (this.cx / 720 * 100) + '%; color:' + this.colors[key];
 						}
 					};
 				}

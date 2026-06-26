@@ -549,12 +549,14 @@
   white-space: nowrap;
   pointer-events: none;
 }
-/* X 軸の時刻ラベル: グラフ下端 (X 軸の行) に系列色で表示。 */
+/* ポインターの時刻ラベル: X 軸の目盛ラベル (SVG y≈230) と重ならないよう、その上の
+   余白帯 (プロット下端 y=208 と X 軸ラベルの間) に系列色で表示する (③)。
+   top はラッパー高 (=SVG 720:240 比) に対する割合で、SVG-y≈211 に中央を置く。 */
 .chart-hover-time {
   position: absolute;
-  bottom: 4px;
-  transform: translateX(-50%);
-  font-size: 12px;
+  top: 88%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   pointer-events: none;
