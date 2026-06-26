@@ -1277,6 +1277,11 @@ document.addEventListener('htmx:afterSwap', function(event) {
 
 > **障害パターンの詳細は §16 を参照。** 本セクション（C12）はライフサイクル管理の基盤設計のみを記載する。HTMX swap・Alpine.js・モーダル表示タイミングとの干渉で発生する具体的な障害パターンと対策は **§16 Tom Select 障害パターン集（TS）** に集約されている。
 
+> **一般化: DOM へマウントする JS ウィジェットはすべてこの dispose→init ライフサイクルに従う。** Tom Select に限らず、Apache ECharts 等「コンテナ要素に init してインスタンスを保持し、swap で要素が消える/再生成される」ライブラリは同じ管理が要る。ECharts なら `htmx:beforeSwap` で `echarts.getInstanceByDom(el)?.dispose()`、`htmx:afterSwap`／`DOMContentLoaded` で `echarts.init(el)→setOption` を `event.detail.target` 配下に走査（複数インスタンスは `echarts.connect` で連動）。実装は App.templ の `EChartsInitializer`（device-chart-echarts）。
+> - **初期化対象は `data-*` 属性＋`id` で拾い、スタイルには使わない**（§43）。`querySelectorAll('[data-echarts]')` で走査、option は §10-E の `<script type="application/json" id="{id}-option">` から `JSON.parse`。
+> - **go-echarts の `RenderSnippet().Script`（init+setOption 入りの `<script>`）は使わない。** HTMX で挿入された `<script>` は自動実行されない（§30）ため、サーバは **option JSON だけ**を構築（`charts.Line` → `.JSON()` → `encoding/json` で再シリアライズし HTML 安全化）し、init/dispose/connect はこの C12 グローバルハンドラ1箇所に集約する。
+> - **アセットは共通レイアウトの `<head>` で1回読込**（self-host・`view.JSURL()`）。フラグメントに `<script src>` を出すと期間切替のたびに再 DL される（R5.3）。device-show 以外の画面は `[data-echarts]` 不在で初期化が no-op になり無回帰。
+
 #### 3. Alpine.js との状態同期
 
 Tom Select は内部で独自の UI を構築するため、Alpine.js の `x-model` やリアクティブバインディングが直接機能しない。`onChange` コールバックで Alpine 側の状態を更新する。
@@ -2524,15 +2529,36 @@ JavaScript から動的に読み取りたいデータを、templ 上の `<script
 
 `x-data` などの**式として評価される文脈向けの値**（`JSON.parse('...')` のような JS 式を吐く形式）を、そのまま `<script type="application/json">` の中身に流し込むと、`textContent` を `JSON.parse()` する側で先頭の `JSON.parse(` が構文エラーになり catch で空配列に落ちる。症状として「JS ロジックは動いているのに値が反映されない」現象が出る。`<script type="application/json">` の中身は**純 JSON でなければならない**。
 
-### 対策: `json.Marshal` の結果をそのまま埋め込む
+### ⚠ templ の落とし穴（必読）: `<script>` の中身では式が評価されない
+
+**`<script>`（と `<style>`）は HTML の raw text element のため、templ は中身をパースせず、子の式（`@templ.Raw(...)` や `{ expr }`）を評価しない。** 次のように書くと:
 
 ```templ
-// internal/view/component/readings_chart.templ
-// グラフ描画用の計測値を純 JSON で供給する
+// ❌ NG: <script> の中で @templ.Raw を直書きしても評価されない
 templ ReadingsChartData(rows []ReadingPoint) {
     <script type="application/json" id="readings-chart-data">
         @templ.Raw(marshalReadings(rows))
     </script>
+}
+```
+
+`templ generate` の出力（`*_templ.go`）は次のようになり、`@templ.Raw(marshalReadings(rows))` が **文字列としてそのまま書き出される**:
+
+```go
+templruntime.WriteString(buf, 1, "<script type=\"application/json\" id=\"readings-chart-data\">\n\t@templ.Raw(marshalReadings(rows))\n</script>")
+```
+
+結果、ブラウザのページに `@templ.Raw(marshalReadings(rows))` という地の文が漏れ、JSON は供給されない（`JSON.parse` は失敗）。**症状: 画面に `@templ.Raw(...)` がそのまま表示される／JS が値を読めない。**
+
+### 対策: `<script>…</script>` タグごと文字列で組み立て、要素まるごと `@templ.Raw` で出す
+
+中身だけでなく **`<script>` 開きタグから閉じタグまで Go 側で連結**し、その文字列を `@templ.Raw` に渡す（`@templ.Raw` 呼び出し自体は要素の外＝通常コンテキストにあるので評価される）。中身は `json.Marshal` 由来で HTML 安全なので Raw 出力でも `</script>` 混入は起きない。
+
+```templ
+// internal/view/component/readings_chart.templ
+// グラフ描画用の計測値を純 JSON で供給する（<script> タグごと組み立てて Raw 出力）
+templ ReadingsChartData(rows []ReadingPoint) {
+    @templ.Raw(readingsChartScript(rows))
 }
 ```
 
@@ -2542,6 +2568,13 @@ type ReadingPoint struct {
     MeasuredAt string  `json:"measured_at"`
     Metric     string  `json:"metric"`     // temperature / humidity
     Value      float64 `json:"value"`
+}
+
+// readingsChartScript は <script type="application/json"> タグごと組み立てて返す。
+// id は静的定数のみを渡す前提。中身は marshalReadings が HTML 安全化済み。
+func readingsChartScript(rows []ReadingPoint) string {
+    return `<script type="application/json" id="readings-chart-data">` +
+        marshalReadings(rows) + `</script>`
 }
 
 // json.Marshal で純 JSON を生成する。
@@ -2555,6 +2588,8 @@ func marshalReadings(rows []ReadingPoint) string {
     return string(b)
 }
 ```
+
+> **検証済み（device-chart-echarts・2026-06-26）**: ECharts の option JSON を `<script type="application/json">` で供給する実装で、`<script>` 内 `@templ.Raw` 直書きがページに literal 漏れする現象を確認。タグごと `@templ.Raw` 方式で解消した。最小再現で「inside パターン＝literal 出力／whole パターン＝評価」を確定済み。
 
 **XSS 対策の要点（Go の場合）:**
 - `encoding/json` は標準で `<`, `>`, `&` を `<` `>` `&` にエスケープする（`SetEscapeHTML(true)` がデフォルト）。これにより `</script>` のタグ閉じ混入を防げる。`json.Marshal` をそのまま使えば追加対策は基本不要。
@@ -2578,6 +2613,8 @@ body := w.Body.String()
 assert.Contains(t, body, `id="readings-chart-data"`)
 // JSON.parse( で始まっていないこと（= JS 式が紛れていない）
 assert.NotContains(t, body, "JSON.parse(")
+// (重要) @templ.Raw( が literal で漏れていないこと（<script> 内に式を直書きすると漏れる・前述の落とし穴）
+assert.NotContains(t, body, "@templ.Raw(")
 
 // パースできることも確認
 start := strings.Index(body, `id="readings-chart-data">`) + len(`id="readings-chart-data">`)
