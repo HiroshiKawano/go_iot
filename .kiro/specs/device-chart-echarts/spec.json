@@ -1,0 +1,22 @@
+{
+  "feature_name": "device-chart-echarts",
+  "created_at": "2026-06-26T05:07:10Z",
+  "updated_at": "2026-06-26T05:32:00Z",
+  "language": "ja",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
