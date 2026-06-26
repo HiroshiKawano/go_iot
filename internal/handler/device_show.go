@@ -67,14 +67,8 @@ func periodSince(period string, now time.Time) time.Time {
 	}
 }
 
-// usesRawSeries は生データの折れ線 (実測値) で描く期間か判定する (24h/3d/7d)。
-// 30d のみ 1 か月ぶんの生データが過密になるため日次 max/min 集計に集約する。
-func usesRawSeries(period string) bool {
-	return period != "30d"
-}
-
 // rawLabelFor は生データ折れ線の X ラベル整形関数を period から選ぶ。
-// 24h は時刻のみ "HH:MM"、複数日 (3d/7d) は日跨ぎで時刻が重複するため日付付き "M/D HH:MM"。
+// 24h は時刻のみ "HH:MM"、複数日 (3d/7d/30d) は日跨ぎで時刻が重複するため日付付き "M/D HH:MM"。
 func rawLabelFor(period string) func(pgtype.Timestamptz) string {
 	if period == defaultPeriod {
 		return hourMinuteLabel
@@ -211,35 +205,21 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 }
 
 // buildChartArea は period に応じてグラフデータを取得し、温度/湿度 SVG を生成した
-// グラフ領域 View を返す。24h/3d/7d=生データ1系列 (実測値の折れ線)、30d=日次 max/min の2系列
-// (1 か月は生データだと過密なため日次集計に集約する、という設計閾値)。
-// X ラベルは 24h が "HH:MM"、3d/7d は日跨ぎのため "M/D HH:MM"、30d は日付 "MM-DD"。
+// グラフ領域 View を返す。全期間 (24h/3d/7d/30d) とも生データ1系列 (実測値の折れ線) で描き、
+// 統一的に「最高/最低」見出し・右端の現在値・十字ポインターのホバー連動を付与する。
+// X ラベルは 24h が "HH:MM"、複数日 (3d/7d/30d) は日跨ぎのため "M/D HH:MM" (過密時は間引き)。
 func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
-	var tempSeries, humSeries []chart.Series
-	tempHover, humHover := "[]", "[]" // 既定 (日次集計=30d はホバー無効)
-
-	if usesRawSeries(period) {
-		rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
-			DeviceID:   deviceID,
-			RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
-		})
-		if err != nil {
-			return component.DeviceChartAreaView{}, err
-		}
-		tempSeries, humSeries = rawSeries(rows, rawLabelFor(period))
-		// 生データ折れ線のみホバー (十字ポインター+値/時刻) 用の点列を持たせる。
-		tempHover = hoverJSON(chart.LineChartHoverPoints(tempSeries))
-		humHover = hoverJSON(chart.LineChartHoverPoints(humSeries))
-	} else {
-		rows, err := h.Repo.ListDailySensorAggregates(ctx, repository.ListDailySensorAggregatesParams{
-			DeviceID:   deviceID,
-			RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
-		})
-		if err != nil {
-			return component.DeviceChartAreaView{}, err
-		}
-		tempSeries, humSeries = dailySeries(rows)
+	rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
+		DeviceID:   deviceID,
+		RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
+	})
+	if err != nil {
+		return component.DeviceChartAreaView{}, err
 	}
+	tempSeries, humSeries := rawSeries(rows, rawLabelFor(period))
+	// 生データ折れ線にホバー (十字ポインター+値/時刻) 用の点列を持たせる。
+	tempHover := hoverJSON(chart.LineChartHoverPoints(tempSeries))
+	humHover := hoverJSON(chart.LineChartHoverPoints(humSeries))
 
 	return component.DeviceChartAreaView{
 		DeviceID:             deviceID,
@@ -276,31 +256,6 @@ func rawSeries(rows []repository.SensorReading, label func(pgtype.Timestamptz) s
 		humPts = append(humPts, chart.Point{Label: l, Y: pgconv.NumericToFloat(r.Humidity)})
 	}
 	return []chart.Series{{Points: tempPts}}, []chart.Series{{Points: humPts}}
-}
-
-// dailySeries は日次集計行を温度/湿度それぞれ「最高(実線)・最低(破線)」の2系列へ写像する。
-// X ラベルは日付の "MM-DD"。max/min は sqlc が interface{} 型のため aggregateToFloat で安全変換する。
-func dailySeries(rows []repository.ListDailySensorAggregatesRow) (temp, hum []chart.Series) {
-	tMax := make([]chart.Point, 0, len(rows))
-	tMin := make([]chart.Point, 0, len(rows))
-	hMax := make([]chart.Point, 0, len(rows))
-	hMin := make([]chart.Point, 0, len(rows))
-	for _, r := range rows {
-		label := monthDayLabel(r.ReadingDate)
-		tMax = append(tMax, chart.Point{Label: label, Y: aggregateToFloat(r.MaxTemperature)})
-		tMin = append(tMin, chart.Point{Label: label, Y: aggregateToFloat(r.MinTemperature)})
-		hMax = append(hMax, chart.Point{Label: label, Y: aggregateToFloat(r.MaxHumidity)})
-		hMin = append(hMin, chart.Point{Label: label, Y: aggregateToFloat(r.MinHumidity)})
-	}
-	temp = []chart.Series{
-		{Name: "最高", Points: tMax},
-		{Name: "最低", Dashed: true, Points: tMin},
-	}
-	hum = []chart.Series{
-		{Name: "最高", Points: hMax},
-		{Name: "最低", Dashed: true, Points: hMin},
-	}
-	return temp, hum
 }
 
 // buildDeviceInfoView はデバイス行を情報パネル View へ写像する。
@@ -354,17 +309,6 @@ func hourMinuteLabel(ts pgtype.Timestamptz) string {
 // 24h の "HH:MM" と異なり日跨ぎで時刻が重複するため、日付を併記して区別できるようにする。
 func dayTimeLabel(ts pgtype.Timestamptz) string {
 	return pgconv.TimestamptzToTime(ts).In(jst).Format("1/2 15:04")
-}
-
-// monthDayLabel は集計日を 3d/7d/30d グラフの X ラベル "MM-DD" に整形する。
-// ReadingDate は DB の DATE(recorded_at) バケット (時点ではなく日付値) であり、その日境界は
-// DB セッション TZ 依存 (design Out of Boundary / Open Question)。ここでは TZ 変換せず日付を
-// そのまま表示する (Date の .In() はかえって境界をずらすため適用しない)。
-func monthDayLabel(d pgtype.Date) string {
-	if !d.Valid {
-		return ""
-	}
-	return d.Time.Format("01-02")
 }
 
 // aggregateToFloat は日次集計の MAX/MIN を float64 へ安全変換する。

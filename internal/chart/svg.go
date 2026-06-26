@@ -31,7 +31,7 @@ type Series struct {
 const (
 	svgWidth     = 720
 	svgHeight    = 240
-	marginLeft   = 68 // 左 Y 軸ラベル用余白 (「最高/最低」見出し+値を収める, ①②)
+	marginLeft   = 80 // 左 Y 軸ラベル用余白 (「最高/最低」見出し+値を収める, ①②。"最高100.0%" も非クリップ)
 	marginRight  = 56 // 右 余白。右端の現在値ラベル ("28.5℃" 等) を収める (⑤)
 	marginTop    = 16
 	marginBottom = 32 // 下 X 軸ラベル用余白

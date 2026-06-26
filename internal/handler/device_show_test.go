@@ -11,7 +11,6 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/HiroshiKawano/go_iot/internal/view/component"
 )
@@ -40,19 +39,6 @@ func sensorRow(deviceID int64, t time.Time, temp, hum float64) repository.Sensor
 		RecordedAt:  pgconv.Timestamptz(t),
 		Temperature: pgconv.Numeric2(temp),
 		Humidity:    pgconv.Numeric2(hum),
-	}
-}
-
-// dailyAggRow は日次集計1行を作る。max/min は sqlc が interface{} 型で生成するため
-// 本番 pgx と同じ pgtype.Numeric を入れる (ハンドラ側の型アサーションを通す)。
-func dailyAggRow(date time.Time, tMax, tMin, hMax, hMin float64) repository.ListDailySensorAggregatesRow {
-	return repository.ListDailySensorAggregatesRow{
-		ReadingDate:    pgtype.Date{Time: date, Valid: true},
-		MaxTemperature: pgconv.Numeric2(tMax),
-		MinTemperature: pgconv.Numeric2(tMin),
-		MaxHumidity:    pgconv.Numeric2(hMax),
-		MinHumidity:    pgconv.Numeric2(hMin),
-		SampleCount:    10,
 	}
 }
 
@@ -534,12 +520,12 @@ func TestChart_3dは生データで取得(t *testing.T) {
 	}
 }
 
-func TestChart_30dは日次集計で取得(t *testing.T) {
+func TestChart_30dは生データ折れ線で取得(t *testing.T) {
 	repo := showDeviceRepo()
-	// 30d のみ日次 max/min 集計 (2系列: 最高 実線 / 最低 破線)。X ラベルは "MM-DD"。
-	repo.dailyAggs = []repository.ListDailySensorAggregatesRow{
-		dailyAggRow(time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC), 30.0, 18.0, 70.0, 40.0),
-		dailyAggRow(time.Date(2026, 4, 19, 0, 0, 0, 0, time.UTC), 31.0, 19.0, 72.0, 42.0),
+	// 30d も 24h/3d/7d と同じ生データ折れ線 (単一系列)。日付付き時刻ラベル + Y軸「最高/最低」見出し。
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00), // 14:00 JST
+		sensorRow(1, time.Date(2026, 5, 18, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
 	}
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
@@ -551,16 +537,23 @@ func TestChart_30dは日次集計で取得(t *testing.T) {
 	if !activeButtonHas(body, "30日間") {
 		t.Errorf("30日間 がアクティブでない:\n%s", body)
 	}
-	for _, want := range []string{"最高", "最低", "04-18", "04-19"} {
+	// 生データ単一系列 → 日付付き時刻ラベルと Y軸「最高/最低」見出し。日次集計2系列の破線は出ない。
+	if !strings.Contains(body, "4/18 14:00") {
+		t.Errorf("30d 生データの日付時刻ラベルが無い:\n%s", body)
+	}
+	for _, want := range []string{"最高", "最低"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("30d グラフに %q が含まれていない (日次集計経路)", want)
+			t.Errorf("30d グラフに Y軸見出し %q が無い:\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, "stroke-dasharray") {
+		t.Errorf("30d は生データ折れ線のはずだが破線系列(日次最低)が含まれる:\n%s", body)
 	}
 }
 
 func TestChart_グラフデータ取得のDBエラーは500(t *testing.T) {
 	repo := showDeviceRepo()
-	repo.dailyErr = errInjected
+	repo.recentErr = errInjected // 全期間が生データ取得 (ListRecentSensorReadings) になったため
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	w := hxGet(r, "/devices/1/chart?period=30d")
