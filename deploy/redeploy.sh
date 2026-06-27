@@ -6,21 +6,25 @@
 #       現在の egress を検出して 22 を一時開放し、作業後に必ず管理元 /32 へ復元する。
 #
 # 流れ:
+#   0. デプロイ元ガード (main・clean・origin/main 一致を強制。本番は常に main を反映)
 #   1. amd64 クロスビルド (sync-css -> templ generate -> go build)   ※FW開放前に済ませ開放時間を最小化
 #   2. 現在の egress IP を検出 (3回サンプル: 全一致=/32 / 変動=/24)
 #   3. Lightsail FW の 22 を [検出CIDR, 管理元CIDR] へ一時開放 (80/443 据置・8080/5432 非公開維持)
 #   4. 一時 SSH 鍵を取得し 22 到達を待機
+#   4.5 DB マイグレーション: 未適用があれば★入替の前に★ goose up (トンネル経由・後方互換 migration 前提)
 #   5. scp -> 旧バイナリ backup -> swap -> systemd restart -> 検証 (失敗時は旧バイナリへ自動ロールバック)
 #   6. 外部 HTTPS /health と配信 Version を検証
-#   7. ★trap EXIT で必ず★ FW を管理元 /32 のみへ復元 (途中失敗・中断でも実行)
+#   7. ★trap EXIT で必ず★ goose トンネル終了 + FW を管理元 /32 のみへ復元 (途中失敗・中断でも実行)
 #
-# 前提: aws CLI v2 + プロファイル go-iot-mcp / git / go / python3 / nc。
+# 前提: aws CLI v2 + プロファイル go-iot-mcp / git / go (go tool goose) / python3 / nc。
 #       FW 変更は call_aws(MCP) ではなくローカル CLI で行う(MCP の elicit 同意が
 #       クライアント未対応で却下されるため。既知の回避策)。
+#       migration は「追加専用＝後方互換(expand-contract)」であること(STEP 4.5 の不変条件・本文参照)。
 #
 # 使い方:
-#   bash deploy/redeploy.sh               # 通常デプロイ
-#   bash deploy/redeploy.sh --keep-fw-open# 復元せず開けたまま(デバッグ用・手動で戻すこと)
+#   bash deploy/redeploy.sh                 # 通常デプロイ(main 限定・未適用 migration は自動 goose up)
+#   bash deploy/redeploy.sh --keep-fw-open  # 復元せず FW を開けたまま(デバッグ用・手動で戻すこと)
+#   bash deploy/redeploy.sh --allow-non-main# main 限定ガードを迂回(緊急ホットフィックス専用・後で main へ取込)
 set -euo pipefail
 
 # ===== 設定(環境に合わせて変更可) =====
@@ -36,9 +40,18 @@ SERVICE="go_iot"
 ADMIN_CIDR="123.226.213.236/32"        # 復元先(管理元。動的なら適宜更新)
 PEM="$HOME/.ssh/lightsail-goiot.pem"
 KEEP_BACKUPS=3                          # サーバ上に残す旧バイナリ backup の世代数
+DBTUNNEL_PORT=15432                     # goose 用の一時 SSH トンネル(ローカル)ポート
 
-KEEP_FW_OPEN=0
-[ "${1:-}" = "--keep-fw-open" ] && KEEP_FW_OPEN=1
+# ---- 引数 ----
+KEEP_FW_OPEN=0          # --keep-fw-open  : 終了後も FW を開けたまま(デバッグ用・手動で戻すこと)
+ALLOW_NON_MAIN=0        # --allow-non-main: main 以外/未同期からのデプロイを許可(緊急ホットフィックス専用)
+for arg in "$@"; do
+  case "$arg" in
+    --keep-fw-open)   KEEP_FW_OPEN=1 ;;
+    --allow-non-main) ALLOW_NON_MAIN=1 ;;
+    *) printf 'ERROR: 不明な引数: %s (使用可: --keep-fw-open / --allow-non-main)\n' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 AWS="aws --profile $PROFILE --region $REGION"
 log() { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }
@@ -46,6 +59,21 @@ die() { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
+
+# ===== 0. デプロイ元ガード(本番は常に main のレビュー済みコードを反映する) =====
+# 作業ブランチ直デプロイ・未コミット・origin/main 未同期を禁止し、配信 Version と本番を一致させる。
+# (過去事例: feature ブランチを直接デプロイ→main 未マージで「本番が未マージ commit を指す」状態になった)
+# 緊急ホットフィックス時のみ --allow-non-main で迂回(その場合も後で必ず main へ取り込む)。
+if [ "$ALLOW_NON_MAIN" -eq 0 ]; then
+  BR="$(git rev-parse --abbrev-ref HEAD)"
+  [ "$BR" = main ] || die "デプロイ元が main でない(現在: $BR)。main へマージしてから実行(緊急時は --allow-non-main)"
+  [ -z "$(git status --porcelain)" ] || die "作業ツリーに未コミット変更あり。commit してから実行(本番=コミット済み main のみ)"
+  git fetch -q origin main || die "git fetch origin main 失敗"
+  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || die "ローカル main が origin/main と不一致。pull/push で同期してから実行"
+  echo "デプロイ元ガード OK: main・clean・origin/main と一致"
+else
+  echo "⚠️ --allow-non-main: main 限定ガードを迂回(緊急モード)。後で必ず main へ取り込むこと"
+fi
 
 # ---- FW 操作ヘルパ (22 の cidrs だけ差し替え・80/443 anywhere・8080/5432 は常に非公開) ----
 set_ssh_cidrs() { # $1 = JSON 配列要素(例: '"a/32","b/24"')
@@ -57,9 +85,11 @@ show_ports() {
     --query "portStates[].[fromPort,join(',',cidrs)]" --output json || true
 }
 
-# ---- 終了時に必ず FW を復元(開放した場合のみ) ----
+# ---- 終了時に必ず後始末(goose 用 SSH トンネル終了 + FW 復元) ----
 FW_OPENED=0
-restore_fw() {
+TUNNEL_PID=""
+cleanup() {
+  if [ -n "$TUNNEL_PID" ]; then kill "$TUNNEL_PID" 2>/dev/null || true; echo "(goose トンネル終了)"; TUNNEL_PID=""; fi
   [ "$FW_OPENED" -eq 1 ] || return 0
   if [ "$KEEP_FW_OPEN" -eq 1 ]; then
     echo "(--keep-fw-open: FW 復元をスキップ。手動で 22 を $ADMIN_CIDR へ戻すこと)"; return 0
@@ -69,7 +99,7 @@ restore_fw() {
     echo "⚠️ FW 復元失敗: 手動で 22 を $ADMIN_CIDR へ戻すこと"; fi
   show_ports
 }
-trap restore_fw EXIT
+trap cleanup EXIT
 
 # ===== 1. ビルド(FW 開放前) =====
 log "amd64 クロスビルド"
@@ -118,6 +148,32 @@ for _ in $(seq 1 12); do
 done
 [ "$REACH" -eq 1 ] || die "22 へ到達できません(FW 反映待ち / egress が想定外 / sshd 不調)"
 SSH="ssh -i $PEM -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 $SSH_USER@$STATIC_IP"
+
+# ===== 4.5 DB マイグレーション(★バイナリ入替の「前」に適用★) =====
+# 重要(不変条件): 本ステップは「追加専用＝後方互換(expand-contract)」の migration を前提とする。
+#   入替前に goose up するため、適用後〜入替までの数秒は【旧バイナリ × 新スキーマ】で動く。
+#   ADD COLUMN(nullable) / ADD INDEX / ADD TABLE 等は旧バイナリに無害。一方 DROP/RENAME/型変更/
+#   NOT NULL 追加 等の破壊的変更は旧バイナリを壊すため、その種は expand-contract で複数回に分けること。
+#   未適用が無ければ no-op(冪等)。goose 失敗時はバイナリを入替えずに中止(prod は旧コード×直前スキーマで継続)。
+#   DB は localhost 5432(外部非公開)のため SSH トンネル(ローカル DBTUNNEL_PORT)越しに適用する。
+log "DB マイグレーション確認(goose・SSH トンネル経由)"
+DBPASS="$($SSH 'sudo cat /root/go_iot_db_pass')"
+[ -n "$DBPASS" ] || die "DB パスワード取得失敗(/root/go_iot_db_pass)"
+ssh -fN -i "$PEM" -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes \
+  -L "$DBTUNNEL_PORT:localhost:5432" "$SSH_USER@$STATIC_IP"
+TUNNEL_PID="$(pgrep -f "ssh -fN.*$DBTUNNEL_PORT:localhost:5432" | head -1)"
+sleep 2
+export GOOSE_DRIVER=postgres
+export GOOSE_DBSTRING="postgres://$APP_USER:${DBPASS}@localhost:${DBTUNNEL_PORT}/go_iot?sslmode=disable"
+STATUS="$(go tool goose -dir db/migrations status 2>&1)" || die "goose status 失敗(DB接続/トンネル確認): $STATUS"
+echo "$STATUS"
+if printf '%s' "$STATUS" | grep -q "Pending"; then
+  echo "未適用 migration あり -> goose up(入替の前に適用)"
+  go tool goose -dir db/migrations up || die "goose up 失敗 -> デプロイ中止(バイナリ未入替・prod 継続)"
+else
+  echo "未適用 migration なし(goose 最新・no-op)"
+fi
+kill "$TUNNEL_PID" 2>/dev/null || true; echo "(goose トンネル終了)"; TUNNEL_PID=""
 
 # ===== 5. 配布 -> backup -> swap -> restart -> 検証(失敗時ロールバック) =====
 log "scp 配布"

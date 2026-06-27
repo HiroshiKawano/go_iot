@@ -1736,12 +1736,13 @@ ssh ubuntu@<静的IP> "createdb -h localhost go_iot_restore_test 2>/dev/null || 
 bash deploy/redeploy.sh
 ```
 
-これだけで **現在の接続元IP(egress)自動検出 → FW一時開放 → amd64ビルド → 配布 → 旧binary退避 → 入替 → `systemctl restart go_iot` → sha照合/health検証 → FW復元** まで実行される。失敗時は**旧binaryへ自動ロールバック**し、途中で止まっても **trap で FW は必ず管理元IPへ戻る**。完了後に外部 `https://<静的IP>.sslip.io/health` が 200 で、ログインページの `?v=<commit>` が新しくなっていれば反映成功。
+これだけで **デプロイ元ガード(main限定) → amd64ビルド → 現在の接続元IP(egress)自動検出 → FW一時開放 → SSH鍵取得 → 未適用 migration の `goose up`(入替の前) → 配布 → 旧binary退避 → 入替 → `systemctl restart go_iot` → sha照合/health検証 → トンネル終了+FW復元** まで実行される。失敗時は**旧binaryへ自動ロールバック**し、途中で止まっても **trap で goose トンネルを閉じ FW は必ず管理元IPへ戻る**。完了後に外部 `https://<静的IP>.sslip.io/health` が 200 で、ログインページの `?v=<commit>` が新しくなっていれば反映成功。
 
-> 🛑 **最重要の前提: `redeploy.sh` は goose マイグレーションを実行しない（バイナリ入替のみ）。** 反映するコードが**新しい migration を含む（前回デプロイ以降に `db/migrations/` が増えた）場合は、redeploy.sh の前に本番 DB へ `goose up` を別途適用すること**。これを怠ると、新バイナリは新スキーマ前提のクエリを発行するのに本番 DB は旧スキーマのまま → **デプロイ自体は成功(health 200)するのに、該当テーブルを読む画面だけ 500** になる（health は DB を引かないので気づきにくい）。
-> - **踏んだ事例（2026-06-27）**: `temp-humidity-chart-stats`（スキーマ非変更）を反映したが、同バイナリが main 由来で含む **device-location-select の `locality` 列(00008) が本番未適用**だったため、ログイン後 `/dashboard`（`ListDevicesByUser`）と `/devices/:id`（`GetDevice`）が全て 500。`redeploy.sh` 後に外部 health は 200・`?v=` も更新されていたため「デプロイ成功」に見えたが、device 系クエリが `... locality FROM devices` を読めず落ちていた。
-> - **正しい順序**: ① ローカルで migration を確定 → ② **本番に `goose up`**（§A-3 STEP5 / 下記トンネル手順）→ ③ `redeploy.sh` でバイナリ反映。リリース前に本番の適用状況を必ず照合する: `ssh ... 'sudo -u postgres psql -d go_iot -tAc "SELECT version_id FROM goose_db_version ORDER BY id DESC LIMIT 1"'` と `ls db/migrations/` の最大番号を突き合わせ、差があれば先に `goose up`。
-> - **本番 goose up（トンネル経由・再掲）**: `ssh -fN -i ~/.ssh/lightsail-goiot.pem -o ExitOnForwardFailure=yes -L 15432:localhost:5432 ubuntu@<静的IP>` → `export GOOSE_DRIVER=postgres; export GOOSE_DBSTRING="postgres://go_iot:$(ssh ... 'sudo cat /root/go_iot_db_pass')@localhost:15432/go_iot?sslmode=disable"` → `go tool goose -dir db/migrations status`（Pending 確認）→ `up`（DSN は env 渡し＝`ps` 非露出）。FW 開閉は redeploy.sh と同じ egress 検出＋trap 復元で行う。**`seed` は本番で絶対に流さない**。
+> ✅ **2026-06-27 改修: `redeploy.sh` が「① main 限定ガード」と「② 入替前の `goose up`」を内蔵した**（下記の障害を踏まえた恒久対策）。
+> - **① デプロイ元ガード（常に main を反映）**: `main` ブランチ・作業ツリー clean・`origin/main` と一致でなければ**中止**する。作業ブランチ直デプロイや未マージ commit が本番に乗るのを構造的に防ぐ（配信 `?v=<commit>` と main を一致させる）。緊急ホットフィックスのみ `--allow-non-main` で迂回（後で必ず main へ取り込む）。
+> - **② 入替前マイグレーション**: SSH トンネル経由で `goose status` を見て、未適用があれば**バイナリ入替の前に** `goose up` する（DSN は env 渡し＝`ps` 非露出・冪等・失敗時は入替えず中止）。`seed` は流さない。
+> - **🛑 不変条件（重要）: migration は「追加専用＝後方互換(expand-contract)」であること。** 入替前に適用するため、適用〜入替の数秒は【旧バイナリ × 新スキーマ】で動く。`ADD COLUMN(nullable)`/`ADD INDEX`/`ADD TABLE` は旧バイナリに無害だが、`DROP`/`RENAME`/型変更/`NOT NULL 追加` 等の**破壊的変更は旧バイナリを壊す**ため、その種は **expand-contract（互換追加→デプロイ→後日クリーンアップ）で複数回に分ける**こと。
+> - **これを内蔵する前に踏んだ障害（2026-06-27・恒久対策の動機）**: `temp-humidity-chart-stats`（スキーマ非変更）を反映した際、同バイナリが main 由来で含む **device-location-select の `locality` 列(00008) が本番未適用**だったため、ログイン後 `/dashboard`（`ListDevicesByUser`）と `/devices/:id`（`GetDevice`）が全て 500。外部 health は 200・`?v=` も更新されていたため「成功」に見えたが（health は DB を引かない）、device 系クエリが `... locality FROM devices` を読めず落ちていた。→ 本改修で「未適用 migration があれば自動で先に適用」されるため再発しない。
 
 #### ⚠️ 初心者がつまづく罠（重要・この3つで9割ハマる）
 
