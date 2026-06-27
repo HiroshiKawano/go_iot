@@ -1738,6 +1738,11 @@ bash deploy/redeploy.sh
 
 これだけで **現在の接続元IP(egress)自動検出 → FW一時開放 → amd64ビルド → 配布 → 旧binary退避 → 入替 → `systemctl restart go_iot` → sha照合/health検証 → FW復元** まで実行される。失敗時は**旧binaryへ自動ロールバック**し、途中で止まっても **trap で FW は必ず管理元IPへ戻る**。完了後に外部 `https://<静的IP>.sslip.io/health` が 200 で、ログインページの `?v=<commit>` が新しくなっていれば反映成功。
 
+> 🛑 **最重要の前提: `redeploy.sh` は goose マイグレーションを実行しない（バイナリ入替のみ）。** 反映するコードが**新しい migration を含む（前回デプロイ以降に `db/migrations/` が増えた）場合は、redeploy.sh の前に本番 DB へ `goose up` を別途適用すること**。これを怠ると、新バイナリは新スキーマ前提のクエリを発行するのに本番 DB は旧スキーマのまま → **デプロイ自体は成功(health 200)するのに、該当テーブルを読む画面だけ 500** になる（health は DB を引かないので気づきにくい）。
+> - **踏んだ事例（2026-06-27）**: `temp-humidity-chart-stats`（スキーマ非変更）を反映したが、同バイナリが main 由来で含む **device-location-select の `locality` 列(00008) が本番未適用**だったため、ログイン後 `/dashboard`（`ListDevicesByUser`）と `/devices/:id`（`GetDevice`）が全て 500。`redeploy.sh` 後に外部 health は 200・`?v=` も更新されていたため「デプロイ成功」に見えたが、device 系クエリが `... locality FROM devices` を読めず落ちていた。
+> - **正しい順序**: ① ローカルで migration を確定 → ② **本番に `goose up`**（§A-3 STEP5 / 下記トンネル手順）→ ③ `redeploy.sh` でバイナリ反映。リリース前に本番の適用状況を必ず照合する: `ssh ... 'sudo -u postgres psql -d go_iot -tAc "SELECT version_id FROM goose_db_version ORDER BY id DESC LIMIT 1"'` と `ls db/migrations/` の最大番号を突き合わせ、差があれば先に `goose up`。
+> - **本番 goose up（トンネル経由・再掲）**: `ssh -fN -i ~/.ssh/lightsail-goiot.pem -o ExitOnForwardFailure=yes -L 15432:localhost:5432 ubuntu@<静的IP>` → `export GOOSE_DRIVER=postgres; export GOOSE_DBSTRING="postgres://go_iot:$(ssh ... 'sudo cat /root/go_iot_db_pass')@localhost:15432/go_iot?sslmode=disable"` → `go tool goose -dir db/migrations status`（Pending 確認）→ `up`（DSN は env 渡し＝`ps` 非露出）。FW 開閉は redeploy.sh と同じ egress 検出＋trap 復元で行う。**`seed` は本番で絶対に流さない**。
+
 #### ⚠️ 初心者がつまづく罠（重要・この3つで9割ハマる）
 
 **罠①: SSH(22) が「timed out」で繋がらない＝接続元IPの不一致**

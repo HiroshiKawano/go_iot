@@ -154,6 +154,25 @@ templ App(data AppLayoutData) {
 							};
 							option.series[0].sampling = 'lttb';
 						}
+						// tooltip(trigger:axis) は全系列を拾うため、正常帯の透明な積み上げ基線
+						// 「帯下限」(凡例非表示) まで生値で漏れてしまう。これを除外し、数値は小数2桁へ
+						// 丸めてクラッタを抑える (オーバーレイ既定オフ時のホバーをクリーンに保つ)。
+						// 乖離率の未定義点 (null) は行ごと省く。
+						if (option.tooltip) {
+							option.tooltip.formatter = function(params) {
+								if (!Array.isArray(params)) params = [params];
+								if (!params.length) return '';
+								var lines = [params[0].axisValueLabel];
+								params.forEach(function(p) {
+									if (p.seriesName === '帯下限') return;
+									var v = p.value;
+									if (v == null) return;
+									if (typeof v === 'number') v = v.toFixed(2);
+									lines.push(p.marker + ' ' + p.seriesName + ': ' + v);
+								});
+								return lines.join('<br/>');
+							};
+						}
 						inst.setOption(option);
 						return inst;
 					}

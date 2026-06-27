@@ -131,6 +131,28 @@ func TestApp_EChartsグローバル初期化スクリプトを同梱(t *testing.
 	}
 }
 
+// 正常帯は「帯下限(透明な積み上げ基線・凡例非表示)」+「帯幅」の2系列で描く。tooltip は
+// trigger:axis のため帯下限まで拾い、既定オフでもホバー時に生値が漏れてクラッタになる。
+// EChartsInitializer が tooltip.formatter で帯下限を除外し、数値を2桁へ丸めることを固定する。
+func TestApp_tooltipは帯下限を除外し数値を丸める(t *testing.T) {
+	data := AppLayoutData{
+		Title:     "デバイス詳細 - 農業IoTシステム",
+		UserName:  "テストユーザー",
+		CSRFToken: "tok-tip",
+		CSSURL:    "/static/css/style.css?v=dev",
+	}
+	html := render(t, App(data))
+
+	for _, marker := range []string{
+		"option.tooltip",       // tooltip を client 側で後加工する
+		"formatter",            // tooltip.formatter を付与
+		"seriesName === '帯下限'", // 透明ヘルパ系列を除外する判定
+		"toFixed(2)",           // 生値の長い float を小数2桁へ丸める
+	} {
+		assertContains(t, html, marker)
+	}
+}
+
 func TestApp_旧linkedChartsを撤去(t *testing.T) {
 	data := AppLayoutData{
 		Title:     "ダッシュボード - 農業IoTシステム",

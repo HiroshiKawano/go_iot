@@ -601,6 +601,10 @@
 }
 .summary-box .label { font-size: var(--fs-sm); color: var(--color-muted); }
 .summary-box .value { font-size: var(--fs-lg); font-weight: 600; margin-top: var(--space-1); }
+/* device-show 数値カード（現在値/最高/最低/日較差の4項目）を1行に並べる列調整。
+   基底 .summary-grid(3列・readings 履歴が依存)は変えず、本モディファイアでのみ4列化。
+   狭幅(@media max-width:768px)では基底 .summary-grid の 1fr ルールが後勝ちで1列化する。 */
+.summary-grid-4 { grid-template-columns: repeat(4, 1fr); }
 
 /* --- アラートルール管理 --- */
 /* .rule-form のflex配置・form-group伸縮は「インラインフォーム共通」で定義済み。ここは固有値のみ */

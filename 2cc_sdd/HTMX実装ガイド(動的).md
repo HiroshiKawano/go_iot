@@ -1282,6 +1282,13 @@ document.addEventListener('htmx:afterSwap', function(event) {
 > - **go-echarts の `RenderSnippet().Script`（init+setOption 入りの `<script>`）は使わない。** HTMX で挿入された `<script>` は自動実行されない（§30）ため、サーバは **option JSON だけ**を構築（`charts.Line` → `.JSON()` → `encoding/json` で再シリアライズし HTML 安全化）し、init/dispose/connect はこの C12 グローバルハンドラ1箇所に集約する。
 > - **アセットは共通レイアウトの `<head>` で1回読込**（self-host・`view.JSURL()`）。フラグメントに `<script src>` を出すと期間切替のたびに再 DL される（R5.3）。device-show 以外の画面は `[data-echarts]` 不在で初期化が no-op になり無回帰。
 
+> **複数系列オーバーレイの構築（temp-humidity-chart-stats・2026-06-27）.** 生実測線へ SMA・正常帯・乖離率を上載せした際の go-echarts/v2 + ECharts 実装の罠と定石。単一系列（E1）から複数系列へ拡張するときに踏む:
+> - **`omitempty` 罠（最重要）.** `opts.LineStyle.Opacity`／`opts.AreaStyle.Opacity`（`types.Float`=`*float32`）や `opts.LineChart.ShowSymbol`（`types.Bool`=`*bool`）は、`0`／`false` のつもりで**ゼロ値のまま渡すと nil ポインタ→`omitempty` で省略され、ECharts 既定（不透明・symbol 表示）で描かれてしまう**。透明・非表示は必ず `opts.Float(0)`／`opts.Bool(false)` の**明示ポインタ**で渡す。検証は option JSON を `json.Unmarshal` して `lineStyle.opacity`／`showSymbol` の実在をアサート（テストガイダンス集 §56.1）。
+> - **JS 関数 formatter はサーバ option に埋め込めない.** option を `encoding/json` で再シリアライズして HTML 安全化する構成（上記）では、`tooltip.formatter`／`endLabel.formatter` 等の **JS 関数は文字列化されて ECharts が実行しない**。関数付与は必ずクライアント（`EChartsInitializer`）側で `option.xxx.formatter = function(){...}` として行い、サーバは数値・系列・凡例など **JSON 化可能な構造だけ**を供給する。
+> - **`tooltip.trigger:'axis'` は全系列を拾う.** 正常帯を「帯下限（透明な積み上げ基線・凡例非表示）＋帯幅（半透明 areaStyle・同 stack）」の2系列で描くと、軸ツールチップが**凡例に出さない帯下限まで生値で表示**する（既定オフでもホバーで漏れてクラッタになる）。クライアント `tooltip.formatter` で `seriesName` 一致の透明ヘルパ系列を除外し、ついでに `toFixed(2)` で派生値の長い float を丸め、`null`（未定義の乖離率点）は行ごと省く。
+> - **`series[0]`=生実測線の不変条件.** `EChartsInitializer` は endLabel（右端現在値）／sampling(lttb) を **`option.series[0]` へ無条件付与**する。オーバーレイで系列が増えても**生実測線を必ず series[0] に保つ**（SMA/帯/乖離率は series[1..]）。崩すと現在値ラベル・間引きが別系列に付き、温湿度連動・無回帰が壊れる。option JSON の `series[0].name==単位`・`markPoint` 実在をテストで固定（テストガイダンス集 §5.6.AA）。
+> - **複数系列の型安全な組み方.** 第2 y軸=`line.ExtendYAxis(opts.YAxis{Position:"right"})`＋系列に `WithLineChartOpts(opts.LineChart{YAxisIndex:1})`。曲線追従の塗り帯=帯下限・帯幅を同一 `Stack` 名で積み上げ、帯幅のみ `WithAreaStyleOpts`。既定オフ=`WithLegendOpts(opts.Legend{Selected: map[string]bool{name:false}})`＋帯下限は `Legend.Data` から除外して凡例項目を出さない（1概念=1トグル）。
+
 #### 3. Alpine.js との状態同期
 
 Tom Select は内部で独自の UI を構築するため、Alpine.js の `x-model` やリアクティブバインディングが直接機能しない。`onChange` コールバックで Alpine 側の状態を更新する。

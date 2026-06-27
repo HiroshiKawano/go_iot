@@ -212,10 +212,37 @@ func (h *DeviceHandler) Delete(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard") // 非 HTMX フォームは 303
 }
 
-// buildChartArea は period に応じてグラフデータを取得し、温度/湿度の ECharts option JSON を
-// 構築したグラフ領域 View を返す。全期間 (24h/3d/7d/30d) とも生データ1系列 (実測値の折れ線)。
-// X ラベルは 24h が "HH:MM"、複数日 (3d/7d/30d) は日跨ぎのため "M/D HH:MM"。
-// 計測 0 件のときは option を構築せず HasData=false (空メッセージのみ・templ 側で分岐)。
+// 統計オーバーレイの固定パラメータ。
+//   - bandSigmaK: 正常帯 SMA±kσ の倍率 (k=2 ≈ 95%・design 確定値)。
+//   - statEpsilon: ゼロ除算ガードのしきい値 (乖離率の |SMA|<eps / CV の |μ|<eps を未定義化)。
+const (
+	bandSigmaK  = 2.0
+	statEpsilon = 1e-9
+)
+
+// statEmptyMark は数値カード・日次集計表でデータ未到着/欠測/未定義を示すプレースホルダ。
+const statEmptyMark = "—"
+
+// smaWindowFor は period 別の SMA 窓幅 (点数) を返す (約5分間隔=12点/時 前提・design 決定表)。
+// 24h=12(約1時間)/3d=36(約3時間)/7d=72(約6時間)/30d=288(約1日)。点数窓のため計算層に時刻を持ち込まない。
+func smaWindowFor(period string) int {
+	switch period {
+	case "3d":
+		return 36
+	case "7d":
+		return 72
+	case "30d":
+		return 288
+	default: // "24h"
+		return 12
+	}
+}
+
+// buildChartArea は period に応じてグラフデータを取得し、温度/湿度の ECharts option JSON
+// (生実測線＋統計オーバーレイ)・数値カード・日次集計表を構築したグラフ領域 View を返す。
+// 統計 (SMA/σ/正常帯/乖離率・カード・日次) はすべて取得済み生行から読み取り時に算出する
+// (追加クエリ・スキーマ変更なし・R8)。計測 0 件のときは option を構築せず HasData=false
+// (空メッセージのみ・templ 側で分岐) とし、カードは "—" を出す (R1.4)。
 // 描画/対話 (十字ホバー・最高最低・現在値・温湿度連動) はクライアントの ECharts が担う (S5)。
 func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
@@ -226,23 +253,45 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 		return component.DeviceChartAreaView{}, err
 	}
 
-	// 計測 0 件: option を構築せず空メッセージのみ (HasData=false)。
+	// 計測 0 件: option を構築せず空メッセージのみ。カードは "—" でレイアウトを保つ (R1.4)。
 	if len(rows) == 0 {
 		return component.DeviceChartAreaView{
-			DeviceID: deviceID,
-			Period:   period,
-			HasData:  false,
+			DeviceID:        deviceID,
+			Period:          period,
+			HasData:         false,
+			TemperatureCard: emptyStatCard(),
+			HumidityCard:    emptyStatCard(),
+			ShowDaily:       false,
 		}, nil
 	}
 
-	tempSeries, humSeries := rawSeries(rows, rawLabelFor(period))
-	tempOpt, err := chart.LineOptionJSON(tempSeries, tempChartUnit, tempLineColor)
+	// 生行 → 温度/湿度の float 列 ＋ X ラベル列 (pgconv 境界変換・計算層は float64 のみ)。
+	label := rawLabelFor(period)
+	labels := make([]string, len(rows))
+	temps := make([]float64, len(rows))
+	hums := make([]float64, len(rows))
+	for i, r := range rows {
+		labels[i] = label(r.RecordedAt)
+		temps[i] = pgconv.NumericToFloat(r.Temperature)
+		hums[i] = pgconv.NumericToFloat(r.Humidity)
+	}
+
+	window := smaWindowFor(period)
+	tempOpt, err := chart.ChartOptionJSON(overlaySpec(labels, temps, tempChartUnit, tempLineColor, window))
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
 	}
-	humOpt, err := chart.LineOptionJSON(humSeries, humidityChartUnit, humidityLineColor)
+	humOpt, err := chart.ChartOptionJSON(overlaySpec(labels, hums, humidityChartUnit, humidityLineColor, window))
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
+	}
+
+	// 日次集計表は複数日 (3d/7d/30d) のみ (24h はカードで把握・R5.3)。
+	showDaily := period != defaultPeriod
+	var tempDaily, humDaily []component.DailyStatRow
+	if showDaily {
+		tempDaily = dailyStatRows(rows, func(r repository.SensorReading) float64 { return pgconv.NumericToFloat(r.Temperature) })
+		humDaily = dailyStatRows(rows, func(r repository.SensorReading) float64 { return pgconv.NumericToFloat(r.Humidity) })
 	}
 
 	return component.DeviceChartAreaView{
@@ -255,21 +304,127 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 		HumidityUnit:          humidityChartUnit,
 		TemperatureColor:      tempLineColor,
 		HumidityColor:         humidityLineColor,
+		TemperatureCard:       statCard(temps, tempChartUnit),
+		HumidityCard:          statCard(hums, humidityChartUnit),
+		ShowDaily:             showDaily,
+		TemperatureDaily:      tempDaily,
+		HumidityDaily:         humDaily,
 	}, nil
 }
 
-// rawSeries は生データ行を温度/湿度それぞれ1系列 (折れ線) へ写像する。
-// X ラベルは label で整形する (24h は "HH:MM"、複数日は "M/D HH:MM")。
-// 0 件なら空 Points の系列を返す (空グラフ分岐は chart 側)。
-func rawSeries(rows []repository.SensorReading, label func(pgtype.Timestamptz) string) (temp, hum []chart.Series) {
-	tempPts := make([]chart.Point, 0, len(rows))
-	humPts := make([]chart.Point, 0, len(rows))
-	for _, r := range rows {
-		l := label(r.RecordedAt)
-		tempPts = append(tempPts, chart.Point{Label: l, Y: pgconv.NumericToFloat(r.Temperature)})
-		humPts = append(humPts, chart.Point{Label: l, Y: pgconv.NumericToFloat(r.Humidity)})
+// overlaySpec は生実測列から統計オーバーレイ (SMA/正常帯/乖離率) を算出した ChartSpec を組む。
+// SMA・移動σは窓幅 window (立ち上がりは expanding window)、正常帯は SMA±kσ、乖離率は (実測−SMA)/SMA%。
+// すべて読み取り時計算 (生行から派生・保存しない・R8.2)。
+func overlaySpec(labels []string, values []float64, unit, color string, window int) chart.ChartSpec {
+	sma := chart.SMA(values, window)
+	sigma := chart.MovingStdDev(values, window)
+	lower, width := chart.Band(sma, sigma, bandSigmaK)
+	deviation := chart.Deviation(values, sma, statEpsilon)
+	return chart.ChartSpec{
+		Labels:    labels,
+		Unit:      unit,
+		Color:     color,
+		Raw:       values,
+		SMA:       sma,
+		BandLower: lower,
+		BandWidth: width,
+		Deviation: deviation,
 	}
-	return []chart.Series{{Points: tempPts}}, []chart.Series{{Points: humPts}}
+}
+
+// statCard は期間内の数値カード (現在値=最新点・最高/最低=期間内・日較差=最高−最低) を整形する (R1.1)。
+// 空入力は全項目 "—" (呼び出し側は非空を渡すが防御的)。
+func statCard(values []float64, unit string) component.StatCardView {
+	if len(values) == 0 {
+		return emptyStatCard()
+	}
+	min, max := chart.MinMax(values)
+	return component.StatCardView{
+		Current: formatStat(values[len(values)-1], unit),
+		Max:     formatStat(max, unit),
+		Min:     formatStat(min, unit),
+		Diurnal: formatStat(chart.DiurnalRange(values), unit),
+	}
+}
+
+// emptyStatCard はデータ未到着時の数値カード (全項目 "—") を返す (R1.4)。
+func emptyStatCard() component.StatCardView {
+	return component.StatCardView{
+		Current: statEmptyMark, Max: statEmptyMark, Min: statEmptyMark, Diurnal: statEmptyMark,
+	}
+}
+
+// dailyStatRows は生行を JST 暦日でバケット化し、各日の集計 (平均/最高/最低/日較差/σ/CV) を
+// 日付昇順で返す (R5.1)。データのある最古日〜最新日の間で計測の無い日は欠測行 ("—") として
+// 補完し、表の体裁を保つ (R5.4)。pick は行から対象指標 (温度 or 湿度) の float を取り出す。
+func dailyStatRows(rows []repository.SensorReading, pick func(repository.SensorReading) float64) []component.DailyStatRow {
+	if len(rows) == 0 {
+		return nil
+	}
+	// JST 暦日キー (時刻切り捨て) でグルーピング。
+	buckets := make(map[time.Time][]float64)
+	var minDay, maxDay time.Time
+	for i, r := range rows {
+		day := jstDay(r.RecordedAt)
+		buckets[day] = append(buckets[day], pick(r))
+		if i == 0 || day.Before(minDay) {
+			minDay = day
+		}
+		if i == 0 || day.After(maxDay) {
+			maxDay = day
+		}
+	}
+	// 最古日〜最新日を1日ずつ進め、欠測日は "—" で埋める (JST は DST 無しのため AddDate で安全)。
+	var out []component.DailyStatRow
+	for d := minDay; !d.After(maxDay); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		vals, ok := buckets[d]
+		if !ok {
+			out = append(out, emptyDailyRow(dateStr))
+			continue
+		}
+		out = append(out, dailyRow(dateStr, vals))
+	}
+	return out
+}
+
+// dailyRow は1日分の値列から日次集計行を整形する (単位は列見出し側・セルは素の数値)。
+func dailyRow(date string, values []float64) component.DailyStatRow {
+	min, max := chart.MinMax(values)
+	cv, ok := chart.CV(values, statEpsilon)
+	cvStr := statEmptyMark
+	if ok {
+		cvStr = formatStat(cv, "")
+	}
+	return component.DailyStatRow{
+		Date:    date,
+		Avg:     formatStat(chart.Mean(values), ""),
+		Max:     formatStat(max, ""),
+		Min:     formatStat(min, ""),
+		Diurnal: formatStat(chart.DiurnalRange(values), ""),
+		Sigma:   formatStat(chart.StdDev(values), ""),
+		CV:      cvStr,
+	}
+}
+
+// emptyDailyRow は欠測日の行 (日付以外すべて "—") を返す (R5.4)。
+func emptyDailyRow(date string) component.DailyStatRow {
+	return component.DailyStatRow{
+		Date: date, Avg: statEmptyMark, Max: statEmptyMark, Min: statEmptyMark,
+		Diurnal: statEmptyMark, Sigma: statEmptyMark, CV: statEmptyMark,
+	}
+}
+
+// jstDay は計測時刻 (instant) を JST に変換し、その暦日の 0:00 JST に切り捨てて返す
+// (日次バケットのキー。表示ラベルの JST と整合させる)。
+func jstDay(ts pgtype.Timestamptz) time.Time {
+	t := pgconv.TimestamptzToTime(ts).In(jst)
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, jst)
+}
+
+// formatStat は統計値を小数2桁の文字列へ整形する (unit が非空なら単位を付す)。
+func formatStat(v float64, unit string) string {
+	return strconv.FormatFloat(v, 'f', 2, 64) + unit
 }
 
 // buildDeviceInfoView はデバイス行を情報パネル View へ写像する。

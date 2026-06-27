@@ -65,6 +65,25 @@
           <a href="?period=30d" class="period-btn">30日間</a>
         </div>
 
+        <!-- R1: 数値カード(現在値・最高・最低・日較差／温度・湿度別)。24h でも常時表示し、期間切替で更新する。
+             実装(templ)では handler が整形した StatCardView を .value へ流し込む。空データ(0件)は各値「—」。
+             4項目を1行に並べるため .summary-grid に列調整モディファイア .summary-grid-4 を併用する。 -->
+        <h2 class="u-mbs-6">温度サマリ</h2>
+        <div class="summary-grid summary-grid-4">
+          <div class="summary-box"><div class="label">現在値</div><div class="value">28.50℃</div></div>
+          <div class="summary-box"><div class="label">最高</div><div class="value">35.20℃</div></div>
+          <div class="summary-box"><div class="label">最低</div><div class="value">18.50℃</div></div>
+          <div class="summary-box"><div class="label">日較差</div><div class="value">16.70℃</div></div>
+        </div>
+
+        <h2 class="u-mbs-6">湿度サマリ</h2>
+        <div class="summary-grid summary-grid-4">
+          <div class="summary-box"><div class="label">現在値</div><div class="value">65.30%</div></div>
+          <div class="summary-box"><div class="label">最高</div><div class="value">85.00%</div></div>
+          <div class="summary-box"><div class="label">最低</div><div class="value">30.20%</div></div>
+          <div class="summary-box"><div class="label">日較差</div><div class="value">54.80%</div></div>
+        </div>
+
         <!-- 折れ線(24h/3d/7d の実測値)にマウスを合わせると、全高の縦点線+短い横点線の十字ポインターと、
              最寄りの計測点の値(系列色)・時刻を表示する。実装は Alpine の linkedCharts で SVG に重ね、
              温度・湿度どちらをホバーしても両グラフの縦線/ドット/値/時刻を同一時刻で連動表示する(④)。
@@ -95,6 +114,56 @@
             <div class="chart-hover-tip" style="left:59.7%; top:62.5%; color:#1971c2; border-color:#1971c2;">68.2%</div>
             <div class="chart-hover-time" style="left:59.7%; color:#1971c2;">12:05</div>
           </div>
+        </div>
+
+        <!-- R5: 日次集計表(平均/最高/最低/日較差/σ/CV・温度/湿度別)。
+             複数日(3d/7d/30d)のときのみ表示し、24h では出さない(実装は ShowDaily で分岐)。
+             欠測日は各値を「—」にして表の体裁を保つ(先頭 2026-04-17 行で図示)。
+             単位はヘッダに付与しセルは素の数値(最新計測テーブルの慣習に合わせる)。CV は無次元のため単位なし。 -->
+        <h2 class="u-mbs-6">日次集計（温度）</h2>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>日付</th>
+                <th>平均(℃)</th>
+                <th>最高(℃)</th>
+                <th>最低(℃)</th>
+                <th>日較差(℃)</th>
+                <th>σ(℃)</th>
+                <th>CV</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>2026-04-17</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+              <tr><td>2026-04-18</td><td>27.80</td><td>33.10</td><td>19.40</td><td>13.70</td><td>3.85</td><td>0.14</td></tr>
+              <tr><td>2026-04-19</td><td>28.10</td><td>34.50</td><td>18.90</td><td>15.60</td><td>4.10</td><td>0.15</td></tr>
+              <tr><td>2026-04-20</td><td>28.50</td><td>35.20</td><td>18.50</td><td>16.70</td><td>4.32</td><td>0.15</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 class="u-mbs-6">日次集計（湿度）</h2>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>日付</th>
+                <th>平均(%)</th>
+                <th>最高(%)</th>
+                <th>最低(%)</th>
+                <th>日較差(%)</th>
+                <th>σ(%)</th>
+                <th>CV</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>2026-04-17</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+              <tr><td>2026-04-18</td><td>63.20</td><td>84.00</td><td>32.10</td><td>51.90</td><td>12.40</td><td>0.20</td></tr>
+              <tr><td>2026-04-19</td><td>62.80</td><td>85.00</td><td>31.00</td><td>54.00</td><td>13.10</td><td>0.21</td></tr>
+              <tr><td>2026-04-20</td><td>62.50</td><td>85.00</td><td>30.20</td><td>54.80</td><td>13.50</td><td>0.22</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
