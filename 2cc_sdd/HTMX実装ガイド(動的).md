@@ -6033,6 +6033,20 @@ readings はパス固定（`/devices/:device/readings`）で `authz.RequireDevic
 
 ---
 
+## 65. 文脈連動サイドバー（動的 active＋条件付きデバイス文脈リンク）パターン 📅 2026-06-28 — device-context-nav で確立
+
+> §C08（ドロワー開閉は Alpine 維持）・§42（サイドバー項目の `path` 必須）・1468 行付近（`hx-boost` 採用時は active を手動更新）を踏まえ、本プロジェクトが採った「**フルページ遷移前提の動的サイドバー**」を確立形として記す。`hx-boost` は使わず、各画面のフルページ遷移ごとにサイドバーを現在ページの状態で描き直す。
+
+**契約（型）は `component` パッケージに置く（import 方向制約）.** 現在ページ識別子＋選択中デバイス ID を束ねた値型 `SidebarNav{Current NavPage; DeviceID int64}` を **`component` 側**に定義する。`layout` は `component` を import する（`App.templ` が `@component.Sidebar` を呼ぶ）ため、ナビ文脈型を `layout` に置くと循環になる（本書「import 循環の第3のケース」と同根）。`layout.AppLayoutData` に `Nav component.SidebarNav` を1フィールド足し、`App.templ` が `@component.Sidebar(data.Nav)` へ流す（合流点は1箇所＝`App.templ`）。
+
+**active は `templ.KV`、文脈リンクは `if` の条件描画.** 各 `<a>` の active は `class={ templ.KV("active", nav.Current == NavXxx) }` でサーバ描画する（後付けでないので feature テストで検証可＝テストガイダンス集 §4.15）。デバイス文脈リンク（詳細／履歴）は `if nav.DeviceID > 0 { ... }` で囲み、href は `templ.SafeURL(fmt.Sprintf("/devices/%d", nav.DeviceID))` で同一 id から組む。注意: `templ.KV("active", false)` は class 属性を**消さず `class=""` を出力**する（モックは手書き慣習どおり非 active を class 無しにしてよい・意味的に等価）。テストは `class="active"` の有無・件数で判定し、`class=""` 出力に依存しない（存在ベースのアサート）。
+
+**ゼロ値は安全縮退（fail-safe）.** `SidebarNav{}`（`Current==""`・`DeviceID==0`）は「どの項目も active にしない・文脈リンクなし」へ縮退する。各ハンドラが自画面の `Nav` を設定し（詳細/履歴のみ `DeviceID` も渡す）、対応メニュー項目を持たない画面（登録/編集）は明示的にゼロ値を渡す。**編集は URL に device id を持つが、文脈に入れないなら `DeviceID` を設定しない**（要件で確定したユーザー判断・コメント明示）。`Current` を単一フィールドにすることで「同時 active ≤1」を構造保証できる。
+
+**HTMX 部分更新にサイドバーを含めない（不変条件）.** 画面内 HTMX 部分更新（検索・ページ送り・インライン CRUD 等）は結果フラグメントのみ返し（§1 のコンポーネント分割）、サイドバーを含めない。サイドバーの active・文脈リンクは**フルページ遷移時のみ**描き直す前提に立つ。回帰防止としてハンドラテストで「HX-Request 応答に `class="sidebar"`・文脈リンク文言を含まない」を固定し、実ブラウザでも swap でサイドバー DOM が保持されることを確認する（テストガイダンス集 §5.6.AB）。
+
+---
+
 ## 要確認事項（実装着手前に決定すべき項目）
 
 本ガイドは設計書（システム構成図 / DB設計書 / 画面設計書 / HTMLモック作成ルール）に基づき翻訳したが、以下は実装方針が未確定のため断定を避けた。実装着手前に決定すること。
