@@ -163,6 +163,10 @@ func newHTTPHandler(cfg *config.Config, sm *scs.SessionManager, q repository.Que
 	// HTMX 部分更新 (フラグメント #device-readings-list)。GET のみのため CSRF 検証対象外。
 	readingsH := &handler.ReadingsHandler{Repo: q}
 	web.GET("/devices/:device/readings", middleware.RequireAuth(), readingsH.Index)
+	// CSV エクスポート (sensor-data-export): 期間内全行をメタ列付き CSV で添付ダウンロード。
+	// 静的セグメント readings.csv は /readings の兄弟として :device node を共有し競合しない。
+	// ファイルDL ゆえ HTMX 非対象・GET のみのため CSRF 検証対象外。
+	web.GET("/devices/:device/readings.csv", middleware.RequireAuth(), readingsH.Export)
 
 	// アラートルール管理 (alert-rules): デバイスごとのルールをインライン CRUD する 6 ルート。
 	// 初期表示/デバイス切替(GET)・追加(POST)・編集読込(GET)・更新(PUT)・有効切替(PATCH)・削除(DELETE)。

@@ -48,6 +48,9 @@ type Querier interface {
 	ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]SensorReading, error)
 	// 24時間グラフ用: 指定時刻以降の生データを昇順で取得
 	ListRecentSensorReadings(ctx context.Context, arg ListRecentSensorReadingsParams) ([]SensorReading, error)
+	// CSV エクスポート / 集計帳票用: 期間内の全行を昇順で取得 (ページングなし)。
+	// 既存 Paginated は DESC+LIMIT、本クエリは ASC+LIMIT なし (帳票バケット/CSV 昇順出力に使う)。
+	ListSensorReadingsInRange(ctx context.Context, arg ListSensorReadingsInRangeParams) ([]SensorReading, error)
 	// センサーデータ履歴画面のテーブル用 (期間指定 + ページング)
 	ListSensorReadingsPaginated(ctx context.Context, arg ListSensorReadingsPaginatedParams) ([]SensorReading, error)
 	// ダッシュボードのアラート通知バナー表示用

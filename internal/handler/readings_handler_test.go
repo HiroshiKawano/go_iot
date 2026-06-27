@@ -39,6 +39,11 @@ type fakeReadingsRepo struct {
 	summaryErr    error
 	summaryCalled bool
 	lastSummary   repository.GetSensorReadingsSummaryParams
+
+	rangeRows   []repository.SensorReading
+	rangeErr    error
+	rangeCalled bool
+	lastRange   repository.ListSensorReadingsInRangeParams
 }
 
 func (f *fakeReadingsRepo) GetUser(_ context.Context, id int64) (repository.User, error) {
@@ -77,6 +82,12 @@ func (f *fakeReadingsRepo) GetSensorReadingsSummary(_ context.Context, arg repos
 	f.summaryCalled = true
 	f.lastSummary = arg
 	return f.summaryRow, f.summaryErr
+}
+
+func (f *fakeReadingsRepo) ListSensorReadingsInRange(_ context.Context, arg repository.ListSensorReadingsInRangeParams) ([]repository.SensorReading, error) {
+	f.rangeCalled = true
+	f.lastRange = arg
+	return f.rangeRows, f.rangeErr
 }
 
 // コンパイル時に ReadingsRepo を満たすことを保証する。

@@ -74,3 +74,12 @@ SELECT COUNT(*)::BIGINT AS total
  WHERE device_id   = $1
    AND recorded_at BETWEEN $2 AND $3
    AND deleted_at IS NULL;
+
+-- name: ListSensorReadingsInRange :many
+-- CSV エクスポート / 集計帳票用: 期間内の全行を昇順で取得 (ページングなし)。
+-- 既存 Paginated は DESC+LIMIT、本クエリは ASC+LIMIT なし (帳票バケット/CSV 昇順出力に使う)。
+SELECT * FROM sensor_readings
+ WHERE device_id   = $1
+   AND recorded_at BETWEEN $2 AND $3
+   AND deleted_at IS NULL
+ ORDER BY recorded_at ASC;

@@ -21,6 +21,14 @@ templ DeviceReadingsList(v DeviceReadingsListView) {
 				}
 			</div>
 		}
+		if v.CSVURL != "" {
+			// CSV ダウンロード: ファイルDL ゆえ HTMX 非対象 (hx-boost="false" + download)。
+			// href は handler が適用済み from/to/items で再生成 (表示中の期間・項目と一致・R7)。
+			// GET ゆえ CSRF 対象外。信頼できる handler 生成 URL を templ.SafeURL で埋める (§31 既存 .btn 流用)。
+			<div class="u-ta-right u-mbe-3">
+				<a class="btn btn-secondary" hx-boost="false" download href={ templ.SafeURL(v.CSVURL) }>CSV ダウンロード</a>
+			</div>
+		}
 		<h2 class="u-mbe-3">集計情報</h2>
 		<div class="summary-grid">
 			<div class="summary-box">
@@ -48,6 +56,17 @@ templ DeviceReadingsList(v DeviceReadingsListView) {
 				<div class="value">{ v.Summary.MinHum }</div>
 			</div>
 		</div>
+		if v.Report.HasData {
+			// 集計帳票 (日次/時間別): 期間内全行を JST バケット集計した読み取り時帳票 (R4/R5)。
+			// 温度・湿度それぞれ 平均/最高/最低/日較差/σ/CV、末尾に適正帯滞在率 (R6・作物未設定は既定)。
+			// 横長14列は .table-wrapper の overflow-x で横スクロール吸収・グルーピング見出しで温湿度を区別。
+			// 欠測バケットは各値 "—"。将来 P6 で露点列を行末尾へ非破壊追加できる構造 (mocks/html/readings.html 写経)。
+			<h2 class="u-mbe-3">集計帳票（日次）</h2>
+			<p class="form-help">適正帯: { v.Report.CropLabel } ／ { v.Report.RangeLabel }（作物未設定時は既定 0.30〜1.50 kPa）</p>
+			@readingsReportTable("日付", v.Report.Daily)
+			<h2 class="u-mbe-3 u-mbs-6">集計帳票（時間別）</h2>
+			@readingsReportTable("時間帯", v.Report.Hourly)
+		}
 		<h2 class="u-mbe-3">データ一覧</h2>
 		if v.HasData {
 			<div class="table-wrapper">
@@ -76,5 +95,58 @@ templ DeviceReadingsList(v DeviceReadingsListView) {
 			<p class="empty-message">指定期間の計測データはありません。</p>
 		}
 		@Pagination(v.Pagination)
+	</div>
+}
+
+// readingsReportTable は集計帳票表 (日次/時間別で共通の14列ワイド表) を描画する。
+// firstCol は先頭列の見出し ("日付" or "時間帯")。温度6列＋湿度6列を colspan グルーピング見出しで
+// 区別し、末尾に適正帯滞在率を置く。既存 .table-wrapper/.data-table のみ流用し独自クラスは新設しない (§31)。
+// セルは整形済み文字列をそのまま出す (欠測/未定義は handler が "—" を詰める)。
+templ readingsReportTable(firstCol string, rows []ReadingsReportRow) {
+	<div class="table-wrapper">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th rowspan="2">{ firstCol }</th>
+					<th colspan="6">温度</th>
+					<th colspan="6">湿度</th>
+					<th rowspan="2">適正帯滞在率</th>
+				</tr>
+				<tr>
+					<th>平均(℃)</th>
+					<th>最高(℃)</th>
+					<th>最低(℃)</th>
+					<th>日較差(℃)</th>
+					<th>σ(℃)</th>
+					<th>CV</th>
+					<th>平均(%)</th>
+					<th>最高(%)</th>
+					<th>最低(%)</th>
+					<th>日較差(%)</th>
+					<th>σ(%)</th>
+					<th>CV</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range rows {
+					<tr>
+						<td>{ r.Bucket }</td>
+						<td>{ r.TempAvg }</td>
+						<td>{ r.TempMax }</td>
+						<td>{ r.TempMin }</td>
+						<td>{ r.TempDiurnal }</td>
+						<td>{ r.TempSigma }</td>
+						<td>{ r.TempCV }</td>
+						<td>{ r.HumAvg }</td>
+						<td>{ r.HumMax }</td>
+						<td>{ r.HumMin }</td>
+						<td>{ r.HumDiurnal }</td>
+						<td>{ r.HumSigma }</td>
+						<td>{ r.HumCV }</td>
+						<td>{ r.InRange }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
 	</div>
 }

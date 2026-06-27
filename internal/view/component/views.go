@@ -185,12 +185,52 @@ type LatestReadingsView struct {
 // (DeviceReadingsList, id=device-readings-list) の表示データ。
 // 集計6項目・履歴行・データ有無・簡易ページャ・形式エラーマップを束ねる。
 // HTMX 部分更新でこの DTO のみを差し替えるため、集計・一覧・ページャを内包する。
+//
+// Report/CSVURL は CSV エクスポート/集計帳票フェーズ (sensor-data-export) の追加分。
+// Report は日次/時間別の集計帳票 View、CSVURL は適用済み from/to/items を反映した CSV
+// ダウンロードリンク。ともに handler が結線する (空 Report は HasData=false で非表示、空
+// CSVURL はボタン非描画) ため既存の集計/一覧/ページャ経路は無回帰 (追加のみ)。
 type DeviceReadingsListView struct {
 	Summary    SummaryView         // 整形済み集計6項目 (期間全体・ページ非依存)
 	Rows       []ReadingHistoryRow // 履歴一覧 (新しい順・最大20件)
 	HasData    bool                // len(Rows) > 0。false でテーブル非表示+空状態メッセージ
 	Pagination PaginationView      // 簡易ページャ (前へ / N・M / 次へ)
 	Errors     map[string]string   // 日付形式エラー (field → 日本語メッセージ。空なら非表示)
+	Report     ReadingsReportView  // 日次/時間別の集計帳票 (空帳票は HasData=false で非表示)
+	CSVURL     string              // CSV ダウンロードリンク (適用済み from/to/items 反映。空ならボタン非描画)
+}
+
+// ReadingsReportRow は集計帳票1バケット分 (日次=1日/時間別=1時間帯) の表示データ
+// (整形済み primitive・欠測や未定義は "—")。温度・湿度それぞれ 平均/最高/最低/日較差/σ/CV を
+// 持ち、末尾に適正帯滞在率 InRange を置く。単位は列見出し側に付くためセルは素の数値文字列
+// (CV は無次元のため単位なし)。将来 P6 で露点/結露時間列をこの末尾へ非破壊追加できる構造に留める。
+type ReadingsReportRow struct {
+	Bucket      string // 日次 "2026-04-20" / 時間別 "06時"
+	TempAvg     string // 温度 平均
+	TempMax     string // 温度 最高
+	TempMin     string // 温度 最低
+	TempDiurnal string // 温度 日較差 (最高−最低)
+	TempSigma   string // 温度 標準偏差σ
+	TempCV      string // 温度 変動係数 (σ/μ・無次元)・未定義は "—"
+	HumAvg      string // 湿度 平均
+	HumMax      string // 湿度 最高
+	HumMin      string // 湿度 最低
+	HumDiurnal  string // 湿度 日較差
+	HumSigma    string // 湿度 標準偏差σ
+	HumCV       string // 湿度 変動係数・未定義は "—"
+	InRange     string // 適正帯滞在率 "72%" / 欠測は "—"
+}
+
+// ReadingsReportView は集計帳票 (日次/時間別) の表示データ。
+// CropLabel は適正帯の根拠作物 ("ゴーヤ"/"既定")、RangeLabel は適正帯 ("0.40〜1.20 kPa")、
+// Daily は日付昇順・Hourly は時刻昇順の帳票行。HasData=false (空期間) のとき帳票表を描画しない
+// (数値を捏造しない)。CropLabel/RangeLabel は空期間でもヘッダ表示用に保持する。
+type ReadingsReportView struct {
+	CropLabel  string              // 適正帯の作物 "ゴーヤ" / "既定"
+	RangeLabel string              // 適正帯 "0.40〜1.20 kPa"
+	Daily      []ReadingsReportRow // 日次バケット (日付昇順・欠測日は "—" 行)
+	Hourly     []ReadingsReportRow // 時間別バケット (時刻昇順・データのある時間帯のみ)
+	HasData    bool                // 計測あり。false で帳票表非表示
 }
 
 // SummaryView は集計情報 (.summary-grid) の表示データ (整形済み)。

@@ -96,6 +96,12 @@ func (f fakeDeviceQuerier) GetSensorReadingsSummary(_ context.Context, _ reposit
 	return repository.GetSensorReadingsSummaryRow{}, nil
 }
 
+// ListSensorReadingsInRange は CSV エクスポート/集計帳票 (sensor-data-export) の共通入力。
+// 履歴画面 Index がフラグメント描画時に呼ぶため空データで明示実装する (埋め込み Querier の nil 参照回避)。
+func (f fakeDeviceQuerier) ListSensorReadingsInRange(_ context.Context, _ repository.ListSensorReadingsInRangeParams) ([]repository.SensorReading, error) {
+	return nil, nil
+}
+
 // --- アラート履歴 (alert-history) で AlertHistoryHandler が呼ぶ新メソッドの安全スタブ。
 // 埋め込み Querier(nil) のままだと実行時に nil 参照で panic するため明示実装する。
 // Count/List は空データ (0件)、ListDevicesByUser は当該ユーザー所有のデバイスを返す

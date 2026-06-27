@@ -53,9 +53,27 @@
             <input type="date" name="to" value="2026-04-20">
             <span class="error-message"></span>
           </div>
+          <div class="form-group">
+            <label>出力項目（CSV）</label>
+            <!-- 項目フィルタ: 未選択は温度・湿度の両方を既定（実装の CSV 既定と一致）。
+                 入れ子 label は inline 既定（.form-group > label の block 指定は直下ラベルのみに効くため
+                 ラッパ div 内の温度/湿度ラベルは横並びになる）。実装では適用済み選択を checked で echo する。 -->
+            <div>
+              <label><input type="checkbox" name="items" value="temperature" checked> 温度</label>
+              <label><input type="checkbox" name="items" value="humidity" checked> 湿度</label>
+            </div>
+          </div>
           <button type="submit" class="btn btn-primary">検索</button>
         </form>
       </section>
+
+      <!-- CSV ダウンロード: ファイルDL ゆえ HTMX 非対象（hx-boost="false" + download）。
+           href は適用済み from/to/items を引き継ぐ（実装ハンドラが再生成）。GET ゆえ CSRF 対象外。
+           結果領域（フィルタ適用で swap）内に置き、表示中の期間・項目と CSV を一致させる（R7）。 -->
+      <div class="u-ta-right u-mbe-3">
+        <a class="btn btn-secondary" hx-boost="false" download
+           href="/devices/1/readings.csv?from=2026-04-13&to=2026-04-20&items=temperature&items=humidity">CSV ダウンロード</a>
+      </div>
 
       <h2 class="u-mbe-3">集計情報</h2>
       <div class="summary-grid">
@@ -83,6 +101,62 @@
           <div class="label">最低湿度</div>
           <div class="value">30.20%</div>
         </div>
+      </div>
+
+      <!-- 集計帳票（日次/時間別）: 期間内全行を JST バケット集計した読み取り時帳票（R4/R5）。
+           CSV を外部で開かなくても主要統計を画面で確認できる。温度・湿度それぞれ 平均/最高/最低/日較差/σ/CV、
+           末尾に適正帯滞在率（デバイス作物の VPD 適正帯への在帯割合・R6／未設定は既定 0.30〜1.50 kPa）。
+           欠測バケットは各値「—」（R4.4/R5.3、先頭 2026-04-17 行で図示）。横長 14 列は .table-wrapper の
+           overflow-x で横スクロール吸収。グルーピングヘッダ（温度/湿度 colspan）で温湿度を区別。
+           将来 P6 で露点/結露列を行末尾へ非破壊追加できる構造に留める（本フェーズ未出力）。 -->
+      <h2 class="u-mbe-3">集計帳票（日次）</h2>
+      <p class="form-help">適正帯: ゴーヤ ／ 0.40〜1.20 kPa（作物未設定時は既定 0.30〜1.50 kPa）</p>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th rowspan="2">日付</th>
+              <th colspan="6">温度</th>
+              <th colspan="6">湿度</th>
+              <th rowspan="2">適正帯滞在率</th>
+            </tr>
+            <tr>
+              <th>平均(℃)</th><th>最高(℃)</th><th>最低(℃)</th><th>日較差(℃)</th><th>σ(℃)</th><th>CV</th>
+              <th>平均(%)</th><th>最高(%)</th><th>最低(%)</th><th>日較差(%)</th><th>σ(%)</th><th>CV</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>2026-04-17</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td>2026-04-18</td><td>27.80</td><td>33.10</td><td>19.40</td><td>13.70</td><td>3.85</td><td>0.14</td><td>63.20</td><td>84.00</td><td>32.10</td><td>51.90</td><td>12.40</td><td>0.20</td><td>68%</td></tr>
+            <tr><td>2026-04-19</td><td>28.10</td><td>34.50</td><td>18.90</td><td>15.60</td><td>4.10</td><td>0.15</td><td>62.80</td><td>85.00</td><td>31.00</td><td>54.00</td><td>13.10</td><td>0.21</td><td>71%</td></tr>
+            <tr><td>2026-04-20</td><td>28.50</td><td>35.20</td><td>18.50</td><td>16.70</td><td>4.32</td><td>0.15</td><td>62.50</td><td>85.00</td><td>30.20</td><td>54.80</td><td>13.50</td><td>0.22</td><td>72%</td></tr>
+          </tbody>
+        </table>
+        <p class="empty-message" x-show="false" x-cloak>指定期間の計測データはありません。</p>
+      </div>
+
+      <h2 class="u-mbe-3 u-mbs-6">集計帳票（時間別）</h2>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th rowspan="2">時間帯</th>
+              <th colspan="6">温度</th>
+              <th colspan="6">湿度</th>
+              <th rowspan="2">適正帯滞在率</th>
+            </tr>
+            <tr>
+              <th>平均(℃)</th><th>最高(℃)</th><th>最低(℃)</th><th>日較差(℃)</th><th>σ(℃)</th><th>CV</th>
+              <th>平均(%)</th><th>最高(%)</th><th>最低(%)</th><th>日較差(%)</th><th>σ(%)</th><th>CV</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>06時</td><td>22.40</td><td>24.10</td><td>19.40</td><td>4.70</td><td>1.30</td><td>0.06</td><td>78.20</td><td>85.00</td><td>68.00</td><td>17.00</td><td>4.20</td><td>0.05</td><td>40%</td></tr>
+            <tr><td>12時</td><td>31.80</td><td>35.20</td><td>27.10</td><td>8.10</td><td>2.05</td><td>0.06</td><td>48.30</td><td>58.00</td><td>30.20</td><td>27.80</td><td>6.80</td><td>0.14</td><td>55%</td></tr>
+            <tr><td>18時</td><td>26.50</td><td>29.00</td><td>23.80</td><td>5.20</td><td>1.45</td><td>0.05</td><td>70.10</td><td>80.00</td><td>60.00</td><td>20.00</td><td>5.10</td><td>0.07</td><td>90%</td></tr>
+          </tbody>
+        </table>
+        <p class="empty-message" x-show="false" x-cloak>指定期間の計測データはありません。</p>
       </div>
 
       <h2 class="u-mbe-3">データ一覧</h2>

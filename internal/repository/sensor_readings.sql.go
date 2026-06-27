@@ -282,6 +282,51 @@ func (q *Queries) ListRecentSensorReadings(ctx context.Context, arg ListRecentSe
 	return items, nil
 }
 
+const listSensorReadingsInRange = `-- name: ListSensorReadingsInRange :many
+SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
+ WHERE device_id   = $1
+   AND recorded_at BETWEEN $2 AND $3
+   AND deleted_at IS NULL
+ ORDER BY recorded_at ASC
+`
+
+type ListSensorReadingsInRangeParams struct {
+	DeviceID     int64              `json:"device_id"`
+	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
+	RecordedAt_2 pgtype.Timestamptz `json:"recorded_at_2"`
+}
+
+// CSV エクスポート / 集計帳票用: 期間内の全行を昇順で取得 (ページングなし)。
+// 既存 Paginated は DESC+LIMIT、本クエリは ASC+LIMIT なし (帳票バケット/CSV 昇順出力に使う)。
+func (q *Queries) ListSensorReadingsInRange(ctx context.Context, arg ListSensorReadingsInRangeParams) ([]SensorReading, error) {
+	rows, err := q.db.Query(ctx, listSensorReadingsInRange, arg.DeviceID, arg.RecordedAt, arg.RecordedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SensorReading
+	for rows.Next() {
+		var i SensorReading
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeviceID,
+			&i.Temperature,
+			&i.Humidity,
+			&i.RecordedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSensorReadingsPaginated = `-- name: ListSensorReadingsPaginated :many
 SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
  WHERE device_id   = $1

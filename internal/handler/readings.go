@@ -42,6 +42,9 @@ type ReadingsRepo interface {
 	ListSensorReadingsPaginated(ctx context.Context, arg repository.ListSensorReadingsPaginatedParams) ([]repository.SensorReading, error)
 	GetSensorReadingsSummary(ctx context.Context, arg repository.GetSensorReadingsSummaryParams) (repository.GetSensorReadingsSummaryRow, error)
 	CountSensorReadingsInRange(ctx context.Context, arg repository.CountSensorReadingsInRangeParams) (int64, error)
+	// ListSensorReadingsInRange は期間内の全行 (BETWEEN・ASC・LIMIT なし) を取得する
+	// (CSV エクスポート・集計帳票の共通入力)。CSV 経路 (Export) と画面帳票 (Index・4.1) が共有する。
+	ListSensorReadingsInRange(ctx context.Context, arg repository.ListSensorReadingsInRangeParams) ([]repository.SensorReading, error)
 }
 
 // ReadingsHandler はセンサーデータ履歴画面の HTTP 境界を担う (GET /devices/:device/readings)。
@@ -80,11 +83,13 @@ func (h *ReadingsHandler) Index(c *gin.Context) {
 
 	from := c.Query("from")
 	to := c.Query("to")
+	items := c.QueryArray("items")
 	fromTS, toTS, errs := parseDateBounds(from, to)
 
 	var list component.DeviceReadingsListView
 	if len(errs) > 0 {
-		// 形式エラー: 区間が確定できないため検索/集計クエリは呼ばず、空一覧+インラインエラーで 200。
+		// 形式エラー: 区間が確定できないため検索/集計/全行クエリは呼ばず、空一覧+インラインエラーで 200。
+		// 帳票・CSV リンクも出さない (有効な区間が無いため)。
 		list = component.DeviceReadingsListView{
 			Summary:    buildSummary(repository.GetSensorReadingsSummaryRow{}),
 			HasData:    false,
@@ -92,7 +97,7 @@ func (h *ReadingsHandler) Index(c *gin.Context) {
 			Errors:     errs,
 		}
 	} else {
-		list, err = h.fetchResults(ctx, id, from, to, fromTS, toTS, c.Query("page"))
+		list, err = h.fetchResults(ctx, device, from, to, fromTS, toTS, c.Query("page"), items)
 		if err != nil {
 			renderError(c, http.StatusInternalServerError)
 			return
@@ -114,14 +119,17 @@ func (h *ReadingsHandler) Index(c *gin.Context) {
 		DeviceName: device.Name,
 		From:       from,
 		To:         to,
+		Items:      effectiveMetricItems(items), // 項目フィルタ checkbox の checked echo (4.2・未選択は両方)
 		List:       list,
 	}
 	renderPage(c, http.StatusOK, page.ReadingsPage(v))
 }
 
-// fetchResults は区間確定後に件数→ページクランプ→一覧+集計を取得し結果領域 View を組み立てる。
-// 件数・一覧・集計は同一 (fromTS,toTS) 境界を共有する (R3 連動・ページ非依存)。
-func (h *ReadingsHandler) fetchResults(ctx context.Context, id int64, from, to string, fromTS, toTS time.Time, pageQuery string) (component.DeviceReadingsListView, error) {
+// fetchResults は区間確定後に件数→ページクランプ→一覧+集計+全行を取得し結果領域 View を組み立てる。
+// 件数・一覧・集計・全行 (帳票/CSV) はすべて同一 (fromTS,toTS) 境界を共有する (R7 連動・ページ非依存)。
+// device は帳票の作物別適正帯解決と CSV リンクの device ID 用、items は CSV リンクの出力項目用。
+func (h *ReadingsHandler) fetchResults(ctx context.Context, device repository.Device, from, to string, fromTS, toTS time.Time, pageQuery string, items []string) (component.DeviceReadingsListView, error) {
+	id := device.ID
 	fromParam := pgconv.Timestamptz(fromTS)
 	toParam := pgconv.Timestamptz(toTS)
 
@@ -154,6 +162,15 @@ func (h *ReadingsHandler) fetchResults(ctx context.Context, id int64, from, to s
 		return component.DeviceReadingsListView{}, err
 	}
 
+	// 集計帳票・CSV の共通入力 = 同一区間の全行 (BETWEEN・ASC・LIMIT なし)。一覧/集計と同一境界ゆえ
+	// CSV・帳票・一覧/集計ボックスが整合する (R7)。CSV リンクは適用済み from/to/items を反映する。
+	allRows, err := h.Repo.ListSensorReadingsInRange(ctx, repository.ListSensorReadingsInRangeParams{
+		DeviceID: id, RecordedAt: fromParam, RecordedAt_2: toParam,
+	})
+	if err != nil {
+		return component.DeviceReadingsListView{}, err
+	}
+
 	historyRows := buildReadingHistoryRows(rows)
 	return component.DeviceReadingsListView{
 		Summary:    buildSummary(summary),
@@ -161,6 +178,8 @@ func (h *ReadingsHandler) fetchResults(ctx context.Context, id int64, from, to s
 		HasData:    len(historyRows) > 0,
 		Pagination: buildReadingsPagination(id, from, to, pageNo, totalPages),
 		Errors:     map[string]string{},
+		Report:     buildReadingsReport(allRows, deviceCrop(device)),
+		CSVURL:     csvDownloadURL(id, from, to, items),
 	}, nil
 }
 

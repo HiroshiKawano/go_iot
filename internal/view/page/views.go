@@ -42,7 +42,19 @@ type ReadingsView struct {
 	DeviceName string                           // page-header 見出し「センサーデータ履歴: {DeviceName}」用
 	From       string                           // フィルタフォーム echo (未指定は "")
 	To         string                           // フィルタフォーム echo (未指定は "")
-	List       component.DeviceReadingsListView // フィルタ結果領域 (集計+一覧+ページャ)
+	Items      []string                         // 項目フィルタの適用済み選択 (temperature/humidity・未選択は両方。checkbox checked echo 用)
+	List       component.DeviceReadingsListView // フィルタ結果領域 (集計+一覧+ページャ+帳票+CSV)
+}
+
+// readingsItemChecked は項目フィルタ checkbox の checked 復元用に、適用済み Items に key が
+// 含まれるかを返す (Readings.templ の温度/湿度 checkbox から呼ぶ)。
+func readingsItemChecked(items []string, key string) bool {
+	for _, it := range items {
+		if it == key {
+			return true
+		}
+	}
+	return false
 }
 
 // LoginView はログイン画面の描画に必要なデータ。

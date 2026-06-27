@@ -40,6 +40,21 @@ templ ReadingsPage(v ReadingsView) {
 						<label>終了日</label>
 						<input type="date" name="to" value={ v.To }/>
 					</div>
+					<div class="form-group">
+						<label>出力項目（CSV）</label>
+						// 項目フィルタ (温度/湿度): 未選択は両方を既定 (CSV 既定と一致)。入れ子 label は inline 既定
+						// (.form-group > label の block 指定は直下のみ)。適用済み Items を checked で echo する (4.2)。
+						<div>
+							<label>
+								<input type="checkbox" name="items" value="temperature" if readingsItemChecked(v.Items, "temperature") { checked }/>
+								温度
+							</label>
+							<label>
+								<input type="checkbox" name="items" value="humidity" if readingsItemChecked(v.Items, "humidity") { checked }/>
+								湿度
+							</label>
+						</div>
+					</div>
 					<button type="submit" class="btn btn-primary">検索</button>
 				</form>
 			</section>
