@@ -137,6 +137,9 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 			UserName:  user.Name,
 			CSRFToken: csrf.Token(c.Request),
 			CSSURL:    view.CSSURL(),
+			// 現在ページ=デバイス詳細・選択中デバイス=所有者認可後に確定済みの id
+			// (新規データアクセスなし・文脈リンクは現在表示中デバイスのみを指す・R1.5)。
+			Nav: component.SidebarNav{Current: component.NavDeviceShow, DeviceID: id},
 		},
 		DeviceID:   id,
 		Info:       buildDeviceInfoView(device),

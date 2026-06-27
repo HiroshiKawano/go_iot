@@ -114,6 +114,9 @@ func (h *ReadingsHandler) Index(c *gin.Context) {
 			UserName:  user.Name,
 			CSRFToken: csrf.Token(c.Request),
 			CSSURL:    view.CSSURL(),
+			// 現在ページ=センサーデータ履歴・選択中デバイス=所有者認可後に確定済みの id
+			// (新規データアクセスなし・R1.5)。詳細↔履歴の相互往復導線を供給する。
+			Nav: component.SidebarNav{Current: component.NavReadings, DeviceID: id},
 		},
 		DeviceID:   id,
 		DeviceName: device.Name,

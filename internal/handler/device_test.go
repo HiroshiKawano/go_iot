@@ -164,6 +164,53 @@ func validDeviceVals() url.Values {
 	}
 }
 
+// --- device-context-nav 2.3: 登録/編集はナビ文脈に入れない ---
+
+// assertSidebarNoNavContext は登録/編集相当のサイドバーが、デバイス文脈リンクを描画せず
+// いずれのメニュー項目も active でない (R1.3/2.6) ことを検証する。編集は URL に device id を
+// 持つが、確定済みのユーザー判断として文脈に入れない。
+func assertSidebarNoNavContext(t *testing.T, body string) {
+	t.Helper()
+	if strings.Contains(body, "📟 デバイス詳細") || strings.Contains(body, "📈 センサーデータ履歴") {
+		t.Errorf("文脈リンク (デバイス詳細/センサーデータ履歴) が描画されている (R1.3 違反):\n%s", body)
+	}
+	for _, item := range []string{"🏠 ダッシュボード", "🔔 アラートルール", "🕐 アラート履歴"} {
+		if strings.Contains(body, `class="active">`+item) {
+			t.Errorf("メニュー項目 %q が active になっている (登録/編集は非 active・R2.6)", item)
+		}
+	}
+}
+
+// TestShowCreateForm_サイドバーはactiveも文脈リンクも持たない は、デバイス登録画面の
+// サイドバーがゼロ値ナビ文脈で描画され、active マークも文脈リンクも持たないことを固定する (R1.3/2.6)。
+func TestShowCreateForm_サイドバーはactiveも文脈リンクも持たない(t *testing.T) {
+	repo := deviceOwnerRepo()
+	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/create")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	assertSidebarNoNavContext(t, w.Body.String())
+}
+
+// TestShowEditForm_URLにIDがあってもサイドバーは文脈に入れない は、編集画面が URL に device id を
+// 持っていてもサイドバーの文脈リンクを出さず active も付けないことを回帰防止として固定する
+// (R1.3 boundary/2.6・確定済みのユーザー判断)。
+func TestShowEditForm_URLにIDがあってもサイドバーは文脈に入れない(t *testing.T) {
+	repo := deviceOwnerRepo()
+	repo.devices = map[int64]repository.Device{
+		1: {ID: 1, UserID: 7, Name: "ハウスA温湿度計", MacAddress: "AA:BB:CC:DD:EE:01", IsActive: true},
+	}
+	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1/edit")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	assertSidebarNoNavContext(t, w.Body.String())
+}
+
 // --- 3.1 デバイス登録フォーム表示 ---
 
 func TestShowCreateForm_空フォームと稼働中初期とCSRF(t *testing.T) {

@@ -205,6 +205,26 @@ func TestAlertRuleIndex_所有デバイス指定で一覧とフォーム(t *test
 	}
 }
 
+// TestAlertRuleIndex_サイドバーはアラートルールのみactiveで文脈リンクなし は、アラートルール
+// フルページのサイドバーが「🔔 アラートルール」のみ active で、デバイス文脈リンクを描画しない
+// ことを固定する (R1.3/2.4)。device_id クエリを持つが文脈には入らない。
+func TestAlertRuleIndex_サイドバーはアラートルールのみactiveで文脈リンクなし(t *testing.T) {
+	repo := alertRuleOwnerRepo()
+	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)
+
+	w := getPath(r, "/alerts/rules?device_id=200")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `class="active">🔔 アラートルール`) {
+		t.Errorf("アラートルールが active になっていない:\n%s", body)
+	}
+	if strings.Contains(body, "📟 デバイス詳細") || strings.Contains(body, "📈 センサーデータ履歴") {
+		t.Errorf("アラートルールにデバイス文脈リンクが描画されている (R1.3 違反):\n%s", body)
+	}
+}
+
 func TestAlertRuleIndex_device_id省略で先頭デバイス(t *testing.T) {
 	repo := alertRuleOwnerRepo()
 	r := newAlertRuleRouterWithUser(&AlertRuleHandler{Repo: repo}, ruleTestUID)

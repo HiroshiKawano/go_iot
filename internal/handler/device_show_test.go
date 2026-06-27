@@ -111,6 +111,45 @@ func TestRenderComponent_フラグメントを200でHTML描画しレイアウト
 	}
 }
 
+// --- device-context-nav 2.1: デバイス詳細はデバイス文脈を設定する ---
+
+// TestShow_サイドバーにデバイス文脈リンクと詳細active は、デバイス詳細フルページの
+// サイドバーに「📟 デバイス詳細 / 📈 センサーデータ履歴」の文脈2リンクが要求デバイス id 付きで出て、
+// デバイス詳細が active になることを固定する (R1.1/1.4/2.2/3.x)。文脈リンクは現在表示中
+// (＝所有者認可済み) のデバイスのみを指す。
+func TestShow_サイドバーにデバイス文脈リンクと詳細active(t *testing.T) {
+	repo := showDeviceRepo()
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	// 文脈2リンクが要求デバイス id (1) で描画される (R1.1/1.4・同一 id R3.3)。
+	for _, want := range []string{
+		"📟 デバイス詳細",
+		"📈 センサーデータ履歴",
+		`href="/devices/1"`,
+		`href="/devices/1/readings"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("詳細フルページのサイドバーに %q が無い:\n%s", want, body)
+		}
+	}
+	// デバイス詳細が active (R2.2)。
+	if !strings.Contains(body, `class="active">📟 デバイス詳細`) {
+		t.Errorf("デバイス詳細が active になっていない:\n%s", body)
+	}
+	// 履歴・ダッシュボードは非 active (active 固定の解消)。
+	if strings.Contains(body, `class="active">📈 センサーデータ履歴`) {
+		t.Error("履歴が誤って active になっている (詳細画面)")
+	}
+	if strings.Contains(body, `class="active">🏠 ダッシュボード`) {
+		t.Error("ダッシュボードが誤って active になっている (ダッシュボード固定 active の再現)")
+	}
+}
+
 // --- 4.2 デバイス詳細表示 (GET /devices/:device) ---
 
 func TestShow_200で情報と既定24hアクティブと最新計測(t *testing.T) {

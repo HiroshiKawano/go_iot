@@ -193,6 +193,38 @@ func TestReadingsIndex_初期表示は200でフルページに集計一覧デバ
 	}
 }
 
+// TestReadingsIndex_サイドバーにデバイス文脈リンクと履歴active は、センサーデータ履歴フルページの
+// サイドバーに文脈2リンクが要求デバイス id 付きで出て、センサーデータ履歴が active になることを
+// 固定する (R1.2/1.4/2.3/3.x)。詳細↔履歴の相互往復導線を支える。
+func TestReadingsIndex_サイドバーにデバイス文脈リンクと履歴active(t *testing.T) {
+	repo := ownerReadingsRepo()
+	r := newReadingsRouterWithUser(&ReadingsHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1/readings")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{
+		"📟 デバイス詳細",
+		"📈 センサーデータ履歴",
+		`href="/devices/1"`,
+		`href="/devices/1/readings"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("履歴フルページのサイドバーに %q が無い:\n%s", want, body)
+		}
+	}
+	// センサーデータ履歴が active (R2.3)。
+	if !strings.Contains(body, `class="active">📈 センサーデータ履歴`) {
+		t.Errorf("センサーデータ履歴が active になっていない:\n%s", body)
+	}
+	// デバイス詳細は非 active で存在する。
+	if strings.Contains(body, `class="active">📟 デバイス詳細`) {
+		t.Error("デバイス詳細が誤って active になっている (履歴画面)")
+	}
+}
+
 func TestReadingsIndex_非数値IDは400(t *testing.T) {
 	r := newReadingsRouterWithUser(&ReadingsHandler{Repo: ownerReadingsRepo()}, 7)
 	w := getPath(r, "/devices/abc/readings")
@@ -228,6 +260,50 @@ func TestReadingsIndex_ユーザー取得DBエラーは500(t *testing.T) {
 	w := getPath(r, "/devices/1/readings")
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("status=%d, want 500", w.Code)
+	}
+}
+
+// --- device-context-nav 4.1: HTMX 部分更新はサイドバーを差し替えない ---
+
+// TestReadingsIndex_HTMX部分更新はサイドバーを含まない は、画面内 HTMX 部分更新 (検索/ページ送り) の
+// 応答が結果フラグメントのみで、サイドバーのマークアップ (class="sidebar") もデバイス文脈リンク
+// (📟 デバイス詳細 / 📈 センサーデータ履歴) も含まないことを回帰防止として固定する (R4.3)。
+// サイドバーはフルページ遷移でのみ現在ページ状態で描き直され、部分更新では差し替えない。
+func TestReadingsIndex_HTMX部分更新はサイドバーを含まない(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"検索", "/devices/1/readings?from=2026-04-13&to=2026-04-20"},
+		{"ページ送り", "/devices/1/readings?page=2"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			repo := ownerReadingsRepo()
+			repo.countVal = 5
+			repo.summaryRow = fullSummaryRow()
+			r := newReadingsRouterWithUser(&ReadingsHandler{Repo: repo}, 7)
+
+			w := requestWithHeaders(r, http.MethodGet, c.path, map[string]string{"HX-Request": "true"})
+			if w.Code != http.StatusOK {
+				t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+			}
+			body := w.Body.String()
+			// 結果フラグメントは返る。
+			assertHistoryBodyHas(t, body, `id="device-readings-list"`)
+			// レイアウト・サイドバー・文脈リンクは応答に漏れない (R4.3)。
+			for _, ng := range []string{
+				"<html",          // レイアウト全体
+				`class="sidebar"`, // サイドバー本体
+				"📟 デバイス詳細",       // 文脈リンク (詳細)
+				"📈 センサーデータ履歴",    // 文脈リンク (履歴)
+				"🏠 ダッシュボード",       // 常時表示項目
+			} {
+				if strings.Contains(body, ng) {
+					t.Errorf("HTMX 部分更新の応答に %q が含まれている (サイドバー差し替え・R4.3 違反):\n%s", ng, body)
+				}
+			}
+		})
 	}
 }
 

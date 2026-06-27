@@ -25,6 +25,14 @@ func assertContains(t *testing.T, html, substr string) {
 	}
 }
 
+// assertActiveCount はサイドバー HTML 内の active リンク数を検証する (R2.7 同時 active ≤1)。
+func assertActiveCount(t *testing.T, html string, want int) {
+	t.Helper()
+	if got := strings.Count(html, `class="active"`); got != want {
+		t.Errorf(`class="active" の数 = %d, want %d:\n%s`, got, want, html)
+	}
+}
+
 func TestSiteHeader_ユーザー名とログアウトフォームを描画(t *testing.T) {
 	html := render(t, SiteHeader("テストユーザー", "tok-123"))
 	assertContains(t, html, "site-header")
@@ -36,8 +44,10 @@ func TestSiteHeader_ユーザー名とログアウトフォームを描画(t *te
 	assertContains(t, html, "nav-toggle")
 }
 
-func TestSidebar_ナビゲーションリンクを描画(t *testing.T) {
-	html := render(t, Sidebar())
+func TestSidebar_常時表示3項目とドロワー属性を描画(t *testing.T) {
+	// 常時表示項目 (ダッシュボード/アラートルール/アラート履歴) の遷移先と
+	// モバイルドロワー開閉属性は、いかなるナビ文脈でも不変 (R4.1/4.2/4.4)。
+	html := render(t, Sidebar(SidebarNav{Current: NavDashboard}))
 	assertContains(t, html, `href="/dashboard"`)
 	assertContains(t, html, `href="/alerts/rules"`)
 	assertContains(t, html, `href="/alerts/history"`)
@@ -45,6 +55,68 @@ func TestSidebar_ナビゲーションリンクを描画(t *testing.T) {
 	// Alpine の開閉バインディングはサーバ HTML へ属性として出力される
 	// (§4.11: 後付け状態クラスでなく、それを駆動する :class バインディングの存在を検証)。
 	assertContains(t, html, `:class="{ 'is-open': navOpen }"`)
+}
+
+func TestSidebar_ダッシュボード文脈はダッシュボードのみactive(t *testing.T) {
+	html := render(t, Sidebar(SidebarNav{Current: NavDashboard}))
+	assertContains(t, html, `href="/dashboard" class="active"`) // 現在ページに連動 (R2.1)
+	assertActiveCount(t, html, 1)                                // 同時 active ≤1 (R2.7)
+	// デバイス文脈を持たない画面では文脈リンクを出さない (R1.3)
+	assertNotContains(t, html, "📟 デバイス詳細")
+	assertNotContains(t, html, "📈 センサーデータ履歴")
+	assertNotContains(t, html, "/devices/")
+}
+
+func TestSidebar_アラートルール文脈はアラートルールのみactive(t *testing.T) {
+	html := render(t, Sidebar(SidebarNav{Current: NavAlertRules}))
+	assertContains(t, html, `href="/alerts/rules" class="active"`) // R2.4
+	assertActiveCount(t, html, 1)
+	assertNotContains(t, html, "/devices/") // 文脈リンクなし (R1.3)
+}
+
+func TestSidebar_アラート履歴文脈はアラート履歴のみactive(t *testing.T) {
+	html := render(t, Sidebar(SidebarNav{Current: NavAlertHistory}))
+	assertContains(t, html, `href="/alerts/history" class="active"`) // R2.5
+	assertActiveCount(t, html, 1)
+	assertNotContains(t, html, "/devices/")
+}
+
+func TestSidebar_ゼロ値はactiveも文脈リンクも持たない(t *testing.T) {
+	// デバイス登録/編集相当: 対応メニュー項目なし=どれも active にしない (R2.6)、
+	// 文脈リンクも出さない (R1.3)。ただし常時3項目は描画する (R4.1)。
+	html := render(t, Sidebar(SidebarNav{}))
+	assertContains(t, html, `href="/dashboard"`)
+	assertContains(t, html, `href="/alerts/rules"`)
+	assertContains(t, html, `href="/alerts/history"`)
+	assertActiveCount(t, html, 0) // active 0件 (ダッシュボード固定 active を再現しない)
+	assertNotContains(t, html, "📟 デバイス詳細")
+	assertNotContains(t, html, "📈 センサーデータ履歴")
+	assertNotContains(t, html, "/devices/")
+}
+
+func TestSidebar_デバイス詳細文脈で文脈2リンクと詳細active(t *testing.T) {
+	html := render(t, Sidebar(SidebarNav{Current: NavDeviceShow, DeviceID: 42}))
+	// 選択中デバイス id を指す文脈2リンクが存在 (R1.1/1.4・同一 id R3.3)
+	assertContains(t, html, `href="/devices/42"`)
+	assertContains(t, html, `href="/devices/42/readings"`)
+	assertContains(t, html, "📟 デバイス詳細")
+	assertContains(t, html, "📈 センサーデータ履歴")
+	// 📟 デバイス詳細が active、📈 は非 active で存在 (R2.2)
+	assertContains(t, html, `href="/devices/42" class="active"`)
+	assertNotContains(t, html, `href="/devices/42/readings" class="active"`)
+	// ダッシュボードは非 active (active 固定の解消)
+	assertNotContains(t, html, `href="/dashboard" class="active"`)
+	assertActiveCount(t, html, 1)
+}
+
+func TestSidebar_センサーデータ履歴文脈で履歴active(t *testing.T) {
+	html := render(t, Sidebar(SidebarNav{Current: NavReadings, DeviceID: 42}))
+	assertContains(t, html, `href="/devices/42"`)
+	assertContains(t, html, `href="/devices/42/readings"`)
+	// 📈 センサーデータ履歴が active、📟 詳細は非 active で存在 (R2.3)
+	assertContains(t, html, `href="/devices/42/readings" class="active"`)
+	assertNotContains(t, html, `href="/devices/42" class="active"`)
+	assertActiveCount(t, html, 1)
 }
 
 func TestFlashMessage_メッセージ未指定でも領域を描画(t *testing.T) {

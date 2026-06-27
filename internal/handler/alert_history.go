@@ -226,6 +226,8 @@ func (h *AlertHistoryHandler) Index(c *gin.Context) {
 			UserName:  user.Name,
 			CSRFToken: csrf.Token(c.Request),
 			CSSURL:    view.CSSURL(),
+			// 現在ページ=アラート履歴。device_id フィルタを持つが文脈には入らない (DeviceID 未設定)。
+			Nav: component.SidebarNav{Current: component.NavAlertHistory},
 		},
 		Devices:  buildAlertHistoryDeviceOptions(devices, deviceIDStr),
 		DeviceID: deviceIDStr,

@@ -1,15 +1,24 @@
 package component
 
+import "fmt"
+
 // Sidebar は認証後レイアウトのナビゲーションを描画する。
-// 現在ページのハイライト (active) は後続セッションで動的化する想定で、
-// 本セッションでは固定 HTML とする。開閉は Alpine.js 状態 navOpen を参照する。
-templ Sidebar() {
+// ナビ文脈 SidebarNav を受け取り、現在ページ (nav.Current) に連動して active を付与し、
+// デバイス文脈 (nav.DeviceID > 0) のときだけ「📟 デバイス詳細 / 📈 センサーデータ履歴」の
+// 文脈2リンクをダッシュボードとアラートルールの間に差し込む。文脈リンク先は同一デバイスへ向ける。
+// active は class 表現 (templ.KV) のため、ゼロ値文脈ではどの項目も active にならない。
+// 開閉は Alpine.js 状態 navOpen を参照する。
+templ Sidebar(nav SidebarNav) {
 	<aside class="sidebar" :class="{ 'is-open': navOpen }">
 		<nav>
 			<ul>
-				<li><a href="/dashboard" class="active">🏠 ダッシュボード</a></li>
-				<li><a href="/alerts/rules">🔔 アラートルール</a></li>
-				<li><a href="/alerts/history">🕐 アラート履歴</a></li>
+				<li><a href="/dashboard" class={ templ.KV("active", nav.Current == NavDashboard) }>🏠 ダッシュボード</a></li>
+				if nav.DeviceID > 0 {
+					<li><a href={ templ.SafeURL(fmt.Sprintf("/devices/%d", nav.DeviceID)) } class={ templ.KV("active", nav.Current == NavDeviceShow) }>📟 デバイス詳細</a></li>
+					<li><a href={ templ.SafeURL(fmt.Sprintf("/devices/%d/readings", nav.DeviceID)) } class={ templ.KV("active", nav.Current == NavReadings) }>📈 センサーデータ履歴</a></li>
+				}
+				<li><a href="/alerts/rules" class={ templ.KV("active", nav.Current == NavAlertRules) }>🔔 アラートルール</a></li>
+				<li><a href="/alerts/history" class={ templ.KV("active", nav.Current == NavAlertHistory) }>🕐 アラート履歴</a></li>
 			</ul>
 		</nav>
 	</aside>

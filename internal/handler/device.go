@@ -289,6 +289,8 @@ func buildCreateView(token, userName string, form deviceForm, errs map[string]st
 			UserName:  userName,
 			CSRFToken: token,
 			CSSURL:    view.CSSURL(),
+			// 登録は対応メニュー項目を持たない画面=ゼロ値ナビ文脈 (active なし・文脈リンクなし・R1.3/2.6)。
+			Nav: component.SidebarNav{},
 		},
 		Form: component.DeviceFormView{
 			CSRFToken:  token,
@@ -317,6 +319,10 @@ func buildEditView(token, userName string, id int64, deviceName string, form dev
 			UserName:  userName,
 			CSRFToken: token,
 			CSSURL:    view.CSSURL(),
+			// 編集は URL に device id (path 変数) を持つが、デバイス文脈には入れない
+			// (確定済みのユーザー判断・要件 Out of scope)。DeviceID を設定せずゼロ値とし、
+			// 文脈リンク・active を出さない (R1.3 boundary/2.6)。
+			Nav: component.SidebarNav{},
 		},
 		DeviceName: deviceName,
 		Form: component.DeviceFormView{

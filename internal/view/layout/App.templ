@@ -8,11 +8,13 @@ import (
 // AppLayoutData は認証後レイアウト App が必要とする共通データ。
 // 後続セッションの全画面がこの struct を共有して App を描画する。
 type AppLayoutData struct {
-	Title     string // <title> とページ見出し用
-	UserName  string // ヘッダーに表示するログイン中ユーザー名
-	CSRFToken string // <meta name="csrf-token"> と各フォームの hidden 用
-	CSSURL    string // バージョンクエリ付きスタイルシート URL
-	Flash     string // 共通通知領域に表示するメッセージ (任意)
+	Title     string                // <title> とページ見出し用
+	UserName  string                // ヘッダーに表示するログイン中ユーザー名
+	CSRFToken string                // <meta name="csrf-token"> と各フォームの hidden 用
+	CSSURL    string                // バージョンクエリ付きスタイルシート URL
+	Flash     string                // 共通通知領域に表示するメッセージ (任意)
+	Nav       component.SidebarNav  // サイドバーのナビ文脈 (現在ページ active + デバイス文脈リンク)。
+	// 未設定はゼロ値=どの項目も非 active・文脈リンクなしへ安全縮退する (fail-safe)。
 }
 
 // App は認証後画面の共通レイアウト。
@@ -45,7 +47,7 @@ templ App(data AppLayoutData) {
 		</head>
 		<body x-data="{ navOpen: false }">
 			@component.SiteHeader(data.UserName, data.CSRFToken)
-			@component.Sidebar()
+			@component.Sidebar(data.Nav)
 			<div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
 			<main id="main-content" class="main-content">
 				@component.FlashMessage(data.Flash)

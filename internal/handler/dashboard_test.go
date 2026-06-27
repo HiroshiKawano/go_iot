@@ -84,6 +84,28 @@ func TestDashboard_認証済みでデバイスとアラートを描画(t *testin
 	}
 }
 
+// --- device-context-nav 2.2: ダッシュボードは active を設定し文脈リンクを出さない ---
+
+// TestDashboard_サイドバーはダッシュボードのみactiveで文脈リンクなし は、ダッシュボードの
+// サイドバーが「🏠 ダッシュボード」のみ active で、デバイス文脈リンクを描画しないことを固定する
+// (R1.3/2.1)。
+func TestDashboard_サイドバーはダッシュボードのみactiveで文脈リンクなし(t *testing.T) {
+	repo := authedDashboardRepo()
+
+	w := getDashboard(t, repo)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `class="active">🏠 ダッシュボード`) {
+		t.Errorf("ダッシュボードが active になっていない:\n%s", body)
+	}
+	// デバイス文脈リンクは出さない (R1.3)。
+	if strings.Contains(body, "📟 デバイス詳細") || strings.Contains(body, "📈 センサーデータ履歴") {
+		t.Errorf("ダッシュボードにデバイス文脈リンクが描画されている (R1.3 違反):\n%s", body)
+	}
+}
+
 // --- 5.2 データ欠損・0件・取得失敗 ---
 
 func TestDashboard_デバイス0件は空メッセージで正常表示(t *testing.T) {

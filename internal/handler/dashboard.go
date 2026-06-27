@@ -86,6 +86,8 @@ func (h *AuthHandler) Dashboard(c *gin.Context) {
 		UserName:  user.Name,
 		CSRFToken: csrf.Token(c.Request),
 		CSSURL:    view.CSSURL(),
+		// 現在ページ=ダッシュボード。デバイス文脈は持たない (DeviceID 未設定=文脈リンクなし)。
+		Nav: component.SidebarNav{Current: component.NavDashboard},
 	}, devices, readings, alerts, time.Now())
 
 	renderPage(c, http.StatusOK, page.DashboardPage(dv))

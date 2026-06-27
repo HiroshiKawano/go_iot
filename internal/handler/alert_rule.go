@@ -310,6 +310,8 @@ func (h *AlertRuleHandler) layoutData(c *gin.Context, userName string) layout.Ap
 		UserName:  userName,
 		CSRFToken: csrf.Token(c.Request),
 		CSSURL:    view.CSSURL(),
+		// 現在ページ=アラートルール。device_id クエリを持つが文脈には入らない (DeviceID 未設定)。
+		Nav: component.SidebarNav{Current: component.NavAlertRules},
 	}
 }
 
