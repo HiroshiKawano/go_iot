@@ -46,6 +46,9 @@ type DeviceInfoView struct {
 // (internal/chart が go-echarts で構築・HTML 安全) を <script type="application/json"> で供給し、
 // Unit/Color は ECharts コンテナの data-unit/data-color へ渡す (endLabel formatter・線色用)。
 // HasData=false (計測 0 件) のときは option を構築せず空メッセージのみ描画する。
+//
+// 数値カード (TemperatureCard/HumidityCard) は常時表示 (HasData=false でも各値 "—"・R1.4)。
+// 日次集計表 (TemperatureDaily/HumidityDaily) は ShowDaily=true (複数日かつデータ有り) のときのみ描画する (R5.3)。
 type DeviceChartAreaView struct {
 	DeviceID              int64
 	Period                string
@@ -56,6 +59,36 @@ type DeviceChartAreaView struct {
 	HumidityUnit          string // "%"
 	TemperatureColor      string // "#e8590c" (data-color へ)
 	HumidityColor         string // "#1971c2"
+
+	// 数値カード (現在値・最高・最低・日較差／温度・湿度別)。常時表示・空は各値 "—"。
+	TemperatureCard StatCardView
+	HumidityCard    StatCardView
+
+	// 日次集計表 (複数日のみ)。ShowDaily=false (24h or 空) のとき非表示。
+	ShowDaily        bool
+	TemperatureDaily []DailyStatRow
+	HumidityDaily    []DailyStatRow
+}
+
+// StatCardView は数値カード1メトリック分の表示データ (整形済み・単位付き文字列 or "—")。
+// 現在値=最新計測点、最高/最低=期間内、日較差=最高−最低 (R1.1)。
+type StatCardView struct {
+	Current string // 例 "28.50℃" / "—"
+	Max     string // 例 "35.20℃" / "—"
+	Min     string // 例 "18.50℃" / "—"
+	Diurnal string // 日較差 例 "16.70℃" / "—"
+}
+
+// DailyStatRow は日次集計表1行分の表示データ (整形済み・欠測は "—")。
+// 単位は列見出し側に付くためセルは素の数値文字列 (CV は無次元のため単位なし)。
+type DailyStatRow struct {
+	Date    string // "2026-04-20"
+	Avg     string // 平均
+	Max     string // 最高
+	Min     string // 最低
+	Diurnal string // 日較差 (最高−最低)
+	Sigma   string // 標準偏差σ
+	CV      string // 変動係数 (σ/μ・無次元)・未定義は "—"
 }
 
 // optionScript は ECharts option JSON を <script type="application/json"> でクライアントへ

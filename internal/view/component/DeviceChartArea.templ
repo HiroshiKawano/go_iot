@@ -36,6 +36,9 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 			>{ p.Label }</button>
 		}
 	</div>
+	// 数値カード (温度/湿度サマリ)。常時表示・空データは各値 "—" (R1.1/1.4)。モックの器を写経。
+	@statCards("温度サマリ", v.TemperatureCard)
+	@statCards("湿度サマリ", v.HumidityCard)
 	if v.HasData {
 		<div class="linked-charts">
 			<h2 class="u-mbs-6">温度グラフ</h2>
@@ -49,7 +52,58 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 				@templ.Raw(optionScript("humidity-chart-option", v.HumidityOptionJSON))
 			</div>
 		</div>
+		// 日次集計表は複数日 (3d/7d/30d) のみ (24h は非表示・R5.3)。
+		if v.ShowDaily {
+			@dailyTable("日次集計（温度）", v.TemperatureUnit, v.TemperatureDaily)
+			@dailyTable("日次集計（湿度）", v.HumidityUnit, v.HumidityDaily)
+		}
 	} else {
 		<div class="chart-placeholder">データはまだありません</div>
 	}
+}
+
+// statCards は数値カード1メトリック (現在値・最高・最低・日較差) を .summary-grid で描画する。
+// モック (mocks/html/device-show.html) の .summary-grid-4 / .summary-box を写経し、4項目を1行に並べる。
+templ statCards(title string, c StatCardView) {
+	<h2 class="u-mbs-6">{ title }</h2>
+	<div class="summary-grid summary-grid-4">
+		<div class="summary-box"><div class="label">現在値</div><div class="value">{ c.Current }</div></div>
+		<div class="summary-box"><div class="label">最高</div><div class="value">{ c.Max }</div></div>
+		<div class="summary-box"><div class="label">最低</div><div class="value">{ c.Min }</div></div>
+		<div class="summary-box"><div class="label">日較差</div><div class="value">{ c.Diurnal }</div></div>
+	</div>
+}
+
+// dailyTable は日次集計表 (平均/最高/最低/日較差/σ/CV) を .data-table で描画する。
+// 単位は列見出しに付与 (CV は無次元のため単位なし)・欠測日のセルは "—" (handler 整形済み)。
+templ dailyTable(title, unit string, rows []DailyStatRow) {
+	<h2 class="u-mbs-6">{ title }</h2>
+	<div class="table-wrapper">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>日付</th>
+					<th>{ "平均(" + unit + ")" }</th>
+					<th>{ "最高(" + unit + ")" }</th>
+					<th>{ "最低(" + unit + ")" }</th>
+					<th>{ "日較差(" + unit + ")" }</th>
+					<th>{ "σ(" + unit + ")" }</th>
+					<th>CV</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range rows {
+					<tr>
+						<td>{ row.Date }</td>
+						<td>{ row.Avg }</td>
+						<td>{ row.Max }</td>
+						<td>{ row.Min }</td>
+						<td>{ row.Diurnal }</td>
+						<td>{ row.Sigma }</td>
+						<td>{ row.CV }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
 }

@@ -1,0 +1,84 @@
+# Implementation Plan
+
+- [x] 1. Foundation: モック反映と CSS 配信
+- [x] 1.1 device-show モックに数値カードと日次集計表の器を追加
+  - `mocks/html/device-show.html` の期間選択カード内に、温度・湿度それぞれの「現在値・最高・最低・日較差」数値カードを `.summary-grid`/`.summary-box`（`.label`/`.value`）で追加
+  - 日次集計表の器を `.data-table`/`.table-wrapper` で追加（列: 日付/平均/最高/最低/日較差/σ/CV を温度・湿度別）
+  - 既存クラスを流用し、4項目レイアウトに列調整が必要な場合のみ正本 `mocks/html/style.css` に最小追記
+  - `make sync-css` で本番配信用 CSS を再生成（生成物は手編集しない）
+  - 観測可能完了: `mocks/html/device-show.html` をブラウザ表示するとカード枠と日次集計表の器が現れ、`make sync-css` が本番 CSS を更新する
+  - _Requirements: 9.1, 9.2_
+  - _Boundary: device-show モック, style.css 正本_
+
+- [x] 2. 統計純関数層（internal/chart・純粋・gin/DB/templ/pgtype 非依存）
+- [x] 2.1 移動平均（SMA）と移動標準偏差を立ち上がり込みで算出
+  - 単純移動平均を窓幅指定で算出。先頭 N−1 点は可用点の expanding window（部分平均）で欠落を作らない
+  - 移動標準偏差（母標準偏差・N 除算）。単一点は 0
+  - 観測可能完了: table-driven テストが緑（既知系列の手計算一致／空入力／単一点／窓>系列長の安全）
+  - _Requirements: 2.1, 2.4, 6.1, 6.2, 6.3_
+  - _Boundary: internal/chart stats_
+- [x] 2.2 正常帯境界と乖離率をゼロ除算ガード付きで算出
+  - 正常帯: 下限 = SMA − kσ、帯幅 = 2kσ（積み上げ area 用の2系列）
+  - 乖離率(%) = (実測 − SMA)/SMA × 100。`|SMA| < epsilon` の点は未定義（nil）
+  - 観測可能完了: テストで k=2 の下限/帯幅が定義どおり、温度0℃近傍（`|SMA|≈0`）で乖離率が nil
+  - _Requirements: 3.1, 4.1, 4.4, 6.1, 6.4_
+  - _Boundary: internal/chart stats_
+- [x] 2.3 期間・日次のスカラ集計（平均/最大最小/日較差/σ/CV）
+  - 平均・最大・最小・日較差（最高−最低）・全体標準偏差・変動係数 CV（=σ/μ、`|μ|<epsilon` で未定義）
+  - 観測可能完了: テストで各値一致・空入力安全・平均0近傍で CV 未定義
+  - _Requirements: 1.1, 5.1, 6.1, 6.3, 6.4_
+  - _Boundary: internal/chart stats_
+
+- [x] 3. 複数系列 ECharts option ビルダー（ChartSpec → option JSON）
+- [x] 3.1 ChartSpec 型と生実測線ベースライン（LineOptionJSON 置換）
+  - 複数系列入力契約 ChartSpec（ラベル列/単位/色/生実測/SMA/帯下限/帯幅/乖離率）を定義
+  - 生実測線を series[0] とし markPoint（最高/最低）・tooltip(axis/cross) を維持。HTML 安全 JSON を返す
+  - 既存 `echarts_test.go` を新契約へ更新（生線のみのベースラインが緑）
+  - 観測可能完了: 生線のみの ChartSpec から得た option JSON に series[0]=line+markPoint があり `</script>` が出現しない
+  - _Requirements: 2.4, 7.3, 7.5_
+  - _Boundary: internal/chart echarts_
+- [x] 3.2 SMA 線系列と凡例既定オフ
+  - SMA 指定時に2本目の line（細線・symbol 非表示）を追加し、凡例を表示して「移動平均」を `selected:false`
+  - 移動平均は SMA 1本のみ（EMA/WMA 系列を作らない）
+  - 観測可能完了: option JSON に SMA 系列が現れ `legend.selected["移動平均"]=false`
+  - _Requirements: 2.1, 2.2, 2.3, 8.3_
+  - _Boundary: internal/chart echarts_
+- [x] 3.3 正常帯（2系列積み上げ area・単一凡例トグル）
+  - 帯下限（透明線・stack 同一グループ）＋帯幅（半透明 areaStyle・stack 同一グループ）の2系列。帯下限は凡例項目に出さず、帯幅のみ「正常帯」`selected:false`
+  - 正常帯は SMA±kσ の統計帯としてのみ構成し、アラートしきい値・作物適正帯のデータは参照しない
+  - 観測可能完了: option JSON に stack 共有の2系列があり帯幅の `areaStyle.opacity>0`、凡例は「正常帯」=false のみで帯下限の項目が無い
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+  - _Boundary: internal/chart echarts_
+- [x] 3.4 乖離率系列（第2 y軸）
+  - 乖離率を第2 y軸（右・単位%）へ。点線・symbol 非表示、「乖離率(%)」を `selected:false`、未定義点は null
+  - 観測可能完了: option JSON に第2 y軸と `yAxisIndex=1` の乖離率系列があり `legend.selected["乖離率(%)"]=false`
+  - _Requirements: 4.1, 4.2, 4.3_
+  - _Boundary: internal/chart echarts_
+
+- [x] 4. グラフ領域 handler/View 統合（DeviceChartArea）
+- [x] 4.1 buildChartArea でオーバーレイを配線
+  - period 別 SMA 窓幅マップ（24h=12/3d=36/7d=72/30d=288 点）を定義
+  - 生行→温度/湿度 float 列（pgconv）→ SMA/σ/正常帯(k=2)/乖離率を算出し ChartSpec を構築して option 化。全期間で供給（既定オフ）
+  - 計測 0 件は `HasData=false` の空表示を維持。追加クエリ・スキーマ変更なし（読み取り時計算）
+  - 観測可能完了: httptest で device-show 初期表示と /chart フラグメントの option script に SMA/帯/乖離率系列＋`legend.selected:false` が含まれ、24h/3d/7d/30d とも 200
+  - _Requirements: 2.1, 3.1, 4.1, 7.6, 8.1, 8.2_
+  - _Boundary: handler device_show buildChartArea_
+- [x] 4.2 数値カードの算出・View・templ 描画
+  - 現在値=最新点、最高/最低=期間集計、日較差=最高−最低を温度・湿度別に handler で算出し View へ。templ で `.summary-grid` に描画、空データは「—」
+  - 観測可能完了: レンダリング HTML に温湿度の現在値・最高・最低・日較差が出て、期間切替で更新され、空データで「—」になる
+  - _Requirements: 1.1, 1.2, 1.3, 1.4_
+  - _Boundary: handler device_show, DeviceChartArea templ/View_
+  - _Depends: 2.3_
+- [x] 4.3 日次集計表の算出・View・templ 描画（複数日のみ）
+  - 生行を JST 暦日でバケット化し、各日 平均/最高/最低/日較差/σ/CV を算出。`ShowDaily = period != 24h` を View へ。templ で温度/湿度の `.data-table` に描画、24h は非表示、欠測日は「—」
+  - 観測可能完了: 3d/7d/30d で日次集計表（各日6項目×温湿度）が出て 24h では出ず、欠測日が「—」になる
+  - _Requirements: 5.1, 5.2, 5.3, 5.4_
+  - _Boundary: handler device_show, DeviceChartArea templ/View_
+  - _Depends: 2.3_
+
+- [x] 5. 無回帰・統合検証
+  - httptest で 24h/3d/7d/30d の初期表示・期間切替フラグメントが 200、選択期間のアクティブ往復、`hx-push-url` がフルページ URL、空データ表示、最新計測テーブルがグラフ領域フラグメントに含まれない（期間非連動）ことを検証
+  - 生実測線が series[0] であり続けることを確認し、`EChartsInitializer`（endLabel/sampling/connect）を無変更で温存（温湿度連動・繰り返し再描画の健全性は client 既存挙動で担保）
+  - 観測可能完了: 全期間の Show/Chart テストが緑で、グラフ領域フラグメント HTML に最新計測テーブルが含まれず、option の series[0] が生実測線である
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
+  - _Boundary: handler device_show, App.templ(無変更確認)_

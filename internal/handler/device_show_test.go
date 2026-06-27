@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -132,18 +134,18 @@ func TestShow_200で情報と既定24hアクティブと最新計測(t *testing.
 	for _, want := range []string{
 		"テスト農場主", // App ヘッダーのユーザー名
 		"<h1>デバイス詳細: ハウスA温湿度計</h1>", // 見出し (デバイス名)
-		"AA:BB:CC:DD:EE:01",          // MAC
-		"2026-04-20 14:30:00",        // 最終通信 JST 絶対表記 (05:30 UTC→14:30 JST)
-		`id="device-chart-area"`,            // グラフ領域ラッパー
-		`id="temperature-chart"`,            // 温度 ECharts コンテナ
-		`id="humidity-chart"`,               // 湿度 ECharts コンテナ
-		`id="temperature-chart-option"`,     // 温度 option script
-		`id="humidity-chart-option"`,        // 湿度 option script
-		"data-echarts",                      // ECharts 初期化対象マーカー
-		`id="latest-readings-table"`,        // 最新計測テーブル
-		"2026-04-20 14:30",                  // テーブルの計測日時 (分まで・JST)
-		"28.50",                             // 最新計測の温度値
-		"65.30",                             // 最新計測の湿度値
+		"AA:BB:CC:DD:EE:01",             // MAC
+		"2026-04-20 14:30:00",           // 最終通信 JST 絶対表記 (05:30 UTC→14:30 JST)
+		`id="device-chart-area"`,        // グラフ領域ラッパー
+		`id="temperature-chart"`,        // 温度 ECharts コンテナ
+		`id="humidity-chart"`,           // 湿度 ECharts コンテナ
+		`id="temperature-chart-option"`, // 温度 option script
+		`id="humidity-chart-option"`,    // 湿度 option script
+		"data-echarts",                  // ECharts 初期化対象マーカー
+		`id="latest-readings-table"`,    // 最新計測テーブル
+		"2026-04-20 14:30",              // テーブルの計測日時 (分まで・JST)
+		"28.50",                         // 最新計測の温度値
+		"65.30",                         // 最新計測の湿度値
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("詳細ページに %q が含まれていない", want)
@@ -191,14 +193,14 @@ func TestShow_ECharts配線がフルページに揃う(t *testing.T) {
 	body := w.Body.String()
 
 	for _, want := range []string{
-		"/static/js/echarts.min.js", // self-host アセットを <head> で読込 (R5)
-		"echarts.init",              // 描画インスタンス生成
-		"getInstanceByDom",          // 既存検出 → dispose (再描画・リーク防止 R6)
-		"echarts.connect",           // 温湿度連動 (R3.3)
-		"htmx:beforeSwap",           // swap 前破棄 (R6.2)
-		"htmx:afterSwap",            // swap 後再初期化
-		`id="temperature-chart"`,    // 温度コンテナ
-		`id="humidity-chart"`,       // 湿度コンテナ
+		"/static/js/echarts.min.js",     // self-host アセットを <head> で読込 (R5)
+		"echarts.init",                  // 描画インスタンス生成
+		"getInstanceByDom",              // 既存検出 → dispose (再描画・リーク防止 R6)
+		"echarts.connect",               // 温湿度連動 (R3.3)
+		"htmx:beforeSwap",               // swap 前破棄 (R6.2)
+		"htmx:afterSwap",                // swap 後再初期化
+		`id="temperature-chart"`,        // 温度コンテナ
+		`id="humidity-chart"`,           // 湿度コンテナ
 		`id="temperature-chart-option"`, // 温度 option script
 		`id="humidity-chart-option"`,    // 湿度 option script
 	} {
@@ -270,7 +272,7 @@ func TestShow_情報パネルに認識名の所在地を表示(t *testing.T) {
 		1: {
 			ID: 1, UserID: 7, Name: "ハウスA温湿度計", MacAddress: "AA:BB:CC:DD:EE:01",
 			Location: strPtr("旧自由入力ハウスA"), // 移行元として残置・表示しない
-			Locality: strPtr("佐敷町"),          // 表示は構造化 locality を認識名で
+			Locality: strPtr("佐敷町"),       // 表示は構造化 locality を認識名で
 			IsActive: true,
 		},
 	}
@@ -744,6 +746,360 @@ func TestDelete_論理削除のDBエラーは500(t *testing.T) {
 	w := requestWithHeaders(r, http.MethodDelete, "/devices/1", map[string]string{"HX-Request": "true"})
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("status=%d, want 500", w.Code)
+	}
+}
+
+// --- 4.1 オーバーレイ系列の供給 (SMA/正常帯/乖離率・既定オフ) ---
+
+// smaWindowFor は period 別の SMA 窓幅 (点数) を返す (24h=12/3d=36/7d=72/30d=288)。
+func TestSMAWindowFor_期間別窓幅(t *testing.T) {
+	cases := []struct {
+		period string
+		want   int
+	}{
+		{"24h", 12}, {"3d", 36}, {"7d", 72}, {"30d", 288},
+	}
+	for _, c := range cases {
+		if got := smaWindowFor(c.period); got != c.want {
+			t.Errorf("smaWindowFor(%q) = %d, want %d", c.period, got, c.want)
+		}
+	}
+}
+
+// 全期間で option JSON に SMA/正常帯/乖離率の系列が含まれ、凡例は既定オフ (selected:false) であること
+// (R2.1/2.2, 3.1/3.3, 4.1/4.2, 8.1/8.2)。生実測線は主役のまま据え置き。
+func TestChart_オーバーレイ系列が既定オフで供給される(t *testing.T) {
+	for _, period := range []string{"24h", "3d", "7d", "30d"} {
+		t.Run(period, func(t *testing.T) {
+			repo := showDeviceRepo()
+			repo.recentReadings = []repository.SensorReading{
+				sensorRow(1, time.Date(2026, 4, 20, 3, 0, 0, 0, time.UTC), 27.00, 60.00),
+				sensorRow(1, time.Date(2026, 4, 20, 4, 0, 0, 0, time.UTC), 28.00, 63.00),
+				sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+			}
+			r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+			w := hxGet(r, "/devices/1/chart?period="+period)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+			}
+			body := w.Body.String()
+			// 3系列が option に出る (系列名)。
+			for _, want := range []string{"移動平均", "正常帯", "乖離率(%)"} {
+				if !strings.Contains(body, want) {
+					t.Errorf("option に系列 %q が含まれない", want)
+				}
+			}
+			// 凡例は既定オフ (selected:false)。
+			for _, want := range []string{`"移動平均":false`, `"正常帯":false`, `"乖離率(%)":false`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("legend.selected %q が含まれない:\n%s", want, body)
+				}
+			}
+			// 生実測線の markPoint(最高/最低) は据え置き (主役温存)。
+			for _, want := range []string{`"type":"max"`, `"type":"min"`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("生実測線の markPoint %q が無い", want)
+				}
+			}
+		})
+	}
+}
+
+// --- 4.2 数値カード (現在値・最高・最低・日較差) ---
+
+func TestShow_数値カードに現在最高最低日較差(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 20, 4, 0, 0, 0, time.UTC), 27.00, 60.00),
+		sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00), // 最新点
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	// カードのラベル。
+	for _, want := range []string{"現在値", "最高", "最低", "日較差"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("数値カードのラベル %q が無い", want)
+		}
+	}
+	// 温度: 現在=29.00 / 最高=29.00 / 最低=27.00 / 日較差=2.00。
+	for _, want := range []string{"29.00℃", "27.00℃", "2.00℃"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("温度カードに %q が無い", want)
+		}
+	}
+	// 湿度: 現在=66.00 / 最低=60.00 / 日較差=6.00。
+	for _, want := range []string{"66.00%", "60.00%", "6.00%"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("湿度カードに %q が無い", want)
+		}
+	}
+}
+
+func TestShow_空データで数値カードがダッシュ(t *testing.T) {
+	repo := showDeviceRepo() // latest/recent ともに空
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	// カードのラベルは出る (レイアウトを崩さない・R1.4)。
+	for _, want := range []string{"現在値", "最高", "最低", "日較差"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("空データでも数値カードのラベル %q は出る", want)
+		}
+	}
+	// 値は "—" (データ未到着)。
+	if !strings.Contains(body, "—") {
+		t.Errorf("空データの数値カードに「—」が無い:\n%s", body)
+	}
+}
+
+// --- 4.3 日次集計表 (複数日のみ) ---
+
+func TestChart_日次集計表は複数日のみ表示(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00), // 04-18 14:00 JST
+		sensorRow(1, time.Date(2026, 4, 19, 5, 0, 0, 0, time.UTC), 29.00, 66.00), // 04-19 14:00 JST
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	// 24h: 日次集計表は出さない (R5.3)。
+	w := hxGet(r, "/devices/1/chart?period=24h")
+	if strings.Contains(w.Body.String(), "日次集計") {
+		t.Errorf("24h で日次集計表が出てはいけない (R5.3)")
+	}
+
+	// 7d: 温度/湿度の日次集計表が出る (各日6項目)。
+	w = hxGet(r, "/devices/1/chart?period=7d")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	for _, want := range []string{"日次集計（温度）", "日次集計（湿度）", "平均", "日較差", "σ", "CV", "2026-04-18", "2026-04-19"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("7d 日次集計表に %q が無い:\n%s", want, body)
+		}
+	}
+}
+
+func TestChart_日次集計の欠測日はダッシュ(t *testing.T) {
+	repo := showDeviceRepo()
+	// 04-18 と 04-20 のみ (04-19 は欠測)。
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00),
+		sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := hxGet(r, "/devices/1/chart?period=7d")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	// 欠測日 04-19 も行として現れ (体裁維持)、値は "—"。
+	for _, want := range []string{"2026-04-18", "2026-04-19", "2026-04-20", "—"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("欠測日処理の %q が無い:\n%s", want, body)
+		}
+	}
+}
+
+// --- 5. 無回帰・統合検証 (R7.1〜7.6) ---
+
+// periodButtonLabels は期間値→ボタン表示文言 (アクティブ往復検証用)。
+var periodButtonLabels = map[string]string{"24h": "24時間", "3d": "3日間", "7d": "7日間", "30d": "30日間"}
+
+// regressionRows は無回帰テスト用の決定的な生行 (同日3点)。
+func regressionRows() []repository.SensorReading {
+	return []repository.SensorReading{
+		sensorRow(1, time.Date(2026, 4, 20, 3, 0, 0, 0, time.UTC), 27.00, 60.00),
+		sensorRow(1, time.Date(2026, 4, 20, 4, 0, 0, 0, time.UTC), 28.00, 63.00),
+		sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+	}
+}
+
+// extractOptionJSON は <script type="application/json" id="..."> の中身 (option JSON) を取り出す。
+func extractOptionJSON(t *testing.T, html, scriptID string) string {
+	t.Helper()
+	marker := `id="` + scriptID + `">`
+	i := strings.Index(html, marker)
+	if i < 0 {
+		t.Fatalf("option script id=%q が無い", scriptID)
+	}
+	rest := html[i+len(marker):]
+	end := strings.Index(rest, "</script>")
+	if end < 0 {
+		t.Fatalf("option script id=%q が閉じていない", scriptID)
+	}
+	return rest[:end]
+}
+
+// 全期間で初期表示 (Show) と期間切替 (Chart) がともに 200 を返し、選択期間がアクティブ表示され、
+// グラフ領域フラグメント (Chart) には最新計測テーブルが含まれない (期間非連動) こと (R7.1/7.2/7.4)。
+func TestRegression_全期間でShowとChartが往復しテーブル非連動(t *testing.T) {
+	for _, period := range []string{"24h", "3d", "7d", "30d"} {
+		t.Run(period, func(t *testing.T) {
+			label := periodButtonLabels[period]
+			repo := showDeviceRepo()
+			repo.recentReadings = regressionRows()
+			r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+			// 初期表示 (フルページ): 200・該当期間アクティブ・最新計測テーブルは存在する (据え置き)。
+			ws := getPath(r, "/devices/1?period="+period)
+			if ws.Code != http.StatusOK {
+				t.Fatalf("Show status=%d, want 200 (period=%s, body=%s)", ws.Code, period, ws.Body.String())
+			}
+			showBody := ws.Body.String()
+			if !activeButtonHas(showBody, label) {
+				t.Errorf("Show: %s がアクティブでない", label)
+			}
+			if !strings.Contains(showBody, `id="latest-readings-table"`) {
+				t.Errorf("Show: 最新計測テーブルがフルページに無い")
+			}
+
+			// 期間切替 (フラグメント): 200・該当期間アクティブ・最新計測テーブルは含まない (R7.4)。
+			wc := hxGet(r, "/devices/1/chart?period="+period)
+			if wc.Code != http.StatusOK {
+				t.Fatalf("Chart status=%d, want 200 (period=%s)", wc.Code, period)
+			}
+			chartBody := wc.Body.String()
+			if !activeButtonHas(chartBody, label) {
+				t.Errorf("Chart: %s がアクティブでない", label)
+			}
+			if strings.Contains(chartBody, "latest-readings-table") {
+				t.Errorf("Chart: グラフ領域フラグメントに最新計測テーブルが含まれている (期間非連動違反・R7.4)")
+			}
+			if strings.Contains(chartBody, "<html") {
+				t.Errorf("Chart: フラグメントに <html> が含まれている")
+			}
+		})
+	}
+}
+
+// 生実測線が series[0] であり続けること (R7.3/7.5)。EChartsInitializer は endLabel/sampling を
+// option.series[0] へ付与するため、オーバーレイ (SMA/帯/乖離率) 追加後も生線が series[0] で
+// なければ現在値ラベル・間引きが別系列に付いて温湿度連動・無回帰が壊れる。全期間で固定する。
+func TestRegression_生実測線がseries0であり続ける(t *testing.T) {
+	for _, period := range []string{"24h", "3d", "7d", "30d"} {
+		t.Run(period, func(t *testing.T) {
+			repo := showDeviceRepo()
+			repo.recentReadings = regressionRows()
+			r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+			body := hxGet(r, "/devices/1/chart?period="+period).Body.String()
+
+			for _, c := range []struct{ id, unit string }{
+				{"temperature-chart-option", tempChartUnit},
+				{"humidity-chart-option", humidityChartUnit},
+			} {
+				var doc struct {
+					Series []struct {
+						Name      string          `json:"name"`
+						Type      string          `json:"type"`
+						MarkPoint json.RawMessage `json:"markPoint"`
+					} `json:"series"`
+				}
+				optJSON := extractOptionJSON(t, body, c.id)
+				if err := json.Unmarshal([]byte(optJSON), &doc); err != nil {
+					t.Fatalf("option JSON(%s) が妥当でない: %v", c.id, err)
+				}
+				if len(doc.Series) == 0 {
+					t.Fatalf("%s: series が空", c.id)
+				}
+				s0 := doc.Series[0]
+				if s0.Name != c.unit {
+					t.Errorf("%s: series[0].name=%q, want %q (生実測線が series[0] でない)", c.id, s0.Name, c.unit)
+				}
+				if s0.Type != "line" {
+					t.Errorf("%s: series[0].type=%q, want line", c.id, s0.Type)
+				}
+				if len(s0.MarkPoint) == 0 || !strings.Contains(string(s0.MarkPoint), "max") {
+					t.Errorf("%s: series[0] に markPoint(最高/最低) が無い (生実測線の証跡)", c.id)
+				}
+				// オーバーレイは series[1..] に存在する (主役は series[0] のまま)。
+				if len(doc.Series) < 2 {
+					t.Errorf("%s: オーバーレイ系列 (series[1..]) が無い", c.id)
+				}
+			}
+		})
+	}
+}
+
+// 期間ボタンの hx-push-url がフルページ URL (/devices/{id}?period=) であること (R7.2)。
+// フラグメント URL を push するとリロード時に部分 HTML だけ返る不具合を避ける。
+func TestRegression_hxPushURLはフルページURL(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.recentReadings = regressionRows()
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	body := getPath(r, "/devices/1").Body.String()
+	for _, period := range []string{"24h", "3d", "7d", "30d"} {
+		pushURL := fmt.Sprintf(`hx-push-url="/devices/1?period=%s"`, period)
+		if !strings.Contains(body, pushURL) {
+			t.Errorf("hx-push-url=%q (フルページURL) が無い", pushURL)
+		}
+		getURL := fmt.Sprintf(`hx-get="/devices/1/chart?period=%s"`, period)
+		if !strings.Contains(body, getURL) {
+			t.Errorf("hx-get=%q (フラグメント取得URL) が無い", getURL)
+		}
+	}
+}
+
+// EChartsInitializer (App.templ) が endLabel/sampling を series[0] へ付与し、connect で連動させる
+// 配線を温存していること (R7.3/7.5・App.templ 無変更の確認)。オーバーレイ追加でも client は無改変。
+func TestRegression_EChartsInitializerがseries0配線を温存(t *testing.T) {
+	repo := showDeviceRepo()
+	repo.recentReadings = regressionRows()
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	body := getPath(r, "/devices/1").Body.String()
+	for _, want := range []string{
+		"option.series[0]", // endLabel/sampling は series[0] へ付与 (生実測線前提)
+		"endLabel",         // 右端現在値ラベル (R2.3)
+		"sampling",         // 間引き
+		"lttb",             // 間引きアルゴリズム
+		"echarts.connect",  // 温湿度連動 (R7.3)
+		"htmx:beforeSwap",  // 繰り返し再描画の dispose (R7.5)
+		"htmx:afterSwap",   // swap 後 再 init
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("EChartsInitializer の配線 %q が無い (App.templ 改変の疑い)", want)
+		}
+	}
+}
+
+// 空データ (計測0件) で全期間ともグラフ枠・期間切替を維持しつつ未到着メッセージを出すこと (R7.6)。
+func TestRegression_空データで全期間とも枠と期間切替を維持(t *testing.T) {
+	for _, period := range []string{"24h", "3d", "7d", "30d"} {
+		t.Run(period, func(t *testing.T) {
+			repo := showDeviceRepo() // recent/latest ともに空
+			r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+			body := hxGet(r, "/devices/1/chart?period="+period).Body.String()
+			if !strings.Contains(body, "データはまだありません") {
+				t.Errorf("空データの未到着メッセージが無い (R7.6)")
+			}
+			// 期間切替 (枠) は維持。
+			if !strings.Contains(body, "period-selector") {
+				t.Errorf("空データでも期間切替は維持する (R7.6)")
+			}
+			if !activeButtonHas(body, periodButtonLabels[period]) {
+				t.Errorf("空データでも選択期間 %s はアクティブ", period)
+			}
+			// 空データでは ECharts コンテナ・option script を出さない (初期化対象なし)。
+			if strings.Contains(body, `type="application/json"`) {
+				t.Errorf("空データなのに option script が出ている")
+			}
+		})
 	}
 }
 
