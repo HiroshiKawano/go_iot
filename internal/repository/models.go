@@ -58,6 +58,8 @@ type Device struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	// 論理削除日時 (NULL = 有効)
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	// 圃場所在地の地域キー (沖縄53地域・domain.Locality と対応。親市町村は Locality.Municipality() で導出)
+	Locality *string `json:"locality"`
 }
 
 // デバイスAPI用 Bearer トークン (Sanctum相当)

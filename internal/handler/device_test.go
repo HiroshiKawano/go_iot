@@ -159,7 +159,7 @@ func validDeviceVals() url.Values {
 	return url.Values{
 		"name":        {"温室センサー"},
 		"mac_address": {"aa:bb:cc:dd:ee:ff"}, // 小文字 → 正規化で大文字化される
-		"location":    {"第1ハウス"},
+		"locality":    {"国頭村"},               // 沖縄の地域 (domain.Locality・未合併=市町村名)
 		"is_active":   {"1"},
 	}
 }
@@ -176,14 +176,19 @@ func TestShowCreateForm_空フォームと稼働中初期とCSRF(t *testing.T) {
 	}
 	body := w.Body.String()
 	for _, want := range []string{
-		"テスト農場主",                    // App レイアウトのユーザー名
-		"<h1>デバイス登録</h1>",           // 見出し
-		`id="device-form"`,          // 共有フォーム
-		`action="/devices"`,         // 送信先 (POST)
-		`name="gorilla.csrf.Token"`, // CSRF 隠しフィールド
-		`name="name" value=""`,      // 空フォーム (デバイス名未入力)
-		`value="1" checked`,         // ステータス初期=稼働中
-		`href="/dashboard"`,         // キャンセル導線
+		"テスト農場主",                                         // App レイアウトのユーザー名
+		"<h1>デバイス登録</h1>",                                // 見出し
+		`id="device-form"`,                               // 共有フォーム
+		`action="/devices"`,                              // 送信先 (POST)
+		`name="gorilla.csrf.Token"`,                      // CSRF 隠しフィールド
+		`name="name" value=""`,                           // 空フォーム (デバイス名未入力)
+		`value="1" checked`,                              // ステータス初期=稼働中
+		`href="/dashboard"`,                              // キャンセル導線
+		`<select name="locality" class="js-tom-select">`, // 設置場所=単一の検索可能 地域 select
+		`<option value="">選択してください</option>`,             // 先頭の空 option (任意項目)
+		`<option value="具志川市">具志川（うるま市）</option>`, // 同名区別 (現市町村併記)
+		`<option value="具志川村">具志川（久米島町）</option>`, // 同名区別 (別自治体)
+		`<option value="国頭村">国頭村</option>`,        // 未合併は市町村名そのもの
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("登録フォームHTMLに %q が含まれていない", want)
@@ -192,6 +197,10 @@ func TestShowCreateForm_空フォームと稼働中初期とCSRF(t *testing.T) {
 	// 登録フォームは method override 隠しフィールドを持たない
 	if strings.Contains(body, `name="_method"`) {
 		t.Error("登録フォームに _method 隠しフィールドが描画されている")
+	}
+	// 旧 location 自由入力は廃止されている
+	if strings.Contains(body, `name="location"`) {
+		t.Error("廃止された location 自由入力が残っている")
 	}
 }
 
@@ -210,7 +219,7 @@ func TestShowCreateForm_ユーザー取得失敗は500(t *testing.T) {
 func TestShowEditForm_所有者一致で既存値復元(t *testing.T) {
 	repo := deviceOwnerRepo()
 	repo.devices = map[int64]repository.Device{
-		1: {ID: 1, UserID: 7, Name: "ハウスA温湿度計", MacAddress: "AA:BB:CC:DD:EE:01", Location: strPtr("ビニールハウスA"), IsActive: false},
+		1: {ID: 1, UserID: 7, Name: "ハウスA温湿度計", MacAddress: "AA:BB:CC:DD:EE:01", Location: strPtr("ビニールハウスA"), Locality: strPtr("佐敷町"), IsActive: false},
 	}
 	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
@@ -226,13 +235,20 @@ func TestShowEditForm_所有者一致で既存値復元(t *testing.T) {
 		`value="put"`,
 		`value="ハウスA温湿度計"`,          // 既存値復元 (name)
 		`value="AA:BB:CC:DD:EE:01"`, // 既存値復元 (mac)
-		`value="ビニールハウスA"`,          // 既存値復元 (location)
-		`value="0" checked`,         // 停止中 (IsActive=false) の選択復元
-		`href="/devices/1"`,         // キャンセル導線
+		`<option value="佐敷町" selected>佐敷（南城市）</option>`, // 既存地域の選択復元 (認識名表示)
+		`value="0" checked`, // 停止中 (IsActive=false) の選択復元
+		`href="/devices/1"`, // キャンセル導線
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("編集フォームHTMLに %q が含まれていない", want)
 		}
+	}
+	// 旧 location 自由入力は廃止され、地域 select に置き換わっている
+	if strings.Contains(body, `name="location"`) {
+		t.Error("廃止された location 自由入力が残っている")
+	}
+	if !strings.Contains(body, `name="locality"`) {
+		t.Error("地域 select (name=locality) が描画されていない")
 	}
 }
 
@@ -321,7 +337,6 @@ func TestCreate_正常時は所有者uidと正規化MACとnil_locationで303(t *
 	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	vals := validDeviceVals()
-	vals.Set("location", "") // 未入力 → 未設定 (nil)
 	vals.Set("is_active", "0")
 	w := formRequest(r, http.MethodPost, "/devices", vals)
 
@@ -341,27 +356,27 @@ func TestCreate_正常時は所有者uidと正規化MACとnil_locationで303(t *
 		t.Errorf("MacAddress=%q, want 大文字正規化 AA:BB:CC:DD:EE:FF", repo.lastCreate.MacAddress)
 	}
 	if repo.lastCreate.Location != nil {
-		t.Errorf("Location=%v, want nil (空 location は未設定)", repo.lastCreate.Location)
+		t.Errorf("Location=%v, want nil (新規デバイスは旧 location を持たない)", repo.lastCreate.Location)
 	}
 	if repo.lastCreate.IsActive != false {
 		t.Errorf("IsActive=%v, want false (is_active=0)", repo.lastCreate.IsActive)
 	}
 }
 
-func TestCreate_設置場所ありは非nilで保存(t *testing.T) {
+func TestCreate_地域は非nilのlocalityで保存(t *testing.T) {
 	repo := deviceOwnerRepo()
 	repo.createResult = repository.Device{ID: 11, UserID: 7}
 	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
-	w := formRequest(r, http.MethodPost, "/devices", validDeviceVals()) // location=第1ハウス
+	w := formRequest(r, http.MethodPost, "/devices", validDeviceVals()) // locality=国頭村
 	if w.Code != http.StatusSeeOther {
 		t.Fatalf("status=%d, want 303", w.Code)
 	}
-	if repo.lastCreate.Location == nil || *repo.lastCreate.Location != "第1ハウス" {
-		t.Errorf("Location=%v, want &\"第1ハウス\"", repo.lastCreate.Location)
+	if repo.lastCreate.Locality == nil || *repo.lastCreate.Locality != "国頭村" {
+		t.Errorf("Locality=%v, want &\"国頭村\"", repo.lastCreate.Locality)
 	}
-	if repo.lastCreate.IsActive != true {
-		t.Errorf("IsActive=%v, want true (is_active=1)", repo.lastCreate.IsActive)
+	if repo.lastCreate.Location != nil {
+		t.Errorf("Location=%v, want nil (新規は旧 location 不使用)", repo.lastCreate.Location)
 	}
 }
 
@@ -408,19 +423,39 @@ func TestCreate_デバイス名255超は200でエラー(t *testing.T) {
 	}
 }
 
-func TestCreate_設置場所255超は200でエラー(t *testing.T) {
+func TestCreate_地域未選択はnil_localityで保存(t *testing.T) {
+	repo := deviceOwnerRepo()
+	repo.createResult = repository.Device{ID: 12, UserID: 7}
+	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	vals := validDeviceVals()
+	vals.Set("locality", "") // 未選択 (任意項目)
+	w := formRequest(r, http.MethodPost, "/devices", vals)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d, want 303 (未選択も成功)", w.Code)
+	}
+	if repo.lastCreate.Locality != nil {
+		t.Errorf("Locality=%v, want nil (未選択は未設定)", repo.lastCreate.Locality)
+	}
+}
+
+func TestCreate_不正な地域は200で作成せずエラー(t *testing.T) {
 	repo := deviceOwnerRepo()
 	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	vals := validDeviceVals()
-	vals.Set("location", strings.Repeat("a", 256))
+	vals.Set("locality", "東京都") // 53地域に無い値
 	w := formRequest(r, http.MethodPost, "/devices", vals)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("status=%d, want 200", w.Code)
+		t.Fatalf("status=%d, want 200 (再描画)", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "設置場所は255文字以内で入力してください") {
-		t.Error("location 上限超過エラーが表示されていない")
+	if repo.createCalled {
+		t.Error("不正な地域で CreateDevice を呼んではいけない")
+	}
+	if !strings.Contains(w.Body.String(), localityInvalidMessage) {
+		t.Error("地域不正エラーが表示されていない")
 	}
 }
 
@@ -552,18 +587,20 @@ func TestUpdate_正常時は更新して303(t *testing.T) {
 	if repo.lastUpdate.MacAddress != "AA:BB:CC:DD:EE:99" {
 		t.Errorf("MacAddress=%q, want 正規化 AA:BB:CC:DD:EE:99", repo.lastUpdate.MacAddress)
 	}
+	if repo.lastUpdate.Locality == nil || *repo.lastUpdate.Locality != "国頭村" {
+		t.Errorf("Locality=%v, want &\"国頭村\" (フォームの地域)", repo.lastUpdate.Locality)
+	}
 }
 
-// TestUpdate_設置場所未入力時はnilで更新する は、空 location が「未設定」(nil) として
-// 保存される R2 AC3 の契約を固定する (locationPtr("")→nil)。Create 側 (空→nil) と対称。
-// location は常時送信される通常入力で disabled ではないため、空=ユーザーの明示クリアであり、
-// 移植知見 §12.3 (disabled→未送信→null 上書き) は当てはまらない。その誤適用を防ぐ characterization。
-func TestUpdate_設置場所未入力時はnilで更新する(t *testing.T) {
+// TestUpdate_既存locationを保全しlocalityを更新する は、フォームから廃止された旧 location 列を
+// 編集で破壊せず既存値を保全し (非破壊・R7)、所在地は locality として更新する契約を固定する。
+func TestUpdate_既存locationを保全しlocalityを更新する(t *testing.T) {
 	repo := ownedDevice1Repo() // 既存 device1 の Location は "旧場所"
 	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	vals := validDeviceVals()
-	vals.Set("location", "") // 空送信 = 未設定 (明示クリア)
+	vals.Set("mac_address", "aa:bb:cc:dd:ee:99") // 重複なし
+	vals.Set("locality", "佐敷町")                  // 別地域へ更新
 	w := formRequest(r, http.MethodPut, "/devices/1", vals)
 
 	if w.Code != http.StatusSeeOther {
@@ -572,8 +609,11 @@ func TestUpdate_設置場所未入力時はnilで更新する(t *testing.T) {
 	if !repo.updateCalled {
 		t.Fatal("UpdateDevice が呼ばれていない")
 	}
-	if repo.lastUpdate.Location != nil {
-		t.Errorf("Location=%v, want nil (空 location は未設定・R2 AC3)", repo.lastUpdate.Location)
+	if repo.lastUpdate.Location == nil || *repo.lastUpdate.Location != "旧場所" {
+		t.Errorf("Location=%v, want 既存値保全 \"旧場所\" (location は編集対象外・非破壊)", repo.lastUpdate.Location)
+	}
+	if repo.lastUpdate.Locality == nil || *repo.lastUpdate.Locality != "佐敷町" {
+		t.Errorf("Locality=%v, want &\"佐敷町\"", repo.lastUpdate.Locality)
 	}
 }
 
@@ -758,10 +798,10 @@ func TestValidation_複数項目同時エラーが各項目に同時表示され
 	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	vals := url.Values{
-		"name":        {""},     // 必須エラー
-		"mac_address": {""},     // 必須エラー
-		"location":    {"残す場所"}, // 有効 → 復元される
-		"is_active":   {""},     // 必須エラー
+		"name":        {""},    // 必須エラー
+		"mac_address": {""},    // 必須エラー
+		"locality":    {"国頭村"}, // 有効 → 選択復元される
+		"is_active":   {""},    // 必須エラー
 	}
 	w := formRequest(r, http.MethodPost, "/devices", vals)
 
@@ -781,8 +821,34 @@ func TestValidation_複数項目同時エラーが各項目に同時表示され
 			t.Errorf("複数項目同時エラーで %q が表示されていない", msg)
 		}
 	}
-	if !strings.Contains(body, `value="残す場所"`) {
-		t.Error("有効だった location の入力値が復元されていない (R5.5)")
+	if !strings.Contains(body, `<option value="国頭村" selected>国頭村</option>`) {
+		t.Error("有効だった地域の選択が復元されていない (R5.5)")
+	}
+}
+
+// R5.2: 所在地 (procedural 検証) と他項目が同時に不備のとき、両方のエラーが同時表示される
+// (地域検証が early-return せず累積されることを固定する)。
+func TestValidation_地域不正と他項目不備が同時表示される(t *testing.T) {
+	repo := deviceOwnerRepo()
+	r := newDeviceRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	vals := validDeviceVals()
+	vals.Set("name", "")            // 必須エラー (binding)
+	vals.Set("locality", "存在しない地域") // 地域エラー (procedural)
+	w := formRequest(r, http.MethodPost, "/devices", vals)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (再描画)", w.Code)
+	}
+	if repo.createCalled {
+		t.Error("検証失敗で CreateDevice を呼んではいけない")
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "デバイス名を入力してください") {
+		t.Error("name 必須エラーが表示されていない")
+	}
+	if !strings.Contains(body, localityInvalidMessage) {
+		t.Error("地域不正エラーが同時表示されていない (累積されていない)")
 	}
 }
 

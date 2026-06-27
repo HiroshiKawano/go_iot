@@ -15,7 +15,7 @@ func baseDeviceShowView() DeviceShowView {
 		Info: component.DeviceInfoView{
 			Name:         "ハウスA温湿度計",
 			MacAddress:   "AA:BB:CC:DD:EE:01",
-			Location:     "ビニールハウスA",
+			Location:     "佐敷（南城市）", // 所在地は構造化 locality の認識名
 			StatusActive: true,
 			LastCommText: "2026-04-20 14:30:00",
 			EditURL:      "/devices/1/edit",

@@ -53,7 +53,7 @@ func validComm() pgtype.Timestamptz {
 func TestDashboard_認証済みでデバイスとアラートを描画(t *testing.T) {
 	repo := authedDashboardRepo()
 	repo.devices = []repository.Device{
-		{ID: 1, UserID: 7, Name: "ハウスA温湿度計", Location: strPtr("ビニールハウスA"), IsActive: true, LastCommunicatedAt: validComm()},
+		{ID: 1, UserID: 7, Name: "ハウスA温湿度計", Locality: strPtr("佐敷町"), IsActive: true, LastCommunicatedAt: validComm()},
 	}
 	repo.readings = map[int64]repository.SensorReading{1: validReading(1)}
 	repo.alerts = []repository.ListUnnotifiedAlertHistoriesWithDeviceRow{
@@ -66,10 +66,11 @@ func TestDashboard_認証済みでデバイスとアラートを描画(t *testin
 	}
 	body := w.Body.String()
 	for _, want := range []string{
-		"ハウスA温湿度計", // デバイス名
-		"● 稼働中",    // 稼働状態
-		"28.50℃",   // 温度
-		"65.30%",   // 湿度
+		"ハウスA温湿度計",     // デバイス名
+		"場所: 佐敷（南城市）", // 所在地を認識名で表示 (R6.2)
+		"● 稼働中",        // 稼働状態
+		"28.50℃",       // 温度
+		"65.30%",       // 湿度
 		"ハウスA温湿度計: 温度が35℃を超えました（38.50℃）", // アラート文言
 		`id="device-grid"`,
 		`id="unhandled-alert-banner"`,

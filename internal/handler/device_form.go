@@ -17,8 +17,8 @@ import (
 // ここでは必須・文字数・ステータスの許容値のみをタグで担保する。
 type deviceForm struct {
 	Name       string `form:"name"        binding:"required,max=255"`
-	MacAddress string `form:"mac_address" binding:"required"` // 形式/正規化/一意は handler で
-	Location   string `form:"location"    binding:"max=255"`
+	MacAddress string `form:"mac_address" binding:"required"`           // 形式/正規化/一意は handler で
+	Locality   string `form:"locality"`                                 // 沖縄の地域 (domain.Locality)。存在検証は handler で procedural に行う
 	IsActive   string `form:"is_active"   binding:"required,oneof=1 0"` // "1"=稼働中 / "0"=停止中
 }
 
@@ -39,9 +39,9 @@ func isValidMacFormat(s string) bool {
 	return macFormat.MatchString(s)
 }
 
-// locationPtr は設置場所の入力値を保存用の *string へ変換する。
-// 空文字は「未設定」とみなして nil を返す (R2 AC3)。
-func locationPtr(s string) *string {
+// nullableStr は任意入力文字列を保存用の *string へ変換する。
+// 空文字は「未設定」とみなして nil を返す (設置場所=地域などの nullable カラム用)。
+func nullableStr(s string) *string {
 	if s == "" {
 		return nil
 	}
@@ -62,8 +62,8 @@ func deviceFieldKey(structField string) string {
 		return "name"
 	case "MacAddress":
 		return "mac_address"
-	case "Location":
-		return "location"
+	case "Locality":
+		return "locality"
 	case "IsActive":
 		return "is_active"
 	default:
@@ -87,11 +87,6 @@ func deviceValidationMessage(field, tag string) string {
 		switch tag {
 		case "required":
 			return "MACアドレスを入力してください"
-		}
-	case "location":
-		switch tag {
-		case "max":
-			return "設置場所は255文字以内で入力してください"
 		}
 	case "is_active":
 		switch tag {

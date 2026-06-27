@@ -264,6 +264,33 @@ func TestShow_未通信と未設定のフォールバック表示(t *testing.T) 
 	}
 }
 
+func TestShow_情報パネルに認識名の所在地を表示(t *testing.T) {
+	repo := deviceOwnerRepo()
+	repo.devices = map[int64]repository.Device{
+		1: {
+			ID: 1, UserID: 7, Name: "ハウスA温湿度計", MacAddress: "AA:BB:CC:DD:EE:01",
+			Location: strPtr("旧自由入力ハウスA"), // 移行元として残置・表示しない
+			Locality: strPtr("佐敷町"),          // 表示は構造化 locality を認識名で
+			IsActive: true,
+		},
+	}
+	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
+
+	w := getPath(r, "/devices/1")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	// 所在地は認識名 (合併=「旧町村（現市町村）」) で表示する (R6.1)
+	if !strings.Contains(body, "佐敷（南城市）") {
+		t.Errorf("情報パネルに認識名の所在地「佐敷（南城市）」が表示されていない:\n%s", body)
+	}
+	// 自由入力 location は表示に使わない (locality へ切替済)
+	if strings.Contains(body, "旧自由入力ハウスA") {
+		t.Errorf("自由入力 location が情報パネルに表示されている (locality へ切替のはず):\n%s", body)
+	}
+}
+
 func TestShow_period7dは生データ折れ線と7dアクティブ(t *testing.T) {
 	repo := showDeviceRepo()
 	// 7d は 24h と同じ生データ折れ線。複数日のため X ラベルは "M/D HH:MM" (日付併記)。

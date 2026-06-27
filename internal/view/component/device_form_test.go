@@ -14,9 +14,14 @@ func baseDeviceFormView() DeviceFormView {
 		CancelURL:  "/dashboard",
 		Name:       "温室センサー",
 		MacAddress: "AA:BB:CC:DD:EE:FF",
-		Location:   "第1ハウス",
-		IsActive:   "1",
-		Errors:     map[string]string{},
+		Locality:   "佐敷町",
+		Localities: []SelectOption{
+			{Value: "那覇市", Label: "那覇市", Selected: false},
+			{Value: "佐敷町", Label: "佐敷（南城市）", Selected: true},
+			{Value: "国頭村", Label: "国頭村", Selected: false},
+		},
+		IsActive: "1",
+		Errors:   map[string]string{},
 	}
 }
 
@@ -35,8 +40,10 @@ func TestDeviceForm_共通要素とCSRFと入力値復元(t *testing.T) {
 	assertContains(t, html, `value="温室センサー"`)
 	assertContains(t, html, `name="mac_address"`)
 	assertContains(t, html, `value="AA:BB:CC:DD:EE:FF"`)
-	assertContains(t, html, `name="location"`)
-	assertContains(t, html, `value="第1ハウス"`)
+	// 設置場所は単一の検索可能 地域 select。保存値が認識名 option で選択復元される。
+	assertContains(t, html, `name="locality"`)
+	assertContains(t, html, `js-tom-select`)
+	assertContains(t, html, `<option value="佐敷町" selected>佐敷（南城市）</option>`)
 	// MAC 補助表示
 	assertContains(t, html, "形式: XX:XX:XX:XX:XX:XX")
 	// キャンセル導線
@@ -99,7 +106,7 @@ func TestDeviceForm_項目別エラーをそれぞれ描画(t *testing.T) {
 	v.Errors = map[string]string{
 		"name":        "デバイス名を入力してください",
 		"mac_address": "MACアドレスを入力してください",
-		"location":    "設置場所は255文字以内で入力してください",
+		"locality":    "選択した地域が不正です",
 		"is_active":   "ステータスが不正です",
 	}
 	html := render(t, DeviceForm(v))
@@ -107,6 +114,6 @@ func TestDeviceForm_項目別エラーをそれぞれ描画(t *testing.T) {
 	assertContains(t, html, "error-message")
 	assertContains(t, html, "デバイス名を入力してください")
 	assertContains(t, html, "MACアドレスを入力してください")
-	assertContains(t, html, "設置場所は255文字以内で入力してください")
+	assertContains(t, html, "選択した地域が不正です")
 	assertContains(t, html, "ステータスが不正です")
 }

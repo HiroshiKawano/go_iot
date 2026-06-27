@@ -12,6 +12,7 @@ import (
 
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/authz"
+	"github.com/HiroshiKawano/go_iot/internal/domain"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/view"
 	"github.com/HiroshiKawano/go_iot/internal/view/component"
@@ -28,6 +29,8 @@ const (
 	// MAC の handler 内検証メッセージ (binding では表現できない形式/一意のため)。
 	macFormatMessage    = "MACアドレスは XX:XX:XX:XX:XX:XX 形式で入力してください"
 	macDuplicateMessage = "このMACアドレスは既に登録されています"
+	// 地域 select の手続き検証メッセージ (選択肢に無い値が送られた場合)。
+	localityInvalidMessage = "選択した地域が不正です"
 )
 
 // DeviceRepo はデバイス登録・編集・詳細・削除ハンドラが必要とする最小の DB ポート。
@@ -75,22 +78,25 @@ func (h *DeviceHandler) Create(c *gin.Context) {
 	uid := auth.UserID(c)
 
 	var form deviceForm
-	if err := c.ShouldBind(&form); err != nil {
-		h.reRenderCreate(c, form, toDeviceFieldErrors(err))
-		return
+	bindErr := c.ShouldBind(&form)
+
+	// 検証は early-return せず errs へ累積し、全項目評価後に再描画する (R5.2 同時表示)。
+	errs := map[string]string{}
+	if bindErr != nil {
+		errs = toDeviceFieldErrors(bindErr)
 	}
 
 	mac := normalizeMac(form.MacAddress)
-	if !isValidMacFormat(mac) {
-		h.reRenderCreate(c, form, map[string]string{"mac_address": macFormatMessage})
+	if dbErr := h.checkMacForCreate(ctx, mac, form.MacAddress, errs); dbErr {
+		renderError(c, http.StatusInternalServerError)
 		return
 	}
+	if !validLocalityInput(form.Locality) {
+		errs["locality"] = localityInvalidMessage
+	}
 
-	if _, err := h.Repo.GetDeviceByMacAddress(ctx, mac); err == nil {
-		h.reRenderCreate(c, form, map[string]string{"mac_address": macDuplicateMessage})
-		return
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		renderError(c, http.StatusInternalServerError)
+	if len(errs) > 0 {
+		h.reRenderCreate(c, form, errs)
 		return
 	}
 
@@ -98,7 +104,8 @@ func (h *DeviceHandler) Create(c *gin.Context) {
 		UserID:     uid,
 		Name:       form.Name,
 		MacAddress: mac,
-		Location:   locationPtr(form.Location),
+		Location:   nil, // 新規デバイスは旧自由入力 location を持たない (所在地は locality)
+		Locality:   nullableStr(form.Locality),
 		IsActive:   parseIsActive(form.IsActive),
 	})
 	if err != nil {
@@ -106,6 +113,25 @@ func (h *DeviceHandler) Create(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/devices/"+strconv.FormatInt(device.ID, 10))
+}
+
+// checkMacForCreate は MAC の形式・一意 (削除以外の全デバイス) を検査し、不備を errs に積む。
+// DB 想定外エラー (ErrNoRows 以外) のときだけ true を返し、呼び出し側で 500 にする。
+// MAC 必須は binding で担保済みのため、未入力時は形式・一意検査をスキップする。
+func (h *DeviceHandler) checkMacForCreate(ctx context.Context, mac, raw string, errs map[string]string) (dbError bool) {
+	if raw == "" {
+		return false
+	}
+	if !isValidMacFormat(mac) {
+		errs["mac_address"] = macFormatMessage
+		return false
+	}
+	if _, err := h.Repo.GetDeviceByMacAddress(ctx, mac); err == nil {
+		errs["mac_address"] = macDuplicateMessage
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return true
+	}
+	return false
 }
 
 // ShowEditForm は本人所有デバイスの編集フォームを既存値入りで表示する
@@ -136,7 +162,7 @@ func (h *DeviceHandler) ShowEditForm(c *gin.Context) {
 	form := deviceForm{
 		Name:       device.Name,
 		MacAddress: device.MacAddress,
-		Location:   deviceLocation(device),
+		Locality:   deviceLocalityValue(device),
 		IsActive:   radioFromIsActive(device.IsActive),
 	}
 	v := buildEditView(csrf.Token(c.Request), user.Name, id, device.Name, form, map[string]string{})
@@ -163,25 +189,25 @@ func (h *DeviceHandler) Update(c *gin.Context) {
 	}
 
 	var form deviceForm
-	if err := c.ShouldBind(&form); err != nil {
-		h.reRenderEdit(c, id, device.Name, form, toDeviceFieldErrors(err))
-		return
+	bindErr := c.ShouldBind(&form)
+
+	// 検証は early-return せず errs へ累積し、全項目評価後に再描画する (R5.2 同時表示)。
+	errs := map[string]string{}
+	if bindErr != nil {
+		errs = toDeviceFieldErrors(bindErr)
 	}
 
 	mac := normalizeMac(form.MacAddress)
-	if !isValidMacFormat(mac) {
-		h.reRenderEdit(c, id, device.Name, form, map[string]string{"mac_address": macFormatMessage})
+	if dbErr := h.checkMacForUpdate(ctx, id, mac, form.MacAddress, errs); dbErr {
+		renderError(c, http.StatusInternalServerError)
 		return
 	}
+	if !validLocalityInput(form.Locality) {
+		errs["locality"] = localityInvalidMessage
+	}
 
-	// 一意検査は自分自身を除外 (existing.ID != id が重複)。自身の現在値は許可 (R6.6)。
-	if existing, err := h.Repo.GetDeviceByMacAddress(ctx, mac); err == nil {
-		if existing.ID != id {
-			h.reRenderEdit(c, id, device.Name, form, map[string]string{"mac_address": macDuplicateMessage})
-			return
-		}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		renderError(c, http.StatusInternalServerError)
+	if len(errs) > 0 {
+		h.reRenderEdit(c, id, device.Name, form, errs)
 		return
 	}
 
@@ -189,7 +215,8 @@ func (h *DeviceHandler) Update(c *gin.Context) {
 		ID:         id,
 		Name:       form.Name,
 		MacAddress: mac,
-		Location:   locationPtr(form.Location),
+		Location:   device.Location, // 旧自由入力 location は編集対象外。既存値を保全 (非破壊)
+		Locality:   nullableStr(form.Locality),
 		IsActive:   parseIsActive(form.IsActive),
 	})
 	if err != nil {
@@ -197,6 +224,26 @@ func (h *DeviceHandler) Update(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/devices/"+strconv.FormatInt(updated.ID, 10))
+}
+
+// checkMacForUpdate は MAC の形式・一意 (自己除外・自身の現在値は許可) を検査し、不備を errs に積む。
+// DB 想定外エラーのときだけ true を返し、呼び出し側で 500 にする。
+func (h *DeviceHandler) checkMacForUpdate(ctx context.Context, id int64, mac, raw string, errs map[string]string) (dbError bool) {
+	if raw == "" {
+		return false
+	}
+	if !isValidMacFormat(mac) {
+		errs["mac_address"] = macFormatMessage
+		return false
+	}
+	if existing, err := h.Repo.GetDeviceByMacAddress(ctx, mac); err == nil {
+		if existing.ID != id {
+			errs["mac_address"] = macDuplicateMessage
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return true
+	}
+	return false
 }
 
 // reRenderCreate は登録フォームを 200 で再描画する (入力値復元 + 項目別エラー)。
@@ -239,7 +286,8 @@ func buildCreateView(token, userName string, form deviceForm, errs map[string]st
 			CancelURL:  "/dashboard",
 			Name:       form.Name,
 			MacAddress: form.MacAddress,
-			Location:   form.Location,
+			Locality:   form.Locality,
+			Localities: localityOptions(form.Locality),
 			IsActive:   form.IsActive,
 			Errors:     errs,
 		},
@@ -265,7 +313,8 @@ func buildEditView(token, userName string, id int64, deviceName string, form dev
 			CancelURL:  path,
 			Name:       form.Name,
 			MacAddress: form.MacAddress,
-			Location:   form.Location,
+			Locality:   form.Locality,
+			Localities: localityOptions(form.Locality),
 			IsActive:   form.IsActive,
 			Errors:     errs,
 		},
@@ -292,4 +341,34 @@ func radioFromIsActive(b bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+// validLocalityInput は地域 select の送信値が許容されるかを判定する。
+// 未選択 (空) は任意項目ゆえ許可。非空は domain.Locality の定義値 (53) のみ許可する。
+func validLocalityInput(s string) bool {
+	return s == "" || domain.Locality(s).Valid()
+}
+
+// deviceLocalityValue はデバイスの地域キー (*string) を復元用の文字列へ変換する (未設定は "")。
+func deviceLocalityValue(d repository.Device) string {
+	if d.Locality != nil {
+		return *d.Locality
+	}
+	return ""
+}
+
+// localityOptions は地域 select の選択肢 (沖縄53地域) を組み立てる。
+// Label は認識名 (合併=「旧町村（現市町村）」/未合併=市町村名)、Selected は現在値との一致。
+// view が domain を直接 range せず handler が SelectOption を組むことで選択値復元を一貫させる。
+func localityOptions(selected string) []component.SelectOption {
+	all := domain.AllLocalities()
+	opts := make([]component.SelectOption, 0, len(all))
+	for _, l := range all {
+		opts = append(opts, component.SelectOption{
+			Value:    string(l),
+			Label:    l.Label(),
+			Selected: string(l) == selected,
+		})
+	}
+	return opts
 }

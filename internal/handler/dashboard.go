@@ -129,7 +129,7 @@ func buildDashboardDevice(d repository.Device, reading *repository.SensorReading
 	return component.DashboardDevice{
 		ID:           d.ID,
 		Name:         d.Name,
-		Location:     deviceLocation(d),
+		Location:     deviceLocalityLabel(d),
 		IsActive:     d.IsActive,
 		TempText:     tempText,
 		HumidityText: humidityText,
@@ -152,12 +152,19 @@ func lastCommText(d repository.Device, now time.Time) string {
 	return timefmt.RelativeJP(pgconv.TimestamptzToTime(d.LastCommunicatedAt), now)
 }
 
-// deviceLocation は設置場所 (*string) を表示用文字列へ変換する (未設定 nil は "")。
-func deviceLocation(d repository.Device) string {
-	if d.Location == nil {
+// deviceLocalityLabel は構造化所在地 (locality) を表示用の認識名 (Locality.Label()) へ整形する。
+// 認識名は合併地域=「旧町村（現市町村）」/未合併=市町村名 (domain.Locality.Label())。
+// 未設定 (nil/空) や未知の値は "" を返し、呼び出し側が空表示・既定表記を決める (R6.2/R6.3)。
+// 移行元として残置される自由入力 d.Location は表示に使わない (所在地表示は locality へ切替済)。
+func deviceLocalityLabel(d repository.Device) string {
+	if d.Locality == nil || *d.Locality == "" {
 		return ""
 	}
-	return *d.Location
+	loc := domain.Locality(*d.Locality)
+	if !loc.Valid() {
+		return ""
+	}
+	return loc.Label()
 }
 
 // composeAlertMessage は未対応アラート1件の表示文言を合成する。

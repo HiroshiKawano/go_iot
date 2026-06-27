@@ -114,7 +114,7 @@ func TestDashboardPage_デバイスとアラートをカード描画(t *testing.
 			{
 				ID:           1,
 				Name:         "ハウスA温湿度計",
-				Location:     "ビニールハウスA",
+				Location:     "佐敷（南城市）", // 所在地は構造化 locality の認識名
 				IsActive:     true,
 				TempText:     "28.50℃",
 				HumidityText: "65.30%",

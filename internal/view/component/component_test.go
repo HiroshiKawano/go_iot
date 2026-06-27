@@ -62,7 +62,7 @@ func TestDeviceCard_稼働中デバイスの全要素を描画(t *testing.T) {
 	d := DashboardDevice{
 		ID:           7,
 		Name:         "ハウスA温湿度計",
-		Location:     "ビニールハウスA",
+		Location:     "佐敷（南城市）", // 所在地は構造化 locality の認識名 (handler が整形済)
 		IsActive:     true,
 		TempText:     "28.50℃",
 		HumidityText: "65.30%",
@@ -74,7 +74,7 @@ func TestDeviceCard_稼働中デバイスの全要素を描画(t *testing.T) {
 	assertContains(t, html, "device-card")
 	assertContains(t, html, "ハウスA温湿度計") // 名前
 	assertContains(t, html, "場所:")
-	assertContains(t, html, "ビニールハウスA") // 設置場所
+	assertContains(t, html, "佐敷（南城市）") // 所在地を認識名で表示 (R6.2)
 	assertContains(t, html, "status-active")
 	assertContains(t, html, "● 稼働中")
 	assertContains(t, html, "28.50℃") // 温度表示値

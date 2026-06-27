@@ -88,8 +88,9 @@ func TestComposeAlertMessage(t *testing.T) {
 func strPtr(s string) *string { return &s }
 
 // TestBuildDashboardDevice はデバイス行＋最新計測(無い場合あり)＋基準時刻から
-// 表示用デバイスデータへの写像を検証する。温湿度は小数2桁＋単位、未受信は「ー」、
-// 通信実績なしは「通信実績なし」、ありは相対時間。決定的テストのため now を固定注入する。
+// 表示用デバイスデータへの写像を検証する。所在地は構造化 locality を認識名で表示し
+// (R6.2)、温湿度は小数2桁＋単位、未受信は「ー」、通信実績なしは「通信実績なし」、
+// ありは相対時間。決定的テストのため now を固定注入する。
 func TestBuildDashboardDevice(t *testing.T) {
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 	reading := &repository.SensorReading{
@@ -104,11 +105,11 @@ func TestBuildDashboardDevice(t *testing.T) {
 		want    component.DashboardDevice
 	}{
 		{
-			name: "計測あり・通信実績あり・稼働中",
+			name: "合併地域は認識名「旧町村（現市町村）」・計測あり・稼働中",
 			device: repository.Device{
 				ID:                 1,
 				Name:               "ハウスA温湿度計",
-				Location:           strPtr("ビニールハウスA"),
+				Locality:           strPtr("佐敷町"),
 				IsActive:           true,
 				LastCommunicatedAt: pgconv.Timestamptz(now.Add(-2 * time.Minute)),
 			},
@@ -116,7 +117,7 @@ func TestBuildDashboardDevice(t *testing.T) {
 			want: component.DashboardDevice{
 				ID:           1,
 				Name:         "ハウスA温湿度計",
-				Location:     "ビニールハウスA",
+				Location:     "佐敷（南城市）",
 				IsActive:     true,
 				TempText:     "28.50℃",
 				HumidityText: "65.30%",
@@ -124,11 +125,11 @@ func TestBuildDashboardDevice(t *testing.T) {
 			},
 		},
 		{
-			name: "計測未受信は温湿度とも「ー」",
+			name: "未合併は市町村名・計測未受信は温湿度とも「ー」",
 			device: repository.Device{
 				ID:                 2,
 				Name:               "計測待ちデバイス",
-				Location:           strPtr("ハウスC"),
+				Locality:           strPtr("名護市"),
 				IsActive:           true,
 				LastCommunicatedAt: pgconv.Timestamptz(now.Add(-3 * time.Hour)),
 			},
@@ -136,7 +137,7 @@ func TestBuildDashboardDevice(t *testing.T) {
 			want: component.DashboardDevice{
 				ID:           2,
 				Name:         "計測待ちデバイス",
-				Location:     "ハウスC",
+				Location:     "名護市",
 				IsActive:     true,
 				TempText:     "ー",
 				HumidityText: "ー",
@@ -144,11 +145,11 @@ func TestBuildDashboardDevice(t *testing.T) {
 			},
 		},
 		{
-			name: "通信実績なし(Valid=false)は「通信実績なし」",
+			name: "同名異所は現市町村併記・通信実績なし(Valid=false)は「通信実績なし」",
 			device: repository.Device{
 				ID:                 3,
 				Name:               "未通信デバイス",
-				Location:           strPtr("ハウスD"),
+				Locality:           strPtr("具志川市"),
 				IsActive:           false,
 				LastCommunicatedAt: pgtype.Timestamptz{}, // Valid=false
 			},
@@ -156,7 +157,7 @@ func TestBuildDashboardDevice(t *testing.T) {
 			want: component.DashboardDevice{
 				ID:           3,
 				Name:         "未通信デバイス",
-				Location:     "ハウスD",
+				Location:     "具志川（うるま市）",
 				IsActive:     false, // 停止中
 				TempText:     "28.50℃",
 				HumidityText: "65.30%",
@@ -164,11 +165,12 @@ func TestBuildDashboardDevice(t *testing.T) {
 			},
 		},
 		{
-			name: "設置場所未設定(nil)は空文字",
+			name: "所在地未設定(nil)は空文字（自由入力location残置でも表示しない）",
 			device: repository.Device{
 				ID:                 4,
 				Name:               "場所なしデバイス",
-				Location:           nil,
+				Location:           strPtr("旧自由入力ハウスD"), // 移行元として残置・表示しない
+				Locality:           nil,
 				IsActive:           true,
 				LastCommunicatedAt: pgtype.Timestamptz{},
 			},
@@ -176,6 +178,26 @@ func TestBuildDashboardDevice(t *testing.T) {
 			want: component.DashboardDevice{
 				ID:           4,
 				Name:         "場所なしデバイス",
+				Location:     "",
+				IsActive:     true,
+				TempText:     "ー",
+				HumidityText: "ー",
+				LastCommText: "通信実績なし",
+			},
+		},
+		{
+			name: "未知のlocality値は空文字（防御的）",
+			device: repository.Device{
+				ID:                 5,
+				Name:               "未知地域デバイス",
+				Locality:           strPtr("存在しない地域"),
+				IsActive:           true,
+				LastCommunicatedAt: pgtype.Timestamptz{},
+			},
+			reading: nil,
+			want: component.DashboardDevice{
+				ID:           5,
+				Name:         "未知地域デバイス",
 				Location:     "",
 				IsActive:     true,
 				TempText:     "ー",

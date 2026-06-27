@@ -69,19 +69,19 @@ func TestNormalizeThenValidate(t *testing.T) {
 	}
 }
 
-func TestLocationPtr(t *testing.T) {
+func TestNullableStr(t *testing.T) {
 	t.Run("空文字はnil(未設定)", func(t *testing.T) {
-		if got := locationPtr(""); got != nil {
-			t.Errorf("locationPtr(\"\") = %v, want nil", got)
+		if got := nullableStr(""); got != nil {
+			t.Errorf("nullableStr(\"\") = %v, want nil", got)
 		}
 	})
 	t.Run("値があれば非nilで同値を指す", func(t *testing.T) {
-		got := locationPtr("第1ハウス")
+		got := nullableStr("佐敷町")
 		if got == nil {
-			t.Fatal("locationPtr(\"第1ハウス\") = nil, want 非nil")
+			t.Fatal("nullableStr(\"佐敷町\") = nil, want 非nil")
 		}
-		if *got != "第1ハウス" {
-			t.Errorf("*locationPtr = %q, want %q", *got, "第1ハウス")
+		if *got != "佐敷町" {
+			t.Errorf("*nullableStr = %q, want %q", *got, "佐敷町")
 		}
 	})
 }
@@ -110,7 +110,7 @@ func validDeviceForm(mut func(*deviceForm)) deviceForm {
 	f := deviceForm{
 		Name:       "温室センサー",
 		MacAddress: "AA:BB:CC:DD:EE:FF",
-		Location:   "第1ハウス",
+		Locality:   "国頭村",
 		IsActive:   "1",
 	}
 	if mut != nil {
@@ -147,7 +147,6 @@ func TestToDeviceFieldErrors_各タグが対応する日本語になる(t *testi
 		{"name 空は必須", func(f *deviceForm) { f.Name = "" }, "name", "デバイス名を入力してください"},
 		{"name 256文字は上限超過", func(f *deviceForm) { f.Name = long }, "name", "デバイス名は255文字以内で入力してください"},
 		{"mac_address 空は必須", func(f *deviceForm) { f.MacAddress = "" }, "mac_address", "MACアドレスを入力してください"},
-		{"location 256文字は上限超過", func(f *deviceForm) { f.Location = long }, "location", "設置場所は255文字以内で入力してください"},
 		{"is_active 空は必須", func(f *deviceForm) { f.IsActive = "" }, "is_active", "ステータスを選択してください"},
 		{"is_active 範囲外はoneof", func(f *deviceForm) { f.IsActive = "2" }, "is_active", "ステータスが不正です"},
 	}
@@ -213,7 +212,6 @@ func TestDeviceValidationMessage(t *testing.T) {
 		{"name", "required", "デバイス名を入力してください"},
 		{"name", "max", "デバイス名は255文字以内で入力してください"},
 		{"mac_address", "required", "MACアドレスを入力してください"},
-		{"location", "max", "設置場所は255文字以内で入力してください"},
 		{"is_active", "required", "ステータスを選択してください"},
 		{"is_active", "oneof", "ステータスが不正です"},
 		{"name", "unknown_tag", "入力内容を確認してください"}, // フォールバック
@@ -231,7 +229,7 @@ func TestDeviceFieldKey(t *testing.T) {
 	}{
 		{"Name", "name"},
 		{"MacAddress", "mac_address"},
-		{"Location", "location"},
+		{"Locality", "locality"},
 		{"IsActive", "is_active"},
 		{"Unknown", "unknown"}, // フォールバック: 未知フィールドは小文字化
 	}

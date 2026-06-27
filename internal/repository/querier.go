@@ -35,6 +35,8 @@ type Querier interface {
 	// device_id が NULL の場合は全デバイス対象
 	ListAlertHistoriesPaginated(ctx context.Context, arg ListAlertHistoriesPaginatedParams) ([]ListAlertHistoriesPaginatedRow, error)
 	ListAlertRulesByDevice(ctx context.Context, deviceID int64) ([]AlertRule, error)
+	// 全ユーザー横断で有効なデバイスを列挙する (所在地 backfill 専用)。
+	ListAllDevices(ctx context.Context) ([]Device, error)
 	// 3日/7日/30日グラフ用: 日別の平均/最大/最小を集計 (24h以外の複数日はこの集計経路)
 	ListDailySensorAggregates(ctx context.Context, arg ListDailySensorAggregatesParams) ([]ListDailySensorAggregatesRow, error)
 	ListDeviceTokensByUser(ctx context.Context, userID int64) ([]ListDeviceTokensByUserRow, error)
@@ -59,6 +61,8 @@ type Querier interface {
 	UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (AlertRule, error)
 	UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error)
 	UpdateDeviceLastCommunicated(ctx context.Context, id int64) error
+	// locality 列のみを更新する (backfill 用・他フィールドと location は不変)。
+	UpdateDeviceLocality(ctx context.Context, arg UpdateDeviceLocalityParams) error
 	UpdateDeviceTokenLastUsed(ctx context.Context, id int64) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 }

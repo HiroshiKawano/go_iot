@@ -43,9 +43,12 @@ func baseEditView() DeviceFormView {
 			CancelURL:  "/devices/1",
 			Name:       "ハウスA温湿度計",
 			MacAddress: "AA:BB:CC:DD:EE:01",
-			Location:   "ビニールハウスA",
-			IsActive:   "1",
-			Errors:     map[string]string{},
+			Locality:   "佐敷町",
+			Localities: []component.SelectOption{
+				{Value: "佐敷町", Label: "佐敷（南城市）", Selected: true},
+			},
+			IsActive: "1",
+			Errors:   map[string]string{},
 		},
 	}
 }

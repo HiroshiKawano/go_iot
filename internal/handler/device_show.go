@@ -273,12 +273,13 @@ func rawSeries(rows []repository.SensorReading, label func(pgtype.Timestamptz) s
 }
 
 // buildDeviceInfoView はデバイス行を情報パネル View へ写像する。
-// 場所未設定は "未設定"、最終通信は絶対表記 ("YYYY-MM-DD HH:MM:SS") / 未通信は "未通信"。
+// 所在地は構造化 locality を認識名で表示し未設定は "未設定"、最終通信は絶対表記
+// ("YYYY-MM-DD HH:MM:SS") / 未通信は "未通信"。
 func buildDeviceInfoView(d repository.Device) component.DeviceInfoView {
 	return component.DeviceInfoView{
 		Name:         d.Name,
 		MacAddress:   d.MacAddress,
-		Location:     deviceLocationOrDefault(d),
+		Location:     deviceLocalityOrUnset(d),
 		StatusActive: d.IsActive,
 		LastCommText: lastCommAbsText(d),
 		EditURL:      "/devices/" + strconv.FormatInt(d.ID, 10) + "/edit",
@@ -298,10 +299,11 @@ func buildLatestReadingsView(deviceID int64, rows []repository.SensorReading) co
 	return component.LatestReadingsView{DeviceID: deviceID, Rows: out}
 }
 
-// deviceLocationOrDefault は設置場所を返し、未設定 (nil/空) は "未設定" とする (R2.6)。
-func deviceLocationOrDefault(d repository.Device) string {
-	if loc := deviceLocation(d); loc != "" {
-		return loc
+// deviceLocalityOrUnset は構造化所在地を認識名 (Locality.Label()) で返し、未設定・未知値は
+// "未設定" とする (R6.1/R6.3・情報パネルの従来表記)。認識名整形は deviceLocalityLabel に委譲。
+func deviceLocalityOrUnset(d repository.Device) string {
+	if label := deviceLocalityLabel(d); label != "" {
+		return label
 	}
 	return "未設定"
 }

@@ -118,6 +118,17 @@ func (f fakeDeviceQuerier) ListDevicesByUser(_ context.Context, userID int64) ([
 	return out, nil
 }
 
+// --- ダッシュボード (dashboard) で AuthHandler が呼ぶ新メソッドの安全スタブ。
+// 埋め込み Querier(nil) のままだと実行時に nil 参照で panic するため明示実装する。
+// 最新計測は未受信 (ErrNoRows → 温湿度「ー」)、未通知アラートは 0 件で返す。
+func (f fakeDeviceQuerier) GetLatestSensorReading(_ context.Context, _ int64) (repository.SensorReading, error) {
+	return repository.SensorReading{}, pgx.ErrNoRows
+}
+
+func (f fakeDeviceQuerier) ListUnnotifiedAlertHistoriesWithDevice(_ context.Context, _ repository.ListUnnotifiedAlertHistoriesWithDeviceParams) ([]repository.ListUnnotifiedAlertHistoriesWithDeviceRow, error) {
+	return nil, nil
+}
+
 // deviceApp は user(id=1) と任意のデバイスを備えた合成ハンドラを返す。
 func deviceApp(devices map[int64]repository.Device, created, updated repository.Device) http.Handler {
 	gin.SetMode(gin.TestMode)

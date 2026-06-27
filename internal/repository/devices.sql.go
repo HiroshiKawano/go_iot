@@ -10,9 +10,9 @@ import (
 )
 
 const createDevice = `-- name: CreateDevice :one
-INSERT INTO devices (user_id, name, mac_address, location, is_active)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at
+INSERT INTO devices (user_id, name, mac_address, location, is_active, locality)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality
 `
 
 type CreateDeviceParams struct {
@@ -21,6 +21,7 @@ type CreateDeviceParams struct {
 	MacAddress string  `json:"mac_address"`
 	Location   *string `json:"location"`
 	IsActive   bool    `json:"is_active"`
+	Locality   *string `json:"locality"`
 }
 
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error) {
@@ -30,6 +31,7 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 		arg.MacAddress,
 		arg.Location,
 		arg.IsActive,
+		arg.Locality,
 	)
 	var i Device
 	err := row.Scan(
@@ -43,12 +45,13 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Locality,
 	)
 	return i, err
 }
 
 const getDevice = `-- name: GetDevice :one
-SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at FROM devices
+SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality FROM devices
  WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -66,12 +69,13 @@ func (q *Queries) GetDevice(ctx context.Context, id int64) (Device, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Locality,
 	)
 	return i, err
 }
 
 const getDeviceByMacAddress = `-- name: GetDeviceByMacAddress :one
-SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at FROM devices
+SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality FROM devices
  WHERE mac_address = $1 AND deleted_at IS NULL
 `
 
@@ -89,12 +93,52 @@ func (q *Queries) GetDeviceByMacAddress(ctx context.Context, macAddress string) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Locality,
 	)
 	return i, err
 }
 
+const listAllDevices = `-- name: ListAllDevices :many
+SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality FROM devices
+ WHERE deleted_at IS NULL
+ ORDER BY id
+`
+
+// 全ユーザー横断で有効なデバイスを列挙する (所在地 backfill 専用)。
+func (q *Queries) ListAllDevices(ctx context.Context) ([]Device, error) {
+	rows, err := q.db.Query(ctx, listAllDevices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Device
+	for rows.Next() {
+		var i Device
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.MacAddress,
+			&i.Location,
+			&i.IsActive,
+			&i.LastCommunicatedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Locality,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDevicesByUser = `-- name: ListDevicesByUser :many
-SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at FROM devices
+SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality FROM devices
  WHERE user_id = $1 AND deleted_at IS NULL
  ORDER BY created_at DESC
 `
@@ -119,6 +163,7 @@ func (q *Queries) ListDevicesByUser(ctx context.Context, userID int64) ([]Device
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Locality,
 		); err != nil {
 			return nil, err
 		}
@@ -148,9 +193,10 @@ UPDATE devices
        mac_address = $3,
        location    = $4,
        is_active   = $5,
+       locality    = $6,
        updated_at  = NOW()
  WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at
+RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality
 `
 
 type UpdateDeviceParams struct {
@@ -159,6 +205,7 @@ type UpdateDeviceParams struct {
 	MacAddress string  `json:"mac_address"`
 	Location   *string `json:"location"`
 	IsActive   bool    `json:"is_active"`
+	Locality   *string `json:"locality"`
 }
 
 func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error) {
@@ -168,6 +215,7 @@ func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Dev
 		arg.MacAddress,
 		arg.Location,
 		arg.IsActive,
+		arg.Locality,
 	)
 	var i Device
 	err := row.Scan(
@@ -181,6 +229,7 @@ func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Dev
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Locality,
 	)
 	return i, err
 }
@@ -194,5 +243,23 @@ UPDATE devices
 
 func (q *Queries) UpdateDeviceLastCommunicated(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, updateDeviceLastCommunicated, id)
+	return err
+}
+
+const updateDeviceLocality = `-- name: UpdateDeviceLocality :exec
+UPDATE devices
+   SET locality   = $2,
+       updated_at = NOW()
+ WHERE id = $1 AND deleted_at IS NULL
+`
+
+type UpdateDeviceLocalityParams struct {
+	ID       int64   `json:"id"`
+	Locality *string `json:"locality"`
+}
+
+// locality 列のみを更新する (backfill 用・他フィールドと location は不変)。
+func (q *Queries) UpdateDeviceLocality(ctx context.Context, arg UpdateDeviceLocalityParams) error {
+	_, err := q.db.Exec(ctx, updateDeviceLocality, arg.ID, arg.Locality)
 	return err
 }

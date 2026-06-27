@@ -10,7 +10,7 @@ func baseDeviceInfoView() DeviceInfoView {
 	return DeviceInfoView{
 		Name:         "ハウスA温湿度計",
 		MacAddress:   "AA:BB:CC:DD:EE:01",
-		Location:     "ビニールハウスA",
+		Location:     "佐敷（南城市）", // 所在地は構造化 locality の認識名 (handler が整形済)
 		StatusActive: true,
 		LastCommText: "2026-04-20 14:30:00",
 		EditURL:      "/devices/1/edit",
@@ -31,7 +31,7 @@ func TestDeviceInfoPanel_稼働中の全要素を描画(t *testing.T) {
 	// 各値
 	assertContains(t, html, "ハウスA温湿度計")
 	assertContains(t, html, "AA:BB:CC:DD:EE:01")
-	assertContains(t, html, "ビニールハウスA")
+	assertContains(t, html, "佐敷（南城市）")              // 所在地を認識名で表示 (R6.1)
 	assertContains(t, html, "2026-04-20 14:30:00") // 最終通信 YYYY-MM-DD HH:MM:SS
 
 	// 稼働中の状態記号

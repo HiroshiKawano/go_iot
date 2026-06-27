@@ -11,7 +11,7 @@ package component
 type DashboardDevice struct {
 	ID           int64
 	Name         string
-	Location     string // 未設定は "" (モックは「場所: 」を表示)
+	Location     string // 所在地の認識名 (構造化 locality の Locality.Label())。未設定は "" (モックは「場所: 」を表示)
 	IsActive     bool
 	TempText     string // "28.50℃" or "ー"
 	HumidityText string // "65.30%" or "ー"
@@ -26,12 +26,13 @@ type DashboardAlert struct {
 
 // DeviceInfoView はデバイス詳細の情報パネル (DeviceInfoPanel) の表示データ。
 // すべて整形済み primitive で保持し、pgtype/repository 型を持ち込まない (view 純粋性)。
-// Location 未設定は "未設定"、LastCommText は最終通信を "YYYY-MM-DD HH:MM:SS"、
-// 一度も通信が無い場合は "未通信" を handler 側で整形して渡す。
+// Location は所在地の認識名 (構造化 locality の Locality.Label())・未設定は "未設定"、
+// LastCommText は最終通信を "YYYY-MM-DD HH:MM:SS"、一度も通信が無い場合は "未通信" を
+// handler 側で整形して渡す。
 type DeviceInfoView struct {
 	Name         string // デバイス名
 	MacAddress   string // MAC アドレス
-	Location     string // 設置場所 (未設定は "未設定")
+	Location     string // 所在地の認識名 (構造化 locality の Locality.Label()。未設定は "未設定")
 	StatusActive bool   // true=● 稼働中 / false=○ 停止中
 	LastCommText string // "2026-04-20 14:30:00" or "未通信"
 	EditURL      string // 編集画面 URL "/devices/{id}/edit" (S4 提供)
@@ -137,11 +138,24 @@ type PaginationView struct {
 	PrevURL, NextURL string // from/to を保持し page を差し替えた相対 URL
 }
 
+// SelectOption は検索可能 select (Tom Select) の選択肢 1 件 (文字列値キー版)。
+// 既存 DeviceOption は ID(int64) キーで地域 (文字列値) に不適合のため別 DTO とする。
+// 地域 select 等で handler が Selected 込みの選択肢を組み、templ は domain を直接 range せず
+// この DTO を描画する (選択値復元の一貫性のため)。
+type SelectOption struct {
+	Value    string // option の value 属性 (例 "佐敷町")
+	Label    string // 表示文言 (例 "佐敷（南城市）")
+	Selected bool   // 現在選択中なら true (selected 属性で復元)
+}
+
 // DeviceFormView は登録/編集で共有するデバイスフォーム (DeviceForm) の描画パラメータ。
 // 認証後レイアウト (layout.AppLayoutData) は持たない —— layout が component を import する
 // ため逆向きの import は循環になる。レイアウトは page 側のラッパ (page.DeviceFormView) が担い、
 // ここはフォーム本体の描画に必要な値だけを保持する。
 // IsActive は radio の選択状態復元用に "1"(稼働中)/"0"(停止中) の文字列で持つ。
+// 設置場所は単一の検索可能 select で沖縄の地域 (domain.Locality・53) から1つ選ぶ
+// (旧来の location 自由入力を置換)。Locality は復元用の選択値、Localities は handler が
+// domain.AllLocalities() から組んだ Selected 込みの選択肢。
 type DeviceFormView struct {
 	CSRFToken  string            // hidden gorilla.csrf.Token 用
 	Action     string            // 送信先 "/devices"(登録) / "/devices/{id}"(編集)
@@ -149,7 +163,8 @@ type DeviceFormView struct {
 	CancelURL  string            // キャンセル先 "/dashboard"(登録) / "/devices/{id}"(編集)
 	Name       string            // 入力値復元
 	MacAddress string            // 入力値復元
-	Location   string            // 入力値復元
+	Locality   string            // 設置場所の選択値 (domain.Locality の値・未設定は "")
+	Localities []SelectOption    // 地域 select の選択肢 (Selected 込み)
 	IsActive   string            // "1"/"0" の radio checked 復元用
 	Errors     map[string]string // field → 日本語メッセージ
 }
