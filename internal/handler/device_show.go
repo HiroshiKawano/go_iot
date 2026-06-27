@@ -15,6 +15,7 @@ import (
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/authz"
 	"github.com/HiroshiKawano/go_iot/internal/chart"
+	"github.com/HiroshiKawano/go_iot/internal/domain"
 	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/timefmt"
@@ -124,7 +125,7 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 		return
 	}
 
-	chartArea, err := h.buildChartArea(ctx, id, period, now)
+	chartArea, err := h.buildChartArea(ctx, device, period, now)
 	if err != nil {
 		renderError(c, http.StatusInternalServerError)
 		return
@@ -167,12 +168,13 @@ func (h *DeviceHandler) Chart(c *gin.Context) {
 		return
 	}
 
-	if _, err := authz.RequireDeviceOwner(ctx, h.Repo, id, uid); err != nil {
+	device, err := authz.RequireDeviceOwner(ctx, h.Repo, id, uid)
+	if err != nil {
 		renderDeviceReadError(c, err) // 不在/非所有とも 404
 		return
 	}
 
-	chartArea, err := h.buildChartArea(ctx, id, q.Period, now)
+	chartArea, err := h.buildChartArea(ctx, device, q.Period, now)
 	if err != nil {
 		renderError(c, http.StatusInternalServerError)
 		return
@@ -244,7 +246,8 @@ func smaWindowFor(period string) int {
 // (追加クエリ・スキーマ変更なし・R8)。計測 0 件のときは option を構築せず HasData=false
 // (空メッセージのみ・templ 側で分岐) とし、カードは "—" を出す (R1.4)。
 // 描画/対話 (十字ホバー・最高最低・現在値・温湿度連動) はクライアントの ECharts が担う (S5)。
-func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, period string, now time.Time) (component.DeviceChartAreaView, error) {
+func (h *DeviceHandler) buildChartArea(ctx context.Context, device repository.Device, period string, now time.Time) (component.DeviceChartAreaView, error) {
+	deviceID := device.ID
 	rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
 		DeviceID:   deviceID,
 		RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
@@ -254,6 +257,7 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 	}
 
 	// 計測 0 件: option を構築せず空メッセージのみ。カードは "—" でレイアウトを保つ (R1.4)。
+	// VPD パネルも組まない (HasData=false で templ 側非表示・R4.5/5.4/6.3)。
 	if len(rows) == 0 {
 		return component.DeviceChartAreaView{
 			DeviceID:        deviceID,
@@ -294,6 +298,13 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 		humDaily = dailyStatRows(rows, func(r repository.SensorReading) float64 { return pgconv.NumericToFloat(r.Humidity) })
 	}
 
+	// VPD (飽差) 適正帯ダッシュボードを温湿度データから読み取り時に組む (デバイスの作物で適正帯を解決)。
+	// 温湿度 option/カード/日次表とは独立 (別 option・別 DTO=無回帰・R8)。JSON 化失敗は温湿度同様 500。
+	vpdPanel, err := buildVPDPanel(labels, temps, hums, rows, deviceCrop(device), period)
+	if err != nil {
+		return component.DeviceChartAreaView{}, err
+	}
+
 	return component.DeviceChartAreaView{
 		DeviceID:              deviceID,
 		Period:                period,
@@ -309,7 +320,17 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, deviceID int64, peri
 		ShowDaily:             showDaily,
 		TemperatureDaily:      tempDaily,
 		HumidityDaily:         humDaily,
+		VPD:                   vpdPanel,
 	}, nil
+}
+
+// deviceCrop はデバイスの作物列 (*string・NULL 許容) を domain.Crop へ写す。
+// 未設定 (NULL)・不正値は空 Crop を返し、VPDRange()/CropLabel が既定 (0.3-1.5・"既定") にフォールバックする。
+func deviceCrop(d repository.Device) domain.Crop {
+	if d.Crop == nil {
+		return ""
+	}
+	return domain.Crop(*d.Crop)
 }
 
 // overlaySpec は生実測列から統計オーバーレイ (SMA/正常帯/乖離率) を算出した ChartSpec を組む。
@@ -437,8 +458,19 @@ func buildDeviceInfoView(d repository.Device) component.DeviceInfoView {
 		Location:     deviceLocalityOrUnset(d),
 		StatusActive: d.IsActive,
 		LastCommText: lastCommAbsText(d),
+		Crop:         deviceCropLabelOrUnset(d),
 		EditURL:      "/devices/" + strconv.FormatInt(d.ID, 10) + "/edit",
 	}
+}
+
+// deviceCropLabelOrUnset はデバイスの作物を日本語ラベルで返し、未設定 (NULL)・不正値は "未設定"
+// とする (情報パネル表示用。場所と同じフォールバック表記で「センサー毎に作物を持つ」ことを可視化する)。
+// VPD パネルの "既定" 表記 (vpdCropLabel) とは別: あちらは適正帯しきい値の文脈、こちらは設定有無の表示。
+func deviceCropLabelOrUnset(d repository.Device) string {
+	if c := deviceCrop(d); c.Valid() {
+		return c.Label()
+	}
+	return "未設定"
 }
 
 // buildLatestReadingsView は最新計測行をテーブル View へ写像する (日時=分まで・温湿度=小数2桁)。

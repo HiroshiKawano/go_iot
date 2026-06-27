@@ -57,9 +57,66 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 			@dailyTable("日次集計（温度）", v.TemperatureUnit, v.TemperatureDaily)
 			@dailyTable("日次集計（湿度）", v.HumidityUnit, v.HumidityDaily)
 		}
+		// 飽差 VPD 適正帯ダッシュボード (研究用)。データ有時のみ・日次表の下 (モック写経)。
+		@vpdPanel(v.VPD)
 	} else {
 		<div class="chart-placeholder">データはまだありません</div>
 	}
+}
+
+// vpdPanel は飽差 VPD 適正帯ダッシュボードを描画する (mocks/html/device-show.html の VPD パネルを写経)。
+// VPD チャートのマウント先 #vpd-chart (data-echarts data-unit="kPa" data-color) と兄弟 option script
+// (VPD line + 適正帯3ゾーン markArea + VPD移動平均を内包・既存 EChartsInitializer が走査描画) を出し、
+// 作物名/適正帯・VPD 数値カード (.summary-grid-4 流用)・適正帯滞在率バー (独自 .vpd-bar)・
+// 時間帯別逸脱表 (.data-table 流用) を描画する。VPD移動平均は option の凡例トグルで既定オフ。
+// 研究用スコープに限定し農家向け平易表示 (信号色での良否ラベル・圃場共有 URL) は含めない (R9.3)。
+templ vpdPanel(v VPDPanelView) {
+	<h2 class="u-mbs-6">飽差 VPD（適正帯ダッシュボード）</h2>
+	<p class="form-help">{ "作物: " + v.CropLabel + " ／ 適正帯 " + v.LowerLabel + " 〜 " + v.UpperLabel }</p>
+	<div class="chart-wrapper">
+		<div id="vpd-chart" data-echarts data-unit="kPa" data-color={ v.Color }></div>
+		@templ.Raw(optionScript("vpd-chart-option", v.OptionJSON))
+	</div>
+	// VPD 数値カード (現在/期間平均/適正帯滞在率/最大逸脱)。.summary-grid-4 をモックから流用。
+	<div class="summary-grid summary-grid-4 u-mbs-6">
+		<div class="summary-box"><div class="label">現在VPD</div><div class="value">{ v.Card.CurrentVPD }</div></div>
+		<div class="summary-box"><div class="label">期間平均</div><div class="value">{ v.Card.AverageVPD }</div></div>
+		<div class="summary-box"><div class="label">適正帯滞在率</div><div class="value">{ v.Card.TimeInRange }</div></div>
+		<div class="summary-box"><div class="label">最大逸脱</div><div class="value">{ v.Card.MaxDeviation }</div></div>
+	</div>
+	// 適正帯滞在率バー (独自 .vpd-bar/.vpd-bar-fill)。塗り幅は滞在率で動的設定。
+	<div class="vpd-bar" role="img" aria-label={ "適正帯滞在率 " + v.Card.TimeInRange }>
+		<div class="vpd-bar-fill" style={ vpdBarWidthStyle(v.InRangeRatio) }></div>
+	</div>
+	@vpdHourlyTable(v.Hourly)
+}
+
+// vpdHourlyTable は時間帯別 VPD 逸脱表 (時刻バケット×平均VPD/在帯率/主な逸脱方向) を描画する。
+// 単位 (kPa) は列見出しに付与・データのある時間帯のみ行を出す (handler 整形済み)。
+templ vpdHourlyTable(rows []VPDHourlyRow) {
+	<h2 class="u-mbs-6">時間帯別 VPD 逸脱</h2>
+	<div class="table-wrapper">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>時間帯</th>
+					<th>平均VPD(kPa)</th>
+					<th>在帯率</th>
+					<th>主な逸脱</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range rows {
+					<tr>
+						<td>{ row.Hour }</td>
+						<td>{ row.AvgVPD }</td>
+						<td>{ row.InRangePercent }</td>
+						<td>{ row.Direction }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
 }
 
 // statCards は数値カード1メトリック (現在値・最高・最低・日較差) を .summary-grid で描画する。

@@ -67,6 +67,26 @@
             <span class="error-message"></span>
           </div>
 
+          <!-- 栽培作物（任意・VPD 適正帯の切替に使用）。所在地と同型の検索可能 select。
+               先頭は空 option「選択しない（既定しきい値）」＝未選択で既定帯 0.3〜1.5kPa にフォールバック。
+               選択肢9種は domain.Crop（goya/ingen/sugarcane/mango/pineapple/uri/rice/imo/leafy_vegetable）と同期。 -->
+          <div class="form-group">
+            <label>栽培作物</label>
+            <select name="crop" class="js-tom-select">
+              <option value="">選択しない（既定しきい値）</option>
+              <option value="goya">ゴーヤ</option>
+              <option value="ingen">インゲン</option>
+              <option value="sugarcane">サトウキビ</option>
+              <option value="mango">マンゴー</option>
+              <option value="pineapple">パイナップル</option>
+              <option value="uri">ウリ</option>
+              <option value="rice">米</option>
+              <option value="imo">いも</option>
+              <option value="leafy_vegetable">葉野菜</option>
+            </select>
+            <span class="error-message"></span>
+          </div>
+
           <div class="form-group">
             <label>ステータス</label>
             <div class="radio-group">

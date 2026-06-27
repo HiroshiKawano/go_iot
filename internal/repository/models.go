@@ -60,6 +60,8 @@ type Device struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 	// 圃場所在地の地域キー (沖縄53地域・domain.Locality と対応。親市町村は Locality.Municipality() で導出)
 	Locality *string `json:"locality"`
+	// 栽培作物キー (domain.Crop と対応・VPD 適正帯の切替に使用。NULL=未設定で既定帯 0.3-1.5kPa)
+	Crop *string `json:"crop"`
 }
 
 // デバイスAPI用 Bearer トークン (Sanctum相当)

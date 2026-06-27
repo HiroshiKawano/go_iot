@@ -115,9 +115,17 @@ func TestIntegration_地域選択肢は認識名と同名区別で53件(t *testi
 		}
 	}
 
-	// 沖縄53地域 + 先頭の空 option = 54 option ちょうど (他都道府県を含めない・R1.2)。
-	if got := strings.Count(body, "<option"); got != 54 {
-		t.Errorf("option 数 = %d, want 54 (沖縄53地域 + 空 option。他都道府県を含めない)", got)
+	// 沖縄53地域 + 先頭の空 option = 54 option ちょうど (locality select 内のみ・他都道府県/作物を含めない・R1.2)。
+	// ページ全体には別途 作物 select も存在するため、locality の <select>…</select> 区間に限定して数える。
+	localitySelect := body
+	if i := strings.Index(localitySelect, `name="locality"`); i >= 0 {
+		localitySelect = localitySelect[i:]
+		if j := strings.Index(localitySelect, "</select>"); j >= 0 {
+			localitySelect = localitySelect[:j]
+		}
+	}
+	if got := strings.Count(localitySelect, "<option"); got != 54 {
+		t.Errorf("locality の option 数 = %d, want 54 (沖縄53地域 + 空 option。他都道府県を含めない)", got)
 	}
 }
 

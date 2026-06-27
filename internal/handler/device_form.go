@@ -19,6 +19,7 @@ type deviceForm struct {
 	Name       string `form:"name"        binding:"required,max=255"`
 	MacAddress string `form:"mac_address" binding:"required"`           // 形式/正規化/一意は handler で
 	Locality   string `form:"locality"`                                 // 沖縄の地域 (domain.Locality)。存在検証は handler で procedural に行う
+	Crop       string `form:"crop"`                                     // 栽培作物 (domain.Crop)。任意・存在検証は handler で procedural に行う
 	IsActive   string `form:"is_active"   binding:"required,oneof=1 0"` // "1"=稼働中 / "0"=停止中
 }
 
@@ -64,6 +65,8 @@ func deviceFieldKey(structField string) string {
 		return "mac_address"
 	case "Locality":
 		return "locality"
+	case "Crop":
+		return "crop"
 	case "IsActive":
 		return "is_active"
 	default:

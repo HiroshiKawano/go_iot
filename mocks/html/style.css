@@ -68,6 +68,7 @@
     --color-surface: #ffffff;
     --color-text: #212529;
     --color-border: #dedfe3;              /* 旧 var(--divider) を実値化 */
+    --color-vpd: #0ca678;                 /* 飽差VPD系列・適正帯滞在率バーの基準色（温度橙/湿度青と区別） */
 
     /* --- スペーススケール（4px グリッド。旧 Lism --s* を実値化） --- */
     --space-1: 0.25rem;   /* 4px  （旧 --s5）  */
@@ -605,6 +606,22 @@
    基底 .summary-grid(3列・readings 履歴が依存)は変えず、本モディファイアでのみ4列化。
    狭幅(@media max-width:768px)では基底 .summary-grid の 1fr ルールが後勝ちで1列化する。 */
 .summary-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* --- 適正帯滞在率バー（VPD パネル・独自クラス＝モック単一ソースの新規器） --- */
+/* トラック（枠）＋塗り（滞在率）。塗り幅は実装が style="width:N%" で動的設定する
+   （VPD 線/markArea のグラフ内部描画はモック反映対象外だが、滞在率バーは静的な器として反映する）。 */
+.vpd-bar {
+  height: 1.25rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: var(--space-6);
+}
+.vpd-bar-fill {
+  height: 100%;
+  background: var(--color-vpd);
+}
 
 /* --- アラートルール管理 --- */
 /* .rule-form のflex配置・form-group伸縮は「インラインフォーム共通」で定義済み。ここは固有値のみ */

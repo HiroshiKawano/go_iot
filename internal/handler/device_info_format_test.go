@@ -72,9 +72,50 @@ func TestBuildDeviceInfoView_所在地以外の項目は従来どおり写像(t 
 		Location:     "佐敷（南城市）",
 		StatusActive: true,
 		LastCommText: "未通信",
+		Crop:         "未設定", // 作物未選択 (nil) は未設定表記 (場所と同じフォールバック)
 		EditURL:      "/devices/5/edit",
 	}
 	if got := buildDeviceInfoView(d); got != want {
 		t.Errorf("buildDeviceInfoView() =\n  %+v\nwant\n  %+v", got, want)
+	}
+}
+
+// TestBuildDeviceInfoView_作物は日本語ラベルで未設定/不正は未設定表記 はデバイス行→情報パネル View の
+// 作物写像を検証する。情報パネルに作物を出すことで「VPD 適正帯はセンサー毎の作物で決まる」ことを
+// 可視化する (固定ではない)。設定済みは日本語ラベル、未選択(nil)・不正値は所在地と同じ「未設定」。
+func TestBuildDeviceInfoView_作物は日本語ラベルで未設定不正は未設定表記(t *testing.T) {
+	tests := []struct {
+		name     string
+		device   repository.Device
+		wantCrop string
+	}{
+		{
+			name:     "設定済みは日本語ラベル",
+			device:   repository.Device{ID: 1, Name: "D", MacAddress: "AA:BB:CC:DD:EE:01", Crop: strPtr("goya")},
+			wantCrop: "ゴーヤ",
+		},
+		{
+			name:     "別作物も日本語ラベル",
+			device:   repository.Device{ID: 1, Name: "D", MacAddress: "AA:BB:CC:DD:EE:01", Crop: strPtr("mango")},
+			wantCrop: "マンゴー",
+		},
+		{
+			name:     "作物未選択(nil)は未設定",
+			device:   repository.Device{ID: 1, Name: "D", MacAddress: "AA:BB:CC:DD:EE:01", Crop: nil},
+			wantCrop: "未設定",
+		},
+		{
+			name:     "未知の作物値は未設定（防御的）",
+			device:   repository.Device{ID: 1, Name: "D", MacAddress: "AA:BB:CC:DD:EE:01", Crop: strPtr("存在しない作物")},
+			wantCrop: "未設定",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildDeviceInfoView(tt.device).Crop; got != tt.wantCrop {
+				t.Errorf("Crop = %q, want %q", got, tt.wantCrop)
+			}
+		})
 	}
 }

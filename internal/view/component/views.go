@@ -5,6 +5,8 @@
 // page ↔ component の循環 import を避ける。
 package component
 
+import "fmt"
+
 // DashboardDevice はデバイスカード1枚 (DeviceCard) の表示データ。
 // 温度・湿度・最終通信はすべて整形済み文字列で保持する
 // (未受信は TempText/HumidityText が "ー"、通信実績なしは LastCommText が "通信実績なし")。
@@ -35,6 +37,7 @@ type DeviceInfoView struct {
 	Location     string // 所在地の認識名 (構造化 locality の Locality.Label()。未設定は "未設定")
 	StatusActive bool   // true=● 稼働中 / false=○ 停止中
 	LastCommText string // "2026-04-20 14:30:00" or "未通信"
+	Crop         string // 栽培作物の日本語ラベル (domain.Crop.Label()。VPD 適正帯の根拠・センサー毎。未設定/不正は "未設定")
 	EditURL      string // 編集画面 URL "/devices/{id}/edit" (S4 提供)
 }
 
@@ -68,6 +71,47 @@ type DeviceChartAreaView struct {
 	ShowDaily        bool
 	TemperatureDaily []DailyStatRow
 	HumidityDaily    []DailyStatRow
+
+	// VPD (飽差) 適正帯ダッシュボードのパネル。HasData=true のときのみ handler が組む
+	// (温湿度データから読み取り時算出)。HasData=false では空の VPDPanelView (templ 側で
+	// 温湿度同様 if HasData 内に描画するため非表示)。温湿度フィールドとは独立 (無回帰)。
+	VPD VPDPanelView
+}
+
+// VPDPanelView は VPD 適正帯ダッシュボードのパネル (DeviceChartArea 内・研究用) の表示データ。
+// すべて整形済み primitive で保持し、pgtype/repository 型を持ち込まない (view 純粋性)。
+// OptionJSON は VPD line + 適正帯3ゾーン markArea + VPD移動平均を内包した HTML 安全 JSON
+// (internal/chart.VPDChartOptionJSON が構築)。Color は VPD 線の基準色 (data-color へ)。
+// CropLabel は作物名 (未設定は "既定")、Lower/UpperLabel は適正帯の上下限表示文字列、
+// Card は VPD 数値カード、InRangeRatio は滞在率バーの幅 (0..1)、Hourly は時間帯別逸脱行。
+type VPDPanelView struct {
+	OptionJSON   string        // <script type="application/json"> 埋込用 HTML 安全 JSON (markArea 内包)
+	Color        string        // VPD 線の基準色 "#0ca678" (data-color へ)
+	CropLabel    string        // 作物名 "ゴーヤ" or "既定"
+	LowerLabel   string        // 適正帯下限 "0.40 kPa"
+	UpperLabel   string        // 適正帯上限 "1.20 kPa"
+	Card         VPDCardView   // VPD 数値カード (現在/期間平均/滞在率/最大逸脱)
+	InRangeRatio float64       // 適正帯滞在率 0..1 (滞在率バーの動的幅用)
+	Hourly       []VPDHourlyRow // 時間帯別逸脱 (JST 時刻バケット昇順・データのある時間帯のみ)
+}
+
+// VPDCardView は VPD 数値カード1枚分の表示データ (整形済み・単位付き文字列 or "—")。
+// 現在VPD=最新点、期間平均=系列平均、滞在率=適正帯在帯割合(%)、最大逸脱=適正帯から最も外れた量と方向。
+type VPDCardView struct {
+	CurrentVPD   string // 例 "0.90 kPa" / "—"
+	AverageVPD   string // 例 "1.05 kPa" / "—"
+	TimeInRange  string // 例 "72%" / "—"
+	MaxDeviation string // 例 "+0.40 kPa（乾き）" / "—"（上限超=乾きすぎ "+", 下限割れ=湿りすぎ "-"）
+}
+
+// VPDHourlyRow は時間帯別 VPD 逸脱表1行分の表示データ (整形済み)。
+// Hour は JST 時刻バケット "06:00"、AvgVPD はバケット平均VPD (素の数値・単位は列見出し側)、
+// InRangePercent は在帯率 "40%"、Direction は主な逸脱方向 "乾き"/"湿り"/"—"。
+type VPDHourlyRow struct {
+	Hour           string // "06:00"
+	AvgVPD         string // "0.35" (単位なし・列見出しに kPa)
+	InRangePercent string // "40%"
+	Direction      string // "乾き" / "湿り" / "—"
 }
 
 // StatCardView は数値カード1メトリック分の表示データ (整形済み・単位付き文字列 or "—")。
@@ -89,6 +133,12 @@ type DailyStatRow struct {
 	Diurnal string // 日較差 (最高−最低)
 	Sigma   string // 標準偏差σ
 	CV      string // 変動係数 (σ/μ・無次元)・未定義は "—"
+}
+
+// vpdBarWidthStyle は適正帯滞在率 (0..1) を滞在率バー塗りの style 文字列 "width:NN%" に整形する。
+// 整数パーセントへ丸める (バー幅は視覚表現ゆえ小数不要)。0..1 外は CSS 側で 0..100% にクランプされる。
+func vpdBarWidthStyle(ratio float64) string {
+	return fmt.Sprintf("width:%.0f%%", ratio*100)
 }
 
 // optionScript は ECharts option JSON を <script type="application/json"> でクライアントへ
@@ -198,6 +248,8 @@ type DeviceFormView struct {
 	MacAddress string            // 入力値復元
 	Locality   string            // 設置場所の選択値 (domain.Locality の値・未設定は "")
 	Localities []SelectOption    // 地域 select の選択肢 (Selected 込み)
+	Crop       string            // 栽培作物の選択値 (domain.Crop の値・未設定は ""=既定しきい値)
+	Crops      []SelectOption    // 作物 select の選択肢 (Selected 込み・locality と同型)
 	IsActive   string            // "1"/"0" の radio checked 復元用
 	Errors     map[string]string // field → 日本語メッセージ
 }

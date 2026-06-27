@@ -31,6 +31,8 @@ const (
 	macDuplicateMessage = "このMACアドレスは既に登録されています"
 	// 地域 select の手続き検証メッセージ (選択肢に無い値が送られた場合)。
 	localityInvalidMessage = "選択した地域が不正です"
+	// 作物 select の手続き検証メッセージ (9作物に無い値が送られた場合)。
+	cropInvalidMessage = "選択した作物が不正です"
 )
 
 // DeviceRepo はデバイス登録・編集・詳細・削除ハンドラが必要とする最小の DB ポート。
@@ -94,6 +96,9 @@ func (h *DeviceHandler) Create(c *gin.Context) {
 	if !validLocalityInput(form.Locality) {
 		errs["locality"] = localityInvalidMessage
 	}
+	if !validCropInput(form.Crop) {
+		errs["crop"] = cropInvalidMessage
+	}
 
 	if len(errs) > 0 {
 		h.reRenderCreate(c, form, errs)
@@ -106,6 +111,7 @@ func (h *DeviceHandler) Create(c *gin.Context) {
 		MacAddress: mac,
 		Location:   nil, // 新規デバイスは旧自由入力 location を持たない (所在地は locality)
 		Locality:   nullableStr(form.Locality),
+		Crop:       nullableStr(form.Crop),
 		IsActive:   parseIsActive(form.IsActive),
 	})
 	if err != nil {
@@ -163,6 +169,7 @@ func (h *DeviceHandler) ShowEditForm(c *gin.Context) {
 		Name:       device.Name,
 		MacAddress: device.MacAddress,
 		Locality:   deviceLocalityValue(device),
+		Crop:       deviceCropValue(device),
 		IsActive:   radioFromIsActive(device.IsActive),
 	}
 	v := buildEditView(csrf.Token(c.Request), user.Name, id, device.Name, form, map[string]string{})
@@ -205,6 +212,9 @@ func (h *DeviceHandler) Update(c *gin.Context) {
 	if !validLocalityInput(form.Locality) {
 		errs["locality"] = localityInvalidMessage
 	}
+	if !validCropInput(form.Crop) {
+		errs["crop"] = cropInvalidMessage
+	}
 
 	if len(errs) > 0 {
 		h.reRenderEdit(c, id, device.Name, form, errs)
@@ -217,6 +227,7 @@ func (h *DeviceHandler) Update(c *gin.Context) {
 		MacAddress: mac,
 		Location:   device.Location, // 旧自由入力 location は編集対象外。既存値を保全 (非破壊)
 		Locality:   nullableStr(form.Locality),
+		Crop:       nullableStr(form.Crop),
 		IsActive:   parseIsActive(form.IsActive),
 	})
 	if err != nil {
@@ -288,6 +299,8 @@ func buildCreateView(token, userName string, form deviceForm, errs map[string]st
 			MacAddress: form.MacAddress,
 			Locality:   form.Locality,
 			Localities: localityOptions(form.Locality),
+			Crop:       form.Crop,
+			Crops:      cropOptions(form.Crop),
 			IsActive:   form.IsActive,
 			Errors:     errs,
 		},
@@ -315,6 +328,8 @@ func buildEditView(token, userName string, id int64, deviceName string, form dev
 			MacAddress: form.MacAddress,
 			Locality:   form.Locality,
 			Localities: localityOptions(form.Locality),
+			Crop:       form.Crop,
+			Crops:      cropOptions(form.Crop),
 			IsActive:   form.IsActive,
 			Errors:     errs,
 		},
@@ -368,6 +383,35 @@ func localityOptions(selected string) []component.SelectOption {
 			Value:    string(l),
 			Label:    l.Label(),
 			Selected: string(l) == selected,
+		})
+	}
+	return opts
+}
+
+// validCropInput は作物 select の送信値が許容されるかを判定する (locality 写経)。
+// 未選択 (空) は任意項目ゆえ許可。非空は domain.Crop の定義値 (9作物) のみ許可する。
+func validCropInput(s string) bool {
+	return s == "" || domain.Crop(s).Valid()
+}
+
+// deviceCropValue はデバイスの作物キー (*string) を復元用の文字列へ変換する (未設定は "")。
+func deviceCropValue(d repository.Device) string {
+	if d.Crop != nil {
+		return *d.Crop
+	}
+	return ""
+}
+
+// cropOptions は作物 select の選択肢 (9作物) を組み立てる (locality 写経)。
+// Label は日本語作物名、Selected は現在値との一致。空 option「選択しない（既定しきい値）」は templ 側で先頭付与。
+func cropOptions(selected string) []component.SelectOption {
+	all := domain.AllCrops()
+	opts := make([]component.SelectOption, 0, len(all))
+	for _, c := range all {
+		opts = append(opts, component.SelectOption{
+			Value:    string(c),
+			Label:    c.Label(),
+			Selected: string(c) == selected,
 		})
 	}
 	return opts

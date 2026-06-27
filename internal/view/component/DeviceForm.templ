@@ -33,6 +33,18 @@ templ DeviceForm(v DeviceFormView) {
 				</select>
 				<span class="error-message">{ v.Errors["locality"] }</span>
 			</div>
+			// 栽培作物 (任意・VPD 適正帯の切替に使用)。所在地と同型の検索可能 select。
+			// 先頭の空 option「選択しない（既定しきい値）」は未選択=既定帯 0.3-1.5kPa を表す。
+			<div class="form-group">
+				<label>栽培作物</label>
+				<select name="crop" class="js-tom-select">
+					<option value="">選択しない（既定しきい値）</option>
+					for _, opt := range v.Crops {
+						<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+					}
+				</select>
+				<span class="error-message">{ v.Errors["crop"] }</span>
+			</div>
 			<div class="form-group">
 				<label>ステータス</label>
 				<div class="radio-group">

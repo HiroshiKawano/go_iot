@@ -116,6 +116,7 @@ ESP8266デバイス管理
 | updated_at | timestamp with time zone | NO | now() | - |
 | deleted_at | timestamp with time zone | YES | - | 論理削除日時 (NULL = 有効) |
 | locality | character varying(20) | YES | - | 圃場所在地の地域キー (沖縄53地域・domain.Locality と対応。親市町村は Locality.Municipality() で導出) |
+| crop | character varying(20) | YES | - | 栽培作物キー (domain.Crop と対応・VPD 適正帯の切替に使用。NULL=未設定で既定帯 0.3-1.5kPa) |
 
 **索引**
 
@@ -126,6 +127,7 @@ ESP8266デバイス管理
 
 **CHECK 制約**
 
+- `devices_crop_valid`: `CHECK (((crop IS NULL) OR ((crop)::text = ANY ((ARRAY['goya'::character varying, 'ingen'::character varying, 'sugarcane'::character varying, 'mango'::character varying, 'pineapple'::character varying, 'uri'::character varying, 'rice'::character varying, 'imo'::character varying, 'leafy_vegetable'::character varying])::text[]))))`
 - `devices_locality_valid`: `CHECK (((locality IS NULL) OR ((locality)::text = ANY ((ARRAY['那覇市'::character varying, '宜野湾市'::character varying, '石垣市'::character varying, '浦添市'::character varying, '名護市'::character varying, '糸満市'::character varying, '沖縄市'::character varying, '豊見城市'::character varying, '石川市'::character varying, '具志川市'::character varying, '与那城町'::character varying, '勝連町'::character varying, '平良市'::character varying, '城辺町'::character varying, '下地町'::character varying, '上野村'::character varying, '伊良部町'::character varying, '佐敷町'::character varying, '知念村'::character varying, '玉城村'::character varying, '大里村'::character varying, '本部町'::character varying, '金武町'::character varying, '嘉手納町'::character varying, '北谷町'::character varying, '西原町'::character varying, '与那原町'::character varying, '南風原町'::character varying, '仲里村'::character varying, '具志川村'::character varying, '東風平町'::character varying, '具志頭村'::character varying, '竹富町'::character varying, '与那国町'::character varying, '国頭村'::character varying, '大宜味村'::character varying, '東村'::character varying, '今帰仁村'::character varying, '恩納村'::character varying, '宜野座村'::character varying, '伊江村'::character varying, '読谷村'::character varying, '北中城村'::character varying, '中城村'::character varying, '渡嘉敷村'::character varying, '座間味村'::character varying, '粟国村'::character varying, '渡名喜村'::character varying, '南大東村'::character varying, '北大東村'::character varying, '伊平屋村'::character varying, '伊是名村'::character varying, '多良間村'::character varying])::text[]))))`
 - `devices_mac_address_format`: `CHECK (((mac_address)::text ~ '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'::text))`
 

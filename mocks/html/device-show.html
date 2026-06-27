@@ -48,6 +48,7 @@
           <dt>場所</dt><dd>佐敷（南城市）</dd>
           <dt>状態</dt><dd><span class="status-active">● 稼働中</span></dd>
           <dt>最終通信</dt><dd>2026-04-20 14:30:00</dd>
+          <dt>作物</dt><dd>ゴーヤ</dd>
         </dl>
         <div class="form-actions">
           <a href="/devices/1/edit" class="btn btn-secondary">編集</a>
@@ -162,6 +163,53 @@
               <tr><td>2026-04-18</td><td>63.20</td><td>84.00</td><td>32.10</td><td>51.90</td><td>12.40</td><td>0.20</td></tr>
               <tr><td>2026-04-19</td><td>62.80</td><td>85.00</td><td>31.00</td><td>54.00</td><td>13.10</td><td>0.21</td></tr>
               <tr><td>2026-04-20</td><td>62.50</td><td>85.00</td><td>30.20</td><td>54.80</td><td>13.50</td><td>0.22</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 飽差 VPD（適正帯ダッシュボード）: 温湿度から読み取り時算出する派生指標パネル（研究用）。
+             データ有時のみ・日次表の下に表示する（実装(templ)では if HasData 内に内包し、期間切替で更新）。
+             グラフ内部描画（VPD 線・適正帯3ゾーン markArea 塗り・滞在率バーの実値）はモック反映対象外＝器のみ反映
+             （feedback_mock_graph_rendering_exception）。VPD 線/markArea は #vpd-chart の data-echarts option script で描画する。
+             農家向け表示（信号色での良否ラベル・圃場共有 URL）は本フェーズに含めない（研究用スコープ）。 -->
+        <h2 class="u-mbs-6">飽差 VPD（適正帯ダッシュボード）</h2>
+        <p class="form-help">作物: ゴーヤ ／ 適正帯 0.40〜1.20 kPa（未設定時は既定 0.30〜1.50 kPa）</p>
+
+        <div class="chart-wrapper">
+          <div id="vpd-chart" data-echarts data-unit="kPa" class="chart-placeholder">VPDグラフ (kPa / 適正帯3ゾーン markArea: 湿りすぎ(低VPD)／適正／乾きすぎ(高VPD), 横軸:時間)</div>
+        </div>
+
+        <!-- VPD 数値カード（現在/期間平均/適正帯滞在率/最大逸脱）。空データ時は各値「—」。 -->
+        <div class="summary-grid summary-grid-4 u-mbs-6">
+          <div class="summary-box"><div class="label">現在VPD</div><div class="value">0.90 kPa</div></div>
+          <div class="summary-box"><div class="label">期間平均</div><div class="value">1.05 kPa</div></div>
+          <div class="summary-box"><div class="label">適正帯滞在率</div><div class="value">72%</div></div>
+          <div class="summary-box"><div class="label">最大逸脱</div><div class="value">+0.40 kPa（乾き）</div></div>
+        </div>
+
+        <!-- 適正帯滞在率バー（独自クラス .vpd-bar / .vpd-bar-fill）。
+             塗り幅は滞在率（実装で style="width:N%" を動的設定。モックは代表値72%で器を反映）。 -->
+        <div class="vpd-bar" role="img" aria-label="適正帯滞在率 72%">
+          <div class="vpd-bar-fill" style="width:72%"></div>
+        </div>
+
+        <!-- 時間帯別 VPD 逸脱（JST 時刻バケットごとの平均VPD・在帯率・主な逸脱方向）。
+             データのある時間帯のみ行を出す。逸脱方向は湿りすぎ(低VPD)/乾きすぎ(高VPD)、無逸脱は「—」。 -->
+        <h2 class="u-mbs-6">時間帯別 VPD 逸脱</h2>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>時間帯</th>
+                <th>平均VPD(kPa)</th>
+                <th>在帯率</th>
+                <th>主な逸脱</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>06:00</td><td>0.35</td><td>40%</td><td>湿り</td></tr>
+              <tr><td>12:00</td><td>1.45</td><td>55%</td><td>乾き</td></tr>
+              <tr><td>18:00</td><td>0.95</td><td>90%</td><td>—</td></tr>
             </tbody>
           </table>
         </div>

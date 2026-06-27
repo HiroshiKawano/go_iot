@@ -20,9 +20,44 @@ func baseDeviceFormView() DeviceFormView {
 			{Value: "佐敷町", Label: "佐敷（南城市）", Selected: true},
 			{Value: "国頭村", Label: "国頭村", Selected: false},
 		},
+		Crop: "goya",
+		Crops: []SelectOption{
+			{Value: "goya", Label: "ゴーヤ", Selected: true},
+			{Value: "ingen", Label: "インゲン", Selected: false},
+			{Value: "leafy_vegetable", Label: "葉野菜", Selected: false},
+		},
 		IsActive: "1",
 		Errors:   map[string]string{},
 	}
+}
+
+// TestDeviceForm_作物selectと空optionと選択復元 は栽培作物の検索可能 select が
+// 所在地と同型で描画され、空 option (既定しきい値)・選択肢・選択値復元を持つことを固定する (R3.1/3.3)。
+func TestDeviceForm_作物selectと空optionと選択復元(t *testing.T) {
+	html := render(t, DeviceForm(baseDeviceFormView()))
+
+	// 作物 select は所在地と同型の検索可能 select。
+	assertContains(t, html, `name="crop"`)
+	// 先頭の空 option (未選択=既定しきい値)。
+	assertContains(t, html, `選択しない（既定しきい値）`)
+	// 選択肢 (9作物のうち代表) と日本語ラベル。
+	assertContains(t, html, "ゴーヤ")
+	assertContains(t, html, "インゲン")
+	assertContains(t, html, "葉野菜")
+	// 保存値が option で選択復元される (goya=ゴーヤ)。
+	assertContains(t, html, `<option value="goya" selected>ゴーヤ</option>`)
+	// 作物用 select も js-tom-select (検索可能) で、所在地と合わせて2つ。
+	if got := strings.Count(html, "js-tom-select"); got != 2 {
+		t.Errorf("js-tom-select の数 = %d, want 2 (所在地+作物)", got)
+	}
+}
+
+// TestDeviceForm_作物の項目別エラーを描画 は作物の検証エラーが crop 用 .error-message に出ることを固定する (R3.4)。
+func TestDeviceForm_作物の項目別エラーを描画(t *testing.T) {
+	v := baseDeviceFormView()
+	v.Errors = map[string]string{"crop": "選択した作物が不正です"}
+	html := render(t, DeviceForm(v))
+	assertContains(t, html, "選択した作物が不正です")
 }
 
 func TestDeviceForm_共通要素とCSRFと入力値復元(t *testing.T) {
