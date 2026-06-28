@@ -41,6 +41,11 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 	@statCards("湿度サマリ", v.HumidityCard)
 	if v.HasData {
 		<div class="linked-charts">
+			// 欠測ギャップ凡例/注記 (data-quality-meta・静的な器)。欠測検出時 (HasGap=true) のみ出す。
+			// グラフ内部の線分断/markArea 描画はモック反映対象外で、この注記のみ反映する (R5.2/R10.2)。
+			if v.HasGap {
+				<p class="form-help">グレーの帯は欠測区間（データが無い期間）です。折れ線は欠測区間で分断され、欠測値は補間しません。</p>
+			}
 			<h2 class="u-mbs-6">温度グラフ</h2>
 			<div class="chart-wrapper">
 				<div id="temperature-chart" data-echarts data-unit={ v.TemperatureUnit } data-color={ v.TemperatureColor }></div>

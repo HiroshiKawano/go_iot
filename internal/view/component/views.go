@@ -5,7 +5,11 @@
 // page ↔ component の循環 import を避ける。
 package component
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/HiroshiKawano/go_iot/internal/domain"
+)
 
 // DashboardDevice はデバイスカード1枚 (DeviceCard) の表示データ。
 // 温度・湿度・最終通信はすべて整形済み文字列で保持する
@@ -76,6 +80,11 @@ type DeviceChartAreaView struct {
 	// (温湿度データから読み取り時算出)。HasData=false では空の VPDPanelView (templ 側で
 	// 温湿度同様 if HasData 内に描画するため非表示)。温湿度フィールドとは独立 (無回帰)。
 	VPD VPDPanelView
+
+	// HasGap は欠測ギャップ可視化 (data-quality-meta・末尾非破壊追加) を行ったか。
+	// true のとき欠測区間でグラフ線が分断され markArea でハイライトされる。templ は凡例/注記
+	// (静的な器) を HasGap=true のときに描画する。欠測なしは従来描画 (false・無回帰)。
+	HasGap bool
 }
 
 // VPDPanelView は VPD 適正帯ダッシュボードのパネル (DeviceChartArea 内・研究用) の表示データ。
@@ -85,13 +94,13 @@ type DeviceChartAreaView struct {
 // CropLabel は作物名 (未設定は "既定")、Lower/UpperLabel は適正帯の上下限表示文字列、
 // Card は VPD 数値カード、InRangeRatio は滞在率バーの幅 (0..1)、Hourly は時間帯別逸脱行。
 type VPDPanelView struct {
-	OptionJSON   string        // <script type="application/json"> 埋込用 HTML 安全 JSON (markArea 内包)
-	Color        string        // VPD 線の基準色 "#0ca678" (data-color へ)
-	CropLabel    string        // 作物名 "ゴーヤ" or "既定"
-	LowerLabel   string        // 適正帯下限 "0.40 kPa"
-	UpperLabel   string        // 適正帯上限 "1.20 kPa"
-	Card         VPDCardView   // VPD 数値カード (現在/期間平均/滞在率/最大逸脱)
-	InRangeRatio float64       // 適正帯滞在率 0..1 (滞在率バーの動的幅用)
+	OptionJSON   string         // <script type="application/json"> 埋込用 HTML 安全 JSON (markArea 内包)
+	Color        string         // VPD 線の基準色 "#0ca678" (data-color へ)
+	CropLabel    string         // 作物名 "ゴーヤ" or "既定"
+	LowerLabel   string         // 適正帯下限 "0.40 kPa"
+	UpperLabel   string         // 適正帯上限 "1.20 kPa"
+	Card         VPDCardView    // VPD 数値カード (現在/期間平均/滞在率/最大逸脱)
+	InRangeRatio float64        // 適正帯滞在率 0..1 (滞在率バーの動的幅用)
 	Hourly       []VPDHourlyRow // 時間帯別逸脱 (JST 時刻バケット昇順・データのある時間帯のみ)
 }
 
@@ -198,6 +207,10 @@ type DeviceReadingsListView struct {
 	Errors     map[string]string   // 日付形式エラー (field → 日本語メッセージ。空なら非表示)
 	Report     ReadingsReportView  // 日次/時間別の集計帳票 (空帳票は HasData=false で非表示)
 	CSVURL     string              // CSV ダウンロードリンク (適用済み from/to/items 反映。空ならボタン非描画)
+
+	// Quality は表示期間の品質メトリクスボックス+総合品質バッジ (data-quality-meta・末尾非破壊追加)。
+	// HasData=false (0件/単一点/形式不正) のとき各値 "—"・バッジ非表示。
+	Quality QualityMetricsView
 }
 
 // ReadingsReportRow は集計帳票1バケット分 (日次=1日/時間別=1時間帯) の表示データ
@@ -250,6 +263,23 @@ type ReadingHistoryRow struct {
 	Temp       string // "28.50"
 	Humidity   string // "65.30"
 	Delay      string // "2秒"
+
+	// QualityFlags はこの行に該当する品質フラグ集合 (data-quality-meta・末尾非破壊追加)。
+	// 異常行のみ非空・正常行は空 (バッジを付けない・要件 1.3)。templ は domain.QualityFlag.Label()
+	// でバッジ描画する (view→domain 表示メソッド)。
+	QualityFlags []domain.QualityFlag
+}
+
+// QualityMetricsView は表示期間 (BETWEEN 区間) の品質メトリクスボックスと総合品質バッジの
+// 表示データ (data-quality-meta)。欠測率/間隔CV/通信遅延代表値は整形済み文字列、Level は
+// 総合品質レベル (信号色バッジ)。HasData=false (0件/単一点) のとき各値は "—"・バッジ非表示。
+type QualityMetricsView struct {
+	MissingRate string              // 欠測率 "12.5%" / "—"
+	IntervalCV  string              // 間隔一貫性(変動係数) "0.42" / "—"
+	DelayAvg    string              // 通信遅延 平均 "3秒" / "—"
+	DelayMax    string              // 通信遅延 最大 "8秒" / "—"
+	Level       domain.QualityLevel // 総合品質レベル (good/caution/bad)。バッジ信号色は Level.BadgeClass()
+	HasData     bool                // 算出可否。false で各値 "—"・総合バッジ非表示
 }
 
 // PaginationView は簡易ページャ (Pagination) の表示データ。

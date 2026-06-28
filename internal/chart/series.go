@@ -14,6 +14,19 @@ type ChartSpec struct {
 	BandLower []float64  // 正常帯の下限 SMA-kσ（nil/空なら帯を出さない）
 	BandWidth []float64  // 正常帯の帯幅 2kσ（BandLower と対で使う）
 	Deviation []*float64 // 乖離率%（nil/空なら出さない・nil 要素は欠落点）
+
+	// 欠測ギャップ可視化（data-quality-meta・末尾非破壊追加）。
+	// いずれも nil/空のときは完全に従来挙動（後方互換の不変条件）であり、
+	// 設定時のみ series[0] を欠測スロット nil で分断し連続欠測区間を markArea でハイライトする。
+	RawNullable []*float64 // 欠測スロット nil を含む series[0] 拡張データ（非 nil 時は Raw に優先・nil 要素は ECharts null）
+	GapBands    []GapBand  // 連続欠測区間（xAxis インデックス範囲）。markArea ハイライト対象
+}
+
+// GapBand は連続欠測区間を xAxis（カテゴリ）インデックスの範囲 [StartIdx, EndIdx] で表す。
+// 欠測ギャップ markArea の帯1本に対応する（handler が拡張グリッドのインデックス空間で組む）。
+type GapBand struct {
+	StartIdx int // 欠測帯の開始 xAxis インデックス
+	EndIdx   int // 欠測帯の終了 xAxis インデックス
 }
 
 // VPDChartSpec は VPD 専用 ECharts option ビルダー（VPDChartOptionJSON）への入力契約。

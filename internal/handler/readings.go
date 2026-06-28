@@ -18,6 +18,7 @@ import (
 
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/authz"
+	"github.com/HiroshiKawano/go_iot/internal/domain"
 	"github.com/HiroshiKawano/go_iot/internal/infra/pgconv"
 	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/HiroshiKawano/go_iot/internal/timefmt"
@@ -95,6 +96,7 @@ func (h *ReadingsHandler) Index(c *gin.Context) {
 			HasData:    false,
 			Pagination: buildReadingsPagination(id, from, to, 1, 1),
 			Errors:     errs,
+			Quality:    buildQualityMetricsView(nil), // 形式不正は品質メタを算出せず空状態 ("—")
 		}
 	} else {
 		list, err = h.fetchResults(ctx, device, from, to, fromTS, toTS, c.Query("page"), items)
@@ -174,7 +176,10 @@ func (h *ReadingsHandler) fetchResults(ctx context.Context, device repository.De
 		return component.DeviceReadingsListView{}, err
 	}
 
-	historyRows := buildReadingHistoryRows(rows)
+	// 品質メタ (data-quality-meta): 行フラグは全行 ASC 文脈で算出し ID で表示行へ引き当て、
+	// 期間メトリクス/総合バッジは同一 BETWEEN 区間 (一覧/集計/CSV と整合) から組む。
+	flagsByID := rowFlagsByID(allRows)
+	historyRows := buildReadingHistoryRows(rows, flagsByID)
 	return component.DeviceReadingsListView{
 		Summary:    buildSummary(summary),
 		Rows:       historyRows,
@@ -183,19 +188,22 @@ func (h *ReadingsHandler) fetchResults(ctx context.Context, device repository.De
 		Errors:     map[string]string{},
 		Report:     buildReadingsReport(allRows, deviceCrop(device)),
 		CSVURL:     csvDownloadURL(id, from, to, items),
+		Quality:    buildQualityMetricsView(allRows),
 	}, nil
 }
 
 // buildReadingHistoryRows は計測行を履歴一覧 View 行へ写像する
 // (日時=分まで JST・温湿度=小数2桁・通信遅延=整数秒)。
-func buildReadingHistoryRows(rows []repository.SensorReading) []component.ReadingHistoryRow {
+// flagsByID は reading ID → 品質フラグ集合の写像 (異常行のみ収録)。正常行は引き当て無し=空 (要件 1.3)。
+func buildReadingHistoryRows(rows []repository.SensorReading, flagsByID map[int64][]domain.QualityFlag) []component.ReadingHistoryRow {
 	out := make([]component.ReadingHistoryRow, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, component.ReadingHistoryRow{
-			RecordedAt: timefmt.DateTimeMinuteJP(pgconv.TimestamptzToTime(r.RecordedAt).In(jst)),
-			Temp:       formatActual(r.Temperature),
-			Humidity:   formatActual(r.Humidity),
-			Delay:      formatDelay(r.RecordedAt, r.CreatedAt),
+			RecordedAt:   timefmt.DateTimeMinuteJP(pgconv.TimestamptzToTime(r.RecordedAt).In(jst)),
+			Temp:         formatActual(r.Temperature),
+			Humidity:     formatActual(r.Humidity),
+			Delay:        formatDelay(r.RecordedAt, r.CreatedAt),
+			QualityFlags: flagsByID[r.ID],
 		})
 	}
 	return out

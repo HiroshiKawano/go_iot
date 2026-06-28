@@ -85,14 +85,25 @@ func ChartOptionJSON(spec ChartSpec) (string, error) {
 
 	line.SetXAxis(spec.Labels)
 
+	// 欠測ギャップ可視化（RawNullable 設定時のみ）。未設定なら従来挙動（後方互換の不変条件）。
+	hasGapNulls := len(spec.RawNullable) > 0
+
 	// series[0]: 生実測線（主役）。markPoint max/min・基準色。
-	line.AddSeries(spec.Unit, lineData(spec.Raw),
+	// RawNullable 設定時は欠測スロット nil の拡張データを使い connectNulls:false で線を分断する。
+	rawData := lineData(spec.Raw)
+	series0Opts := []charts.SeriesOpts{
 		charts.WithLineStyleOpts(opts.LineStyle{Color: spec.Color}),
 		charts.WithMarkPointNameTypeItemOpts(
 			opts.MarkPointNameTypeItem{Type: "max"}, // 最高
 			opts.MarkPointNameTypeItem{Type: "min"}, // 最低
 		),
-	)
+	}
+	if hasGapNulls {
+		rawData = nullableLineData(spec.RawNullable)
+		// ECharts 既定（false）を明示し、欠測スロットで折れ線を繋がない（要件 5.1）。
+		series0Opts = append(series0Opts, charts.WithLineChartOpts(opts.LineChart{ConnectNulls: opts.Bool(false)}))
+	}
+	line.AddSeries(spec.Unit, rawData, series0Opts...)
 
 	// 移動平均（SMA）: 細線・symbol 非表示。EMA/WMA は作らない（SMA 1本のみ）。
 	if hasSMA {
@@ -132,7 +143,17 @@ func ChartOptionJSON(spec ChartSpec) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("chart: ECharts option の JSON 化に失敗: %w", err)
 	}
-	return string(bs), nil
+	out := string(bs)
+
+	// 連続欠測区間（GapBands）があれば series[0] へ xAxis 範囲 markArea を注入する（要件 5.2）。
+	// 空のときは原文をそのまま返す（後方互換）。
+	if len(spec.GapBands) > 0 {
+		out, err = injectGapMarkArea(out, spec.GapBands)
+		if err != nil {
+			return "", err
+		}
+	}
+	return out, nil
 }
 
 // lineData は []float64 を opts.LineData 列へ変換する。

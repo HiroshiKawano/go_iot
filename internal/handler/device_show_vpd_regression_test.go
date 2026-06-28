@@ -45,11 +45,24 @@ func expectedTempHumOptions(t *testing.T, rows []repository.SensorReading, perio
 		hums[i] = pgconv.NumericToFloat(r.Humidity)
 	}
 	window := smaWindowFor(period)
-	tempOpt, err := chart.ChartOptionJSON(overlaySpec(labels, temps, tempChartUnit, tempLineColor, window))
+	tempSpec := overlaySpec(labels, temps, tempChartUnit, tempLineColor, window)
+	humSpec := overlaySpec(labels, hums, humidityChartUnit, humidityLineColor, window)
+	// buildChartArea と同一の欠測ギャップ配線をミラーする (data-quality-meta 追加後の期待値)。
+	// この回帰テストの意図は「VPD 追加が温湿度 option を変えない」= 温湿度パイプライン独立性であり、
+	// 欠測ありデータでは温湿度 option も gap グリッドを通す (それが正しい温湿度パイプライン出力)。
+	if _, _, gaps, ok := chart.MissingStats(intervalSeconds(rows)); ok && len(gaps) > 0 {
+		slotsAfter := make([]int, len(rows))
+		for _, g := range gaps {
+			slotsAfter[g.StartIdx] = g.MissingSlots
+		}
+		tempSpec = applyGapGrid(tempSpec, slotsAfter)
+		humSpec = applyGapGrid(humSpec, slotsAfter)
+	}
+	tempOpt, err := chart.ChartOptionJSON(tempSpec)
 	if err != nil {
 		t.Fatalf("期待温度 option の構築に失敗: %v", err)
 	}
-	humOpt, err = chart.ChartOptionJSON(overlaySpec(labels, hums, humidityChartUnit, humidityLineColor, window))
+	humOpt, err = chart.ChartOptionJSON(humSpec)
 	if err != nil {
 		t.Fatalf("期待湿度 option の構築に失敗: %v", err)
 	}

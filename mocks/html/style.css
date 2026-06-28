@@ -623,6 +623,27 @@
   background: var(--color-vpd);
 }
 
+/* --- 品質バッジ（data-quality-meta・独自クラス＝モック単一ソースの新規器） --- */
+/* 行の品質フラグ（欠測直後/固着/物理異常/外れ値）と期間/デバイスの総合品質レベル（信頼/注意/不良）を
+   示す小さなピル。基底 .badge は中立タグ（行フラグ用）、信号色 variant（.badge-good/caution/bad）は
+   総合バッジ用に既存トークン（--color-primary/warning/danger）を流用する（utilities ではなく部品色）。
+   信号色 variant は domain.QualityLevel.BadgeClass() と 1:1 対応する。 */
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.badge + .badge { margin-left: var(--space-1); }
+.badge-good { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+.badge-caution { background: var(--color-warning); color: var(--color-text); border-color: var(--color-warning); }
+.badge-bad { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
+
 /* --- アラートルール管理 --- */
 /* .rule-form のflex配置・form-group伸縮は「インラインフォーム共通」で定義済み。ここは固有値のみ */
 .rule-form { gap: var(--space-3); }

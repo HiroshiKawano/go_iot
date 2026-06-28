@@ -105,6 +105,30 @@
         </div>
       </div>
 
+      <!-- データ品質メタ（data-quality-meta）: 表示期間の欠測率・サンプリング間隔の一貫性（CV）・
+           通信遅延の代表値（平均/最大）と、総合品質を信号色バッジ（信頼=緑/注意=黄/不良=赤）で示す。
+           研究者・公務員が「この期間のデータが解析・報告に使えるか」を一目で判断するための器（R3/R4）。
+           グラフ内部の線分断/markArea 描画はモック反映対象外（器のみ反映）。0件/単一点は各値「—」・バッジ非表示。 -->
+      <h2 class="u-mbe-3">データ品質 <span class="badge badge-caution">注意</span></h2>
+      <div class="summary-grid summary-grid-4">
+        <div class="summary-box">
+          <div class="label">欠測率</div>
+          <div class="value">3.2%</div>
+        </div>
+        <div class="summary-box">
+          <div class="label">間隔ばらつき(CV)</div>
+          <div class="value">0.18</div>
+        </div>
+        <div class="summary-box">
+          <div class="label">通信遅延(平均)</div>
+          <div class="value">5秒</div>
+        </div>
+        <div class="summary-box">
+          <div class="label">通信遅延(最大)</div>
+          <div class="value">9秒</div>
+        </div>
+      </div>
+
       <!-- 集計帳票（日次/時間別）: 期間内全行を JST バケット集計した読み取り時帳票（R4/R5）。
            CSV を外部で開かなくても主要統計を画面で確認できる。温度・湿度それぞれ 平均/最高/最低/日較差/σ/CV、
            末尾に適正帯滞在率（デバイス作物の VPD 適正帯への在帯割合・R6／未設定は既定 0.30〜1.50 kPa）。
@@ -170,12 +194,14 @@
               <th>温度(℃)</th>
               <th>湿度(%)</th>
               <th>通信遅延</th>
+              <th>品質</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td>2026-04-20 14:30</td><td>28.50</td><td>65.30</td><td>2秒</td></tr>
-            <tr><td>2026-04-20 14:25</td><td>28.30</td><td>65.50</td><td>1秒</td></tr>
-            <tr><td>2026-04-20 14:20</td><td>28.10</td><td>65.80</td><td>3秒</td></tr>
+            <!-- 品質列: 異常行のみフラグをバッジ表示（欠測直後/固着/物理異常/外れ値）。正常行は空（R1.3 クラッタ回避）。 -->
+            <tr><td>2026-04-20 14:30</td><td>28.50</td><td>65.30</td><td>2秒</td><td></td></tr>
+            <tr><td>2026-04-20 14:25</td><td>28.30</td><td>65.50</td><td>1秒</td><td></td></tr>
+            <tr><td>2026-04-20 14:20</td><td>35.90</td><td>65.80</td><td>3秒</td><td><span class="badge">外れ値</span></td></tr>
           </tbody>
         </table>
         <p class="empty-message" x-show="false" x-cloak>指定期間の計測データはありません。</p>

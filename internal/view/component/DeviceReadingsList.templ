@@ -56,6 +56,33 @@ templ DeviceReadingsList(v DeviceReadingsListView) {
 				<div class="value">{ v.Summary.MinHum }</div>
 			</div>
 		</div>
+		// データ品質メタ (data-quality-meta): 期間の欠測率/間隔CV/通信遅延代表値と総合品質バッジ。
+		// HasData=true のときのみ総合バッジ (domain の信号色クラス) を出す。各値は handler 整形済み
+		// (0件/単一点は "—")。mocks/html/readings.html のデータ品質セクションを写経。
+		<h2 class="u-mbe-3">
+			データ品質
+			if v.Quality.HasData {
+				<span class={ "badge", v.Quality.Level.BadgeClass() }>{ v.Quality.Level.Label() }</span>
+			}
+		</h2>
+		<div class="summary-grid summary-grid-4">
+			<div class="summary-box">
+				<div class="label">欠測率</div>
+				<div class="value">{ v.Quality.MissingRate }</div>
+			</div>
+			<div class="summary-box">
+				<div class="label">間隔ばらつき(CV)</div>
+				<div class="value">{ v.Quality.IntervalCV }</div>
+			</div>
+			<div class="summary-box">
+				<div class="label">通信遅延(平均)</div>
+				<div class="value">{ v.Quality.DelayAvg }</div>
+			</div>
+			<div class="summary-box">
+				<div class="label">通信遅延(最大)</div>
+				<div class="value">{ v.Quality.DelayMax }</div>
+			</div>
+		</div>
 		if v.Report.HasData {
 			// 集計帳票 (日次/時間別): 期間内全行を JST バケット集計した読み取り時帳票 (R4/R5)。
 			// 温度・湿度それぞれ 平均/最高/最低/日較差/σ/CV、末尾に適正帯滞在率 (R6・作物未設定は既定)。
@@ -77,6 +104,7 @@ templ DeviceReadingsList(v DeviceReadingsListView) {
 							<th>温度(℃)</th>
 							<th>湿度(%)</th>
 							<th>通信遅延</th>
+							<th>品質</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -86,6 +114,12 @@ templ DeviceReadingsList(v DeviceReadingsListView) {
 								<td>{ r.Temp }</td>
 								<td>{ r.Humidity }</td>
 								<td>{ r.Delay }</td>
+								<td>
+									// 品質列: 異常行のみフラグを domain.Label() でバッジ表示。正常行は空 (R1.3)。
+									for _, f := range r.QualityFlags {
+										<span class="badge">{ f.Label() }</span>
+									}
+								</td>
 							</tr>
 						}
 					</tbody>

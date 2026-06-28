@@ -284,11 +284,29 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, device repository.De
 	}
 
 	window := smaWindowFor(period)
-	tempOpt, err := chart.ChartOptionJSON(overlaySpec(labels, temps, tempChartUnit, tempLineColor, window))
+	tempSpec := overlaySpec(labels, temps, tempChartUnit, tempLineColor, window)
+	humSpec := overlaySpec(labels, hums, humidityChartUnit, humidityLineColor, window)
+
+	// 欠測ギャップ可視化 (data-quality-meta): 間隔中央値から欠測区間を検出し拡張グリッド化する。
+	// MissingStats の round(間隔/中央値)-1 が「中央値の約1.5倍超で欠測」を符号化する (gapFactor≒1.5)。
+	// device-show は開区間窓の視覚表現のみで率の数値は出さない (readings の BETWEEN 側に集約・C1)。
+	// 欠測なし (2点未満含む) は従来描画 (RawNullable/GapBands 未設定=後方互換)。
+	hasGap := false
+	if _, _, gaps, ok := chart.MissingStats(intervalSeconds(rows)); ok && len(gaps) > 0 {
+		slotsAfter := make([]int, len(rows))
+		for _, g := range gaps {
+			slotsAfter[g.StartIdx] = g.MissingSlots
+		}
+		tempSpec = applyGapGrid(tempSpec, slotsAfter)
+		humSpec = applyGapGrid(humSpec, slotsAfter)
+		hasGap = true
+	}
+
+	tempOpt, err := chart.ChartOptionJSON(tempSpec)
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
 	}
-	humOpt, err := chart.ChartOptionJSON(overlaySpec(labels, hums, humidityChartUnit, humidityLineColor, window))
+	humOpt, err := chart.ChartOptionJSON(humSpec)
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
 	}
@@ -324,7 +342,88 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, device repository.De
 		TemperatureDaily:      tempDaily,
 		HumidityDaily:         humDaily,
 		VPD:                   vpdPanel,
+		HasGap:                hasGap,
 	}, nil
+}
+
+// applyGapGrid は欠測スロット数列 (slotsAfter[i] = 点 i の後に挿入する nil スロット数) に従い
+// ChartSpec を拡張グリッド化する。Labels と全系列を同一インデックス空間へ揃え、生実測線は
+// RawNullable で分断 (欠測スロット=nil・補間しない)、連続欠測区間は GapBands で markArea
+// ハイライトする。オーバーレイ (SMA/正常帯) は既定 off ゆえ直前値で carry-forward して整列を保ち、
+// 乖離率 (nil 許容) は欠測スロットを nil で分断する。元 spec は破壊せず新 spec を返す。
+func applyGapGrid(spec chart.ChartSpec, slotsAfter []int) chart.ChartSpec {
+	n := len(spec.Labels)
+	hasSMA := len(spec.SMA) == n
+	hasBand := len(spec.BandLower) == n && len(spec.BandWidth) == n
+	hasDev := len(spec.Deviation) == n
+
+	extLabels := make([]string, 0, n)
+	rawNullable := make([]*float64, 0, n)
+	var extSMA, extLower, extWidth []float64
+	var extDev []*float64
+	var bands []chart.GapBand
+
+	ext := 0 // 拡張グリッド上の現在インデックス
+	for i := 0; i < n; i++ {
+		startExt := ext
+		// 実点をそのまま積む。
+		extLabels = append(extLabels, spec.Labels[i])
+		v := spec.Raw[i]
+		rawNullable = append(rawNullable, &v)
+		if hasSMA {
+			extSMA = append(extSMA, spec.SMA[i])
+		}
+		if hasBand {
+			extLower = append(extLower, spec.BandLower[i])
+			extWidth = append(extWidth, spec.BandWidth[i])
+		}
+		if hasDev {
+			extDev = append(extDev, spec.Deviation[i])
+		}
+		ext++
+
+		// 点 i の後の欠測スロットを nil/空/carry-forward で挿入する (最終点の後は挿入しない)。
+		slots := 0
+		if i < len(slotsAfter) && i < n-1 {
+			slots = slotsAfter[i]
+		}
+		if slots <= 0 {
+			continue
+		}
+		for s := 0; s < slots; s++ {
+			extLabels = append(extLabels, "")      // 欠測スロットのラベルは空 (markArea が区間を示す)
+			rawNullable = append(rawNullable, nil) // 欠測=nil (線分断・補間しない)
+			if hasSMA {
+				extSMA = append(extSMA, spec.SMA[i]) // 既定 off ゆえ直前値で carry-forward (整列維持)
+			}
+			if hasBand {
+				extLower = append(extLower, spec.BandLower[i])
+				extWidth = append(extWidth, spec.BandWidth[i])
+			}
+			if hasDev {
+				extDev = append(extDev, nil) // 乖離率は nil 許容ゆえ分断
+			}
+		}
+		ext += slots
+		// 連続欠測区間 = 点 i (startExt) 〜 点 i+1 (ext) の xAxis 範囲。
+		bands = append(bands, chart.GapBand{StartIdx: startExt, EndIdx: ext})
+	}
+
+	out := spec // 値コピー (元 spec を破壊しない)
+	out.Labels = extLabels
+	out.RawNullable = rawNullable
+	if hasSMA {
+		out.SMA = extSMA
+	}
+	if hasBand {
+		out.BandLower = extLower
+		out.BandWidth = extWidth
+	}
+	if hasDev {
+		out.Deviation = extDev
+	}
+	out.GapBands = bands
+	return out
 }
 
 // deviceCrop はデバイスの作物列 (*string・NULL 許容) を domain.Crop へ写す。
