@@ -73,3 +73,31 @@ type GDDChartSpec struct {
 	ForecastDay float64   // 予測到達経過日（垂直 markLine／markPoint の x）。HasForecast=true のとき使用
 	HasForecast bool      // false なら予測 markLine/markPoint を出さない（予測不能・到達済み）
 }
+
+// TrendChartSpec は統計分析ページ（長期トレンド・季節サマリ）専用 ECharts option ビルダー
+// （TrendChartOptionJSON）への入力契約。温湿度/VPD/露点/GDD の各 Spec とは別型に隔離し、
+// それらの無回帰を守る（P2/P3/P6/P7 無回帰・design D の別型隔離）。
+//
+// 系列構成（クラッタ回避のため主役はロールアップ平均線・オーバーレイは凡例で既定オフ）:
+//   - 主役: ロールアップ平均（RollupAvg・series[0]・必須）。Sen トレンド線 markLine・有意区間 markArea を注入。
+//   - min/max 帯: BandLower/BandUpper 指定時のみ（積み上げ area：透明ベース＋帯幅）。
+//   - ブートストラップ CI 帯: CILower/CIUpper 指定時のみ（積み上げ area：透明ベース＋CI幅）。
+//   - 平年比: Climatology 指定時のみ（独立線・破線）。年数不足時は nil。
+//
+// 各スライスは Labels と同じ並び・同じ長さを前提とする（handler が JST 整形・pgconv で渡す）。
+type TrendChartSpec struct {
+	Labels      []string  // X 軸カテゴリ（月次/年次ラベル "2024-01" 等・handler が JST 整形）
+	Color       string    // 主役線・Sen 線・CI 帯の基準色（--color-trend）
+	RollupAvg   []float64 // 主役: ロールアップ平均（series[0]・必須）
+	BandLower   []float64 // min 帯の下限（任意・BandUpper と対で積み上げ area）
+	BandUpper   []float64 // max 帯の上限（任意・BandLower と対）
+	SenLine     []float64 // Sen トレンド線の値列（2点 or 全点・markLine の両端点に first/last を採用）
+	CILower     []float64 // ブートストラップ CI 下限（任意・CIUpper と対で積み上げ area）
+	CIUpper     []float64 // CI 上限（任意・CILower と対）
+	Climatology []float64 // 平年比系列（任意・年数不足時 nil）
+	Unit        string    // 主役系列の凡例名・単位（"℃"/"%"）
+
+	// 有意区間（xAxis 範囲の markArea）。Mann-Kendall が有意な区間を強調する。
+	// 非有意/未算出時は空（markArea を出さない・末尾非破壊追加で Run 型を VPD/露点と共有）。
+	Significant []Run
+}

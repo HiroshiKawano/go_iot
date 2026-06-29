@@ -201,6 +201,75 @@ func (q *Queries) ListDailySensorAggregates(ctx context.Context, arg ListDailySe
 	return items, nil
 }
 
+const listDailySensorAggregatesJST = `-- name: ListDailySensorAggregatesJST :many
+SELECT
+    DATE(recorded_at AT TIME ZONE 'Asia/Tokyo') AS reading_date,
+    AVG(temperature)::NUMERIC(5, 2)             AS avg_temperature,
+    MAX(temperature)                            AS max_temperature,
+    MIN(temperature)                            AS min_temperature,
+    AVG(humidity)::NUMERIC(5, 2)                AS avg_humidity,
+    MAX(humidity)                               AS max_humidity,
+    MIN(humidity)                               AS min_humidity,
+    COUNT(*)::BIGINT                            AS sample_count
+  FROM sensor_readings
+ WHERE device_id   = $1
+   AND recorded_at >= $2
+   AND deleted_at IS NULL
+ GROUP BY DATE(recorded_at AT TIME ZONE 'Asia/Tokyo')
+ ORDER BY DATE(recorded_at AT TIME ZONE 'Asia/Tokyo') ASC
+`
+
+type ListDailySensorAggregatesJSTParams struct {
+	DeviceID   int64              `json:"device_id"`
+	RecordedAt pgtype.Timestamptz `json:"recorded_at"`
+}
+
+type ListDailySensorAggregatesJSTRow struct {
+	ReadingDate    pgtype.Date    `json:"reading_date"`
+	AvgTemperature pgtype.Numeric `json:"avg_temperature"`
+	MaxTemperature interface{}    `json:"max_temperature"`
+	MinTemperature interface{}    `json:"min_temperature"`
+	AvgHumidity    pgtype.Numeric `json:"avg_humidity"`
+	MaxHumidity    interface{}    `json:"max_humidity"`
+	MinHumidity    interface{}    `json:"min_humidity"`
+	SampleCount    int64          `json:"sample_count"`
+}
+
+// 統計分析ページ(長期トレンド/季節サマリ)用: JST 暦日でバケットした日次集計。
+// 月次/年次ロールアップは handler 境界で本クエリの日次行を二段集約する(月次ΔT=日次ΔTの平均)。
+// 既存 ListDailySensorAggregates(DATE() の TZ 非明示=UTC バケット)は 3d/7d/30d グラフ用に無改変で温存し、
+// 長期トレンド専用に JST 暦境界版を別名で追加する(SELECT のみ・DDL なし)。
+// 事前条件: device_id は呼び出し前に RequireDeviceOwner で所有検証済み。$2=取得下限(期間×バッファ)。
+// 事後条件: JST 暦日昇順・欠測日は行なし(handler が欠測扱いし 0 補完しない)。
+func (q *Queries) ListDailySensorAggregatesJST(ctx context.Context, arg ListDailySensorAggregatesJSTParams) ([]ListDailySensorAggregatesJSTRow, error) {
+	rows, err := q.db.Query(ctx, listDailySensorAggregatesJST, arg.DeviceID, arg.RecordedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDailySensorAggregatesJSTRow
+	for rows.Next() {
+		var i ListDailySensorAggregatesJSTRow
+		if err := rows.Scan(
+			&i.ReadingDate,
+			&i.AvgTemperature,
+			&i.MaxTemperature,
+			&i.MinTemperature,
+			&i.AvgHumidity,
+			&i.MaxHumidity,
+			&i.MinHumidity,
+			&i.SampleCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestSensorReadings = `-- name: ListLatestSensorReadings :many
 SELECT id, device_id, temperature, humidity, recorded_at, created_at, updated_at, deleted_at FROM sensor_readings
  WHERE device_id = $1 AND deleted_at IS NULL

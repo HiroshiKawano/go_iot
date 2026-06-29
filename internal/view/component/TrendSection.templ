@@ -1,0 +1,117 @@
+package component
+
+// TrendSection は #trend-section（HTMX 部分更新単位）を描画する。
+// デバイス/期間切替時にこの領域全体を innerHTML 差し替えする（alert-rules と同型・§16/C12）。
+// 検出力留保注記・トレンド判定表（信号バッジ）・チャート器（data-echarts＋兄弟 option script）・
+// ロールアップ統計サマリ表（温度/湿度）・平年比注記を内包し、差し替え後も構造を保つ
+// （mocks/html/analysis-trend.html を写経・独自クラスは新設しない・§31）。
+// HasData=false は未選択/データ無で、案内のみ描き検定を断定しない（要件 1.4/6.x）。
+// グラフ内部描画（線/帯/markLine）はモック反映対象外＝器のみ写経（feedback_mock_graph_rendering_exception）。
+templ TrendSection(v TrendSectionView) {
+	<section id="trend-section">
+		if !v.HasData {
+			<section class="card">
+				<p class="empty-message">{ v.EmptyMessage }</p>
+			</section>
+		} else {
+			// 検出力留保注記（非有意≠トレンド無し・記述統計フォールバックの案内）。
+			if v.PowerNote != "" {
+				<div class="alert-banner">
+					<h2>検出力の留保</h2>
+					<ul>
+						<li>{ v.PowerNote }</li>
+					</ul>
+				</div>
+			}
+			// トレンド判定（Mann-Kendall ＋ Sen の傾き）。一次判定/補正済みを区分で区別する。
+			<section class="card">
+				<h2>トレンド判定（Mann-Kendall ＋ Sen の傾き）</h2>
+				<div class="table-wrapper">
+					<table class="data-table">
+						<thead>
+							<tr>
+								<th>指標</th>
+								<th>区分</th>
+								<th>判定</th>
+								<th>Sen の傾き</th>
+								<th>p 値</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, b := range v.Badges {
+								<tr>
+									<td>{ b.Metric }</td>
+									<td>{ b.Stage }</td>
+									<td>@TrendBadge(b)</td>
+									<td>{ b.Slope }</td>
+									<td>{ b.PValue }</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			</section>
+			// チャート器（トレンド＋日較差ΔT）。option JSON は <script type="application/json"> で安全供給。
+			if v.TrendOptionJSON != "" {
+				<section class="card">
+					<h2>長期トレンド</h2>
+					<div class="chart-wrapper">
+						<div id="trend-chart" data-echarts data-unit={ v.ChartUnit } data-color={ v.TrendColor }></div>
+						@templ.Raw(optionScript("trend-chart-option", v.TrendOptionJSON))
+					</div>
+					if v.DiurnalOptionJSON != "" {
+						<h2 class="u-mbs-6">日較差ΔT 推移</h2>
+						<div class="chart-wrapper">
+							<div id="diurnal-chart" data-echarts data-unit={ v.ChartUnit }></div>
+							@templ.Raw(optionScript("diurnal-chart-option", v.DiurnalOptionJSON))
+						</div>
+					}
+				</section>
+			}
+			// ロールアップ統計サマリ（温度・湿度）。
+			<section class="card">
+				@trendSummaryTable("ロールアップ統計サマリ（温度）", "℃", v.TempRows)
+				@trendSummaryTable("ロールアップ統計サマリ（湿度）", "%", v.HumidityRows)
+				if v.ClimatologyNote != "" {
+					<p class="form-help">{ v.ClimatologyNote }</p>
+				}
+			</section>
+		}
+	</section>
+}
+
+// trendSummaryTable はロールアップ統計サマリ表（粒度×指標）を .data-table で描画する。
+// 列: 期間/平均/最高/最低/日較差ΔT/σ/CV/サンプル数。単位は見出しに付与しセルは素の数値（CV は無次元）。
+templ trendSummaryTable(title, unit string, rows []RollupRow) {
+	<h2 class="u-mbs-6">{ title }</h2>
+	<div class="table-wrapper">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>期間</th>
+					<th>{ "平均(" + unit + ")" }</th>
+					<th>{ "最高(" + unit + ")" }</th>
+					<th>{ "最低(" + unit + ")" }</th>
+					<th>{ "日較差ΔT(" + unit + ")" }</th>
+					<th>{ "σ(" + unit + ")" }</th>
+					<th>CV</th>
+					<th>サンプル数</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range rows {
+					<tr>
+						<td>{ r.Bucket }</td>
+						<td>{ r.Avg }</td>
+						<td>{ r.Max }</td>
+						<td>{ r.Min }</td>
+						<td>{ r.DiurnalRange }</td>
+						<td>{ r.StdDev }</td>
+						<td>{ r.CV }</td>
+						<td>{ r.Samples }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}

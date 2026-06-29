@@ -1,0 +1,9 @@
+package component
+
+// TrendBadge は Mann-Kendall 判定の信号色バッジ（pill）を描画する。
+// Direction（up/down/flat）を .badge-trend-* に写し、有意な上昇=暖色 / 有意な下降=寒色 / 非有意=グレーで示す
+// （mocks/html/analysis-trend.html の判定バッジを写経・独自クラスは新設しない・§31）。
+// 区分（一次/補正済み）・Sen 傾き・p 値は TrendSection の判定表の各セルが受け持つ。
+templ TrendBadge(v TrendBadgeView) {
+	<span class={ "badge", "badge-trend-" + v.Direction }>{ v.Verdict }</span>
+}

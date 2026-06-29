@@ -13,6 +13,7 @@ templ Sidebar(nav SidebarNav) {
 		<nav>
 			<ul>
 				<li><a href="/dashboard" class={ templ.KV("active", nav.Current == NavDashboard) }>🏠 ダッシュボード</a></li>
+				<li><a href="/analysis/trend" class={ templ.KV("active", nav.Current == NavAnalysisTrend) }>📊 統計分析</a></li>
 				if nav.DeviceID > 0 {
 					<li><a href={ templ.SafeURL(fmt.Sprintf("/devices/%d", nav.DeviceID)) } class={ templ.KV("active", nav.Current == NavDeviceShow) }>📟 デバイス詳細</a></li>
 					<li><a href={ templ.SafeURL(fmt.Sprintf("/devices/%d/readings", nav.DeviceID)) } class={ templ.KV("active", nav.Current == NavReadings) }>📈 センサーデータ履歴</a></li>

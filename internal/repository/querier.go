@@ -39,6 +39,13 @@ type Querier interface {
 	ListAllDevices(ctx context.Context) ([]Device, error)
 	// 3日/7日/30日グラフ用: 日別の平均/最大/最小を集計 (24h以外の複数日はこの集計経路)
 	ListDailySensorAggregates(ctx context.Context, arg ListDailySensorAggregatesParams) ([]ListDailySensorAggregatesRow, error)
+	// 統計分析ページ(長期トレンド/季節サマリ)用: JST 暦日でバケットした日次集計。
+	// 月次/年次ロールアップは handler 境界で本クエリの日次行を二段集約する(月次ΔT=日次ΔTの平均)。
+	// 既存 ListDailySensorAggregates(DATE() の TZ 非明示=UTC バケット)は 3d/7d/30d グラフ用に無改変で温存し、
+	// 長期トレンド専用に JST 暦境界版を別名で追加する(SELECT のみ・DDL なし)。
+	// 事前条件: device_id は呼び出し前に RequireDeviceOwner で所有検証済み。$2=取得下限(期間×バッファ)。
+	// 事後条件: JST 暦日昇順・欠測日は行なし(handler が欠測扱いし 0 補完しない)。
+	ListDailySensorAggregatesJST(ctx context.Context, arg ListDailySensorAggregatesJSTParams) ([]ListDailySensorAggregatesJSTRow, error)
 	ListDeviceTokensByUser(ctx context.Context, userID int64) ([]ListDeviceTokensByUserRow, error)
 	ListDevicesByUser(ctx context.Context, userID int64) ([]Device, error)
 	// アラート判定ロジック (センサー受信時の同期処理) で使用

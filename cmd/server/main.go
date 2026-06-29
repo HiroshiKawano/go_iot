@@ -187,6 +187,13 @@ func newHTTPHandler(cfg *config.Config, sm *scs.SessionManager, q repository.Que
 	alertHistoryH := &handler.AlertHistoryHandler{Repo: q}
 	web.GET("/alerts/history", middleware.RequireAuth(), alertHistoryH.Index)
 
+	// 統計分析 (seasonal-trend): device-show と独立したトップ階層の研究用分析ページ。
+	// 長期トレンド・季節サマリ (自己相関補正つき Mann-Kendall + Sen の傾き + 厳密判定) を表示する。
+	// 初期表示=フルページ、デバイス/期間切替は HTMX 部分更新 (#trend-section)。GET のみゆえ CSRF 対象外。
+	// 所有者認可は RequireDeviceOwner (閲覧系=非所有/不在は 404・列挙防止)。
+	trendH := &handler.SeasonalTrendHandler{Repo: q}
+	web.GET("/analysis/trend", middleware.RequireAuth(), trendH.Show)
+
 	// 合成: メソッド上書き (ルーティング前) → セッション load/save → engine
 	return middleware.MethodOverride(sm.LoadAndSave(engine))
 }

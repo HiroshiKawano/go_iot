@@ -71,6 +71,7 @@
     --color-vpd: #0ca678;                 /* 飽差VPD系列・適正帯滞在率バーの基準色（温度橙/湿度青と区別） */
     --color-dewpoint: #4263eb;            /* 露点Td系列・結露帯の基準色（寒色＝湿り側・温度橙/湿度青/VPD緑と区別） */
     --color-gdd: #e03131;                 /* GDD累積曲線・予測到達マークの基準色（暖色＝積算温度＝生育が早い側・温度橙/湿度青/VPD緑/露点青と区別） */
+    --color-trend: #7048e8;               /* 統計分析ページ: ロールアップ平均線・Sen トレンド線の基準色（紫＝長期トレンド系・温度橙/湿度青/VPD緑/露点青/GDD赤と区別） */
 
     /* --- スペーススケール（4px グリッド。旧 Lism --s* を実値化） --- */
     --space-1: 0.25rem;   /* 4px  （旧 --s5）  */
@@ -645,6 +646,14 @@
 .badge-good { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
 .badge-caution { background: var(--color-warning); color: var(--color-text); border-color: var(--color-warning); }
 .badge-bad { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
+
+/* --- トレンド判定バッジ信号色（統計分析ページ・既存トークン流用＝新規色を増やさない） --- */
+/* Mann-Kendall の判定方向を信号色で示す。物理規約に合わせ「有意な上昇=暖色／有意な下降=寒色／非有意=グレー」。
+   品質バッジ(.badge-good/caution/bad)とは別ドメイン(トレンド方向)のため別名 variant にする。
+   TrendBadgeView.Direction（up/down/flat）と 1:1 対応する。 */
+.badge-trend-up { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }     /* 有意な上昇＝暖色（温度上昇＝暖まる側） */
+.badge-trend-down { background: var(--color-dewpoint); color: #fff; border-color: var(--color-dewpoint); } /* 有意な下降＝寒色（露点と同じ寒色トークンを流用） */
+.badge-trend-flat { background: var(--color-muted); color: #fff; border-color: var(--color-muted); }      /* 非有意＝グレー（断定しない＝中立） */
 
 /* --- アラートルール管理 --- */
 /* .rule-form のflex配置・form-group伸縮は「インラインフォーム共通」で定義済み。ここは固有値のみ */

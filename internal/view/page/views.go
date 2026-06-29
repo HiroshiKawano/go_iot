@@ -92,6 +92,17 @@ type AlertRulesPageView struct {
 	Section   component.AlertRuleSectionView // 選択中デバイスのフォーム + 一覧
 }
 
+// SeasonalTrendPageView は統計分析フルページ (SeasonalTrend・長期トレンド/季節サマリ) の描画データ。
+// 認証後レイアウト Layout に、集計軸/デバイス/期間セレクタ用の選択肢と #trend-section のセクション DTO を束ねる。
+// セレクタは #trend-section の外（swap 対象外）に置き、切替後も Tom Select を破棄/再初期化しない (§16/C12)。
+// Section はトレンド部品が所有する component 側 DTO (layout を内包しない。layout → component の import 方向を保つ)。
+type SeasonalTrendPageView struct {
+	Layout      layout.AppLayoutData       // App レイアウト (Title/UserName/CSRFToken/CSSURL/Flash)
+	Devices     []component.DeviceOption   // デバイス選択肢 (所有デバイスのみ)
+	Granularity string                     // 選択中の集計期間 ("monthly"/"yearly"・select の selected 復元用)
+	Section     component.TrendSectionView // #trend-section (判定/サマリ/チャート器 or 未選択案内)
+}
+
 // DeviceFormView はデバイス登録/編集ページ (DeviceCreatePage/DeviceEditPage) の描画データ。
 // 登録/編集で単一の View を共有する (画面差分は Form.IsEdit/Action/CancelURL と DeviceName のみ)。
 // 認証後レイアウト用の Layout と、編集見出し「デバイス編集: {DeviceName}」用の DeviceName、

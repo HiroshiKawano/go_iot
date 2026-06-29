@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>統計分析（長期トレンド・季節サマリ） - 農業IoTシステム</title>
+  <link rel="stylesheet" href="./style.css">
+  <!-- Tom Select (TS01: head 内で CDN 読み込み、バージョン統一 2.3.1) -->
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body x-data="{ navOpen: false }">
+  <header class="site-header">
+    <div class="header-left">
+      <button type="button" class="nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-label="メニュー">☰</button>
+      <a href="/dashboard" class="logo">🌱 農業IoT</a>
+    </div>
+    <div class="user-menu">
+      <span class="user-name">テストユーザー</span>
+      <form action="/logout" method="post" class="logout-form">
+        <button type="submit" class="btn btn-small btn-secondary">ログアウト</button>
+      </form>
+    </div>
+  </header>
+
+  <!-- 統計分析はデバイス文脈に依存しないトップ階層項目（ダッシュボード等と同列・常時表示）。
+       実装では Sidebar.templ に NavAnalysisTrend を追加し active 制御する。 -->
+  <aside class="sidebar" :class="{ 'is-open': navOpen }">
+    <nav>
+      <ul>
+        <li><a href="/dashboard">🏠 ダッシュボード</a></li>
+        <li><a href="/analysis/trend" class="active">📊 統計分析</a></li>
+        <li><a href="/alerts/rules">🔔 アラートルール</a></li>
+        <li><a href="/alerts/history">🕐 アラート履歴</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- モバイルドロワー開時の背面オーバーレイ（タップで閉じる） -->
+  <div class="nav-backdrop" x-show="navOpen" @click="navOpen = false" x-cloak></div>
+
+  <main class="main-content">
+    <div class="main-inner">
+      <div class="page-header">
+        <h1>統計分析（長期トレンド・季節サマリ）</h1>
+      </div>
+
+      <!-- 対象・期間選択。HX 部分更新では #trend-section のみ swap し、本セレクタ群は swap 対象外に置く
+           （HTMX実装ガイド §16/C12: Tom Select インスタンスを破棄/再初期化しないため #trend-section の外）。
+           集計軸（デバイス／地点／作物）・粒度（月次／年次）を選択する。最低限、単一デバイスの長期トレンドが成立する。 -->
+      <section class="card">
+        <h2>対象・期間選択</h2>
+        <form action="/analysis/trend" method="get" class="filter-form">
+          <div class="form-group">
+            <label>集計軸</label>
+            <!-- 集計軸は固定少数の列挙（デバイス／地点／作物）のためネイティブ select。
+                 地点・作物は利用可能なときのみ選択肢として有効になる（P1 locality / P3 crop 依存）。 -->
+            <select name="axis">
+              <option value="device" selected>デバイス別</option>
+              <option value="locality">地点別</option>
+              <option value="crop">作物別</option>
+            </select>
+            <span class="error-message"></span>
+          </div>
+          <div class="form-group">
+            <label>デバイス</label>
+            <!-- デバイス一覧は DB 由来で件数が増えるため Tom Select を適用（select.js-tom-select） -->
+            <select name="device_id" class="js-tom-select">
+              <option value="1" selected>ハウスA温湿度計</option>
+              <option value="2">ハウスB温湿度計</option>
+            </select>
+            <span class="error-message"></span>
+          </div>
+          <div class="form-group">
+            <label>集計期間</label>
+            <!-- 粒度は monthly / yearly の2値固定（binding: oneof=monthly yearly・既定 monthly）のためネイティブ select -->
+            <select name="granularity">
+              <option value="monthly" selected>月次</option>
+              <option value="yearly">年次</option>
+            </select>
+            <span class="error-message"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- HX 部分更新ターゲット。デバイス/期間切替時はこの #trend-section の中身のみ差し替える。
+           対象未選択・データ無のときは検定を断定せず、案内（.empty-message）に縮退する。 -->
+      <section id="trend-section">
+
+        <!-- 検出力留保の注記領域: 蓄積年数が少ない局面で「非有意」を誤解させない。
+             N_eff<10 または span<3年 のときは有意性を断定せず Sen 傾き＋符号＋記述統計を主提示にする。 -->
+        <div class="alert-banner">
+          <h2>検出力の留保</h2>
+          <ul>
+            <li>非有意はトレンドが無いことを意味しません（非有意 ≠ トレンド無し）。蓄積年数が少ないと検定の検出力が低く、実在するトレンドも「非有意」になり得ます。</li>
+            <li>年数が不足する間は有意性を断定せず、Sen の傾き・符号・記述統計（平年比・年次推移）を主たる判断材料にしてください。</li>
+          </ul>
+        </div>
+
+        <!-- トレンド判定（Mann-Kendall ＋ Sen の傾き）。
+             区分は「一次判定（多重比較未補正）」と「補正済み（Hamed-Rao）」を分けて提示する。
+             判定バッジは信号色: 有意な上昇=暖色(.badge-trend-up) / 有意な下降=寒色(.badge-trend-down) / 非有意=グレー(.badge-trend-flat)。 -->
+        <section class="card">
+          <h2>トレンド判定（Mann-Kendall ＋ Sen の傾き）</h2>
+          <p class="form-help">Mann-Kendall でトレンドの有無（Z／p 値）を、Sen の傾きで変化の大きさ（℃/年・%/年）を示します。素の回帰トレンド線は探索用の参考で、確定的な検定結果ではありません。</p>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>指標</th>
+                  <th>区分</th>
+                  <th>判定</th>
+                  <th>Sen の傾き</th>
+                  <th>p 値</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>温度</td>
+                  <td>一次判定（多重比較未補正）</td>
+                  <td><span class="badge badge-trend-up">有意な上昇</span></td>
+                  <td>+0.03 ℃/年</td>
+                  <td>0.012</td>
+                </tr>
+                <tr>
+                  <td>温度</td>
+                  <td>補正済み（Hamed-Rao）</td>
+                  <td><span class="badge badge-trend-flat">非有意</span></td>
+                  <td>+0.03 ℃/年</td>
+                  <td>0.087</td>
+                </tr>
+                <tr>
+                  <td>湿度</td>
+                  <td>一次判定（多重比較未補正）</td>
+                  <td><span class="badge badge-trend-down">有意な下降</span></td>
+                  <td>−0.15 %/年</td>
+                  <td>0.030</td>
+                </tr>
+                <tr>
+                  <td>湿度</td>
+                  <td>補正済み（Hamed-Rao）</td>
+                  <td><span class="badge badge-trend-flat">非有意</span></td>
+                  <td>−0.15 %/年</td>
+                  <td>0.110</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- トレンドチャート枠（器のみ）。グラフ内部描画（ロールアップ平均折れ線・Sen トレンド線 markLine・
+             有意区間 markArea・ブートストラップ CI 帯・平年比系列・長期 dataZoom）はモック反映対象外＝動的描画
+             （feedback_mock_graph_rendering_exception）。線/帯は #trend-chart の data-echarts option script で描画する。
+             基準色は --color-trend（紫・長期トレンド系）。 -->
+        <section class="card">
+          <h2>長期トレンド</h2>
+          <div class="chart-wrapper">
+            <div id="trend-chart" data-echarts data-unit="℃" data-color="#7048e8" class="chart-placeholder">トレンドグラフ（℃ / ロールアップ平均＋Sen トレンド線 markLine＋有意区間 markArea＋CI 帯＋平年比, 横軸:月次/年次, dataZoom 付き）</div>
+          </div>
+
+          <!-- 日較差ΔT 推移（日次 ΔT＝最高−最低 の推移）の器。グラフ内部描画はモック反映対象外。 -->
+          <h2 class="u-mbs-6">日較差ΔT 推移</h2>
+          <div class="chart-wrapper">
+            <div id="diurnal-chart" data-echarts data-unit="℃" class="chart-placeholder">日較差グラフ（℃ / 日次 ΔT＝最高−最低 の推移, 横軸:日付）</div>
+          </div>
+        </section>
+
+        <!-- ロールアップ統計サマリ表（粒度×指標）。列: 期間/平均/最高/最低/日較差ΔT/σ/CV/サンプル数。
+             月次ΔT は「月の max−min」ではなく「日次 ΔT の平均」。空月（欠測）は各値を「—」にして体裁を保ち、
+             欠測を 0 とみなさない（先頭 2024-03 行で図示）。単位はヘッダに付与しセルは素の数値（CV は無次元）。 -->
+        <section class="card">
+          <h2>ロールアップ統計サマリ（温度）</h2>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>期間</th>
+                  <th>平均(℃)</th>
+                  <th>最高(℃)</th>
+                  <th>最低(℃)</th>
+                  <th>日較差ΔT(℃)</th>
+                  <th>σ(℃)</th>
+                  <th>CV</th>
+                  <th>サンプル数</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>2024-03</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>0</td></tr>
+                <tr><td>2024-04</td><td>24.80</td><td>33.10</td><td>17.40</td><td>11.20</td><td>3.85</td><td>0.16</td><td>4320</td></tr>
+                <tr><td>2024-05</td><td>27.10</td><td>35.50</td><td>19.90</td><td>12.60</td><td>4.10</td><td>0.15</td><td>4464</td></tr>
+                <tr><td>2024-06</td><td>29.50</td><td>36.20</td><td>23.50</td><td>10.70</td><td>3.32</td><td>0.11</td><td>4320</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="u-mbs-6">ロールアップ統計サマリ（湿度）</h2>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>期間</th>
+                  <th>平均(%)</th>
+                  <th>最高(%)</th>
+                  <th>最低(%)</th>
+                  <th>日較差ΔT(%)</th>
+                  <th>σ(%)</th>
+                  <th>CV</th>
+                  <th>サンプル数</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>2024-03</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>0</td></tr>
+                <tr><td>2024-04</td><td>68.20</td><td>94.00</td><td>42.10</td><td>51.90</td><td>12.40</td><td>0.18</td><td>4320</td></tr>
+                <tr><td>2024-05</td><td>72.80</td><td>95.00</td><td>48.00</td><td>47.00</td><td>11.10</td><td>0.15</td><td>4464</td></tr>
+                <tr><td>2024-06</td><td>78.50</td><td>96.00</td><td>55.20</td><td>40.80</td><td>9.50</td><td>0.12</td><td>4320</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 平年比の不確実性注記。平年値は基準期間に依存し不確実性を伴う。
+               利用可能年が 3 年未満のときは平年比を表示せず、本注記のみを出す（実装は Climatology.Available で分岐）。 -->
+          <p class="form-help">平年比は自社データの暦月平均を基準にしています。基準期間に依存し不確実性を伴うため、利用可能年が 3 年未満の場合は平年比を表示しません。</p>
+        </section>
+
+        <!-- 対象未選択・データ無のときの案内（実装は HasData=false のとき本メッセージへ縮退）。 -->
+        <p class="empty-message" x-show="false" x-cloak>対象のデバイスを選択してください。選択した対象に計測データが無い場合は、解析結果を表示できません。</p>
+      </section>
+    </div>
+  </main>
+
+  <!-- Tom Select 初期化（TS02: ページ末尾に1箇所のみ・js-tom-select を一括初期化） -->
+  <script>
+    document.querySelectorAll('select.js-tom-select:not([disabled])').forEach(function (el) {
+      new TomSelect(el, {
+        allowEmptyOption: true,
+        dropdownParent: 'body',
+        plugins: el.multiple
+          ? ['remove_button', 'dropdown_input']
+          : ['dropdown_input'],
+      });
+    });
+  </script>
+  <!-- HTMX グローバルエラー通知トースト（通常は非表示。実装 App.templ では htmx:responseError / htmx:sendError 受信で JS 表示）。
+       フィールド検証エラーの .error-message とは別物の .error-toast を使う（テストが error-message を検証マーカーに使うため衝突回避）。 -->
+  <div id="global-error-toast" class="error-toast" role="alert" x-show="false" x-cloak>
+    <span id="global-error-toast-text">エラーが発生しました。</span>
+  </div>
+</body>
+</html>

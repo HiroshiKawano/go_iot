@@ -1,0 +1,74 @@
+package page
+
+import (
+	"fmt"
+
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
+	"github.com/HiroshiKawano/go_iot/internal/view/layout"
+)
+
+// SeasonalTrend は統計分析フルページ（長期トレンド・季節サマリ／mocks/html/analysis-trend.html を写経）。
+// 共通レイアウト App 内に、対象・期間セレクタ（集計軸/デバイス/粒度）と #trend-section（判定/サマリ/チャート器）を描画する。
+// セレクタは #trend-section の外に置き、切替後も select 自身は再描画しない（Tom Select は init 1 回で足りる・§16/C12）。
+// デバイス/粒度の change で hx-get し、#trend-section を innerHTML 差し替える（alert-rules と同型）。
+// hx-include="closest form" で同フォームの device_id と granularity を同時送出する。
+templ SeasonalTrend(v SeasonalTrendPageView) {
+	@layout.App(v.Layout) {
+		<div class="main-inner">
+			<div class="page-header">
+				<h1>統計分析（長期トレンド・季節サマリ）</h1>
+			</div>
+			<section class="card">
+				<h2>対象・期間選択</h2>
+				<form action="/analysis/trend" method="get" class="filter-form">
+					<div class="form-group">
+						<label>集計軸</label>
+						// 集計軸は固定少数の列挙（デバイス／地点／作物）ゆえネイティブ select。地点/作物は将来拡張。
+						<select name="axis">
+							<option value="device" selected>デバイス別</option>
+							<option value="locality">地点別</option>
+							<option value="crop">作物別</option>
+						</select>
+						<span class="error-message"></span>
+					</div>
+					<div class="form-group">
+						<label>デバイス</label>
+						<select
+							name="device_id"
+							class="js-tom-select"
+							hx-get="/analysis/trend"
+							hx-target="#trend-section"
+							hx-swap="innerHTML"
+							hx-trigger="change"
+							hx-include="closest form"
+							hx-push-url="true"
+						>
+							for _, d := range v.Devices {
+								<option value={ fmt.Sprintf("%d", d.ID) } selected?={ d.Selected }>{ d.Name }</option>
+							}
+						</select>
+						<span class="error-message"></span>
+					</div>
+					<div class="form-group">
+						<label>集計期間</label>
+						// 粒度は monthly/yearly の2値固定（binding oneof=monthly yearly・既定 monthly）ゆえネイティブ select。
+						<select
+							name="granularity"
+							hx-get="/analysis/trend"
+							hx-target="#trend-section"
+							hx-swap="innerHTML"
+							hx-trigger="change"
+							hx-include="closest form"
+							hx-push-url="true"
+						>
+							<option value="monthly" selected?={ v.Granularity != "yearly" }>月次</option>
+							<option value="yearly" selected?={ v.Granularity == "yearly" }>年次</option>
+						</select>
+						<span class="error-message"></span>
+					</div>
+				</form>
+			</section>
+			@component.TrendSection(v.Section)
+		</div>
+	}
+}

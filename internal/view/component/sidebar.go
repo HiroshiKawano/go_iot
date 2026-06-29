@@ -5,11 +5,12 @@ package component
 type NavPage string
 
 const (
-	NavDashboard    NavPage = "dashboard"
-	NavDeviceShow   NavPage = "device-show"
-	NavReadings     NavPage = "readings"
-	NavAlertRules   NavPage = "alert-rules"
-	NavAlertHistory NavPage = "alert-history"
+	NavDashboard     NavPage = "dashboard"
+	NavDeviceShow    NavPage = "device-show"
+	NavReadings      NavPage = "readings"
+	NavAlertRules    NavPage = "alert-rules"
+	NavAlertHistory  NavPage = "alert-history"
+	NavAnalysisTrend NavPage = "analysis-trend" // 統計分析（長期トレンド）。デバイス非依存のトップ階層項目
 )
 
 // SidebarNav はサイドバー描画に必要なナビ文脈。
