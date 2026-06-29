@@ -23,10 +23,14 @@ type DashboardView struct {
 // DeviceID は削除 (hx-delete) URL、DeleteName は削除確認モーダルに表示するデバイス名。
 // ページ見出しのデバイス名は Info.Name を流用する。
 type DeviceShowView struct {
-	Layout     layout.AppLayoutData
-	DeviceID   int64
-	Info       component.DeviceInfoView
-	ChartArea  component.DeviceChartAreaView
+	Layout    layout.AppLayoutData
+	DeviceID  int64
+	Info      component.DeviceInfoView
+	ChartArea component.DeviceChartAreaView
+	// GDD は積算温度・収穫予測パネル (gdd-forecast)。期間フラグメント (ChartArea) と独立した
+	// period 非連動の兄弟ブロックとして DeviceShow が描画する (定植日→現在の全期間)。
+	// 前提欠落・空データは handler が Guidance/空 OptionJSON で縮退させる (templ は導線注記のみ描画)。
+	GDD        component.GDDPanelView
 	Latest     component.LatestReadingsView
 	DeleteName string
 }

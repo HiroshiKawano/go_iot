@@ -45,6 +45,14 @@ templ DeviceForm(v DeviceFormView) {
 				</select>
 				<span class="error-message">{ v.Errors["crop"] }</span>
 			</div>
+			// 定植/播種日 (任意・空可・GDD 累積の起点)。作物 select の隣の素の date input (Tom Select 非対象)。
+			// 編集時は保存値を value でプリセット・検証エラー時は入力値を復元する。
+			<div class="form-group">
+				<label>定植/播種日</label>
+				<input type="date" name="planting_date" value={ v.PlantingDate }/>
+				<span class="form-help">GDD（積算温度・収穫予測）の起点。未設定でも他の項目は利用できます。</span>
+				<span class="error-message">{ v.Errors["planting_date"] }</span>
+			</div>
 			<div class="form-group">
 				<label>ステータス</label>
 				<div class="radio-group">

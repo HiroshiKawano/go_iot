@@ -153,6 +153,45 @@ func TestApp_tooltipは帯下限を除外し数値を丸める(t *testing.T) {
 	}
 }
 
+// GDD チャートは経過日数 value 軸ゆえ時刻 category 軸の connect から除外する (data-no-connect)。
+// initScope は connect 収集時のみ [data-no-connect] を除外し、init/dispose は全 [data-echarts] のまま
+// (後方互換・既存4チャートは従来どおり連動・R7.4)。
+// GDD（経過日数 value 軸・[x,y] 座標ペア）は、スカラ前提の endLabel formatter（p.value+unit）が
+// 配列を文字列化して壊れるため、endLabel/sampling を data-no-connect チャートに付与しない。
+// 既存4チャート（スカラ category 軸）には従来どおり付与する（後方互換）。
+func TestApp_endLabelはdata_no_connectに付与しない(t *testing.T) {
+	data := AppLayoutData{
+		Title:     "デバイス詳細 - 農業IoTシステム",
+		UserName:  "テストユーザー",
+		CSRFToken: "tok-el",
+		CSSURL:    "/static/css/style.css?v=dev",
+	}
+	html := render(t, App(data))
+
+	// endLabel/sampling 付与が data-no-connect ガードの内側にある（GDD は除外）。
+	if !strings.Contains(html, "!el.hasAttribute('data-no-connect') && option.series") {
+		t.Errorf("endLabel/sampling が data-no-connect で除外されていない（GDD の endLabel が壊れる）:\n%s", html)
+	}
+	// endLabel 自体は引き続き存在する（既存4チャート用）。
+	assertContains(t, html, "endLabel")
+}
+
+func TestApp_initScopeはdata_no_connectをconnectから除外(t *testing.T) {
+	data := AppLayoutData{
+		Title:     "デバイス詳細 - 農業IoTシステム",
+		UserName:  "テストユーザー",
+		CSRFToken: "tok-nc",
+		CSSURL:    "/static/css/style.css?v=dev",
+	}
+	html := render(t, App(data))
+
+	// connect 収集から data-no-connect を除外する判定が initScope に存在する。
+	assertContains(t, html, "data-no-connect")
+	// init/dispose は全 [data-echarts] のまま (除外は connect 収集のみ)。
+	assertContains(t, html, "[data-echarts]")
+	assertContains(t, html, "echarts.connect")
+}
+
 func TestApp_旧linkedChartsを撤去(t *testing.T) {
 	data := AppLayoutData{
 		Title:     "ダッシュボード - 農業IoTシステム",

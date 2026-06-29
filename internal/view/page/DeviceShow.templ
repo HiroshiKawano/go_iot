@@ -29,6 +29,14 @@ templ DeviceShowPage(v DeviceShowView) {
 					@component.DeviceChartArea(v.ChartArea)
 				</div>
 			</section>
+			// GDD（積算温度・収穫予測）パネル。期間フラグメント #device-chart-area の**外**に置く兄弟ブロック
+			// （period 非連動・定植日→現在の全期間ゆえ期間切替で再描画させない・R6.1/6.2）。
+			// 内容（導線注記 or 累積曲線）がある時のみ section を出す（空の器を出さない・dewpointPanel と同型）。
+			if v.GDD.Guidance != "" || v.GDD.OptionJSON != "" {
+				<section class="card">
+					@component.GDDPanel(v.GDD)
+				</section>
+			}
 			@component.LatestReadingsTable(v.Latest)
 			<div class="modal-overlay" x-show="deleteModalOpen" x-cloak>
 				<div class="modal-content">

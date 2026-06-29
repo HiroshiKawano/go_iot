@@ -279,6 +279,54 @@
         </div>
       </section>
 
+      <!-- GDD（積算温度・収穫予測）パネル: 温湿度から読み取り時算出する派生指標パネル（研究用）。
+           VPD・露点に続く第3弾。期間セレクタ**非連動**（定植日→現在の全期間）ゆえ期間選択カードの**外**の
+           独立 section に置く。x=経過日数の value 軸ゆえ echarts.connect から除外する（#gdd-chart に data-no-connect）。
+           グラフ内部描画（累積曲線・目標線・予測到達 markLine/markPoint）はモック反映対象外＝器のみ反映
+           （feedback_mock_graph_rendering_exception）。累積曲線/予測は #gdd-chart の data-echarts option script で描画する。
+           前提欠落（作物に Tbase なし／定植日 NULL）時は導線注記のみへ縮退する。
+           農家向け表示（信号色の収穫カウントダウン・圃場共有 URL）は本フェーズに含めない（研究用スコープ）。 -->
+      <section class="card">
+        <h2 class="u-mbs-6">GDD（積算温度・収穫予測）</h2>
+        <p class="form-help">作物: 米</p>
+
+        <div class="chart-wrapper">
+          <div id="gdd-chart" data-echarts data-no-connect data-unit="℃·日" data-color="#e03131" class="chart-placeholder">GDD累積曲線 (℃·日 / 累積GDD曲線＋収穫目標 markLine＋予測到達 markLine/markPoint, 横軸:経過日数の value 軸)</div>
+        </div>
+
+        <!-- GDD 数値カード（現在累積/残り積算/予測収穫日/現在ステージ）。前提欠落・予測不能時は各値「—」。 -->
+        <div class="summary-grid summary-grid-4 u-mbs-6">
+          <div class="summary-box"><div class="label">現在累積GDD</div><div class="value">500 ℃·日</div></div>
+          <div class="summary-box"><div class="label">残り積算温度</div><div class="value">900 ℃·日</div></div>
+          <div class="summary-box"><div class="label">予測収穫日</div><div class="value">2026-09-15</div></div>
+          <div class="summary-box"><div class="label">現在ステージ</div><div class="value">分げつ</div></div>
+        </div>
+        <p class="form-help">経過日数: 30 日</p>
+
+        <!-- 生育ステージ⇔GDD 対応表。現在の累積が該当する段に「← 現在」マークを付ける。 -->
+        <h2 class="u-mbs-6">生育ステージ（GDD 対応）</h2>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ステージ</th>
+                <th>到達GDD</th>
+                <th>現在</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>発芽</td><td>0 ℃·日</td><td></td></tr>
+              <tr><td>分げつ</td><td>300 ℃·日</td><td>← 現在</td></tr>
+              <tr><td>出穂</td><td>800 ℃·日</td><td></td></tr>
+              <tr><td>登熟</td><td>1100 ℃·日</td><td></td></tr>
+              <tr><td>収穫</td><td>1400 ℃·日</td><td></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- 近似注記（予測が線形外挿の目安である旨・季節変動は織り込まない）。 -->
+        <p class="form-help">予測収穫日は線形外挿による目安です（季節変動は織り込みません）。</p>
+      </section>
+
       <section class="card">
         <h2>最新計測データ</h2>
         <!-- R03: table はラッパー内, R04: thead/tbody 分離, R11: 2件以上, R12: 空メッセージ -->

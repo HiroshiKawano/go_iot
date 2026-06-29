@@ -131,6 +131,14 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 		return
 	}
 
+	// GDD（積算温度・収穫予測）パネルを period 非連動で組む（定植日→現在の全期間・期間フラグメント外）。
+	// 期間切替フラグメント Chart/buildChartArea は無改修ゆえ period 切替で GDD は再描画されない（R6.1/6.2）。
+	gddPanel, err := h.buildGDDPanel(ctx, device, now)
+	if err != nil {
+		renderError(c, http.StatusInternalServerError)
+		return
+	}
+
 	v := page.DeviceShowView{
 		Layout: layout.AppLayoutData{
 			Title:     device.Name + deviceShowTitleSuffix,
@@ -144,6 +152,7 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 		DeviceID:   id,
 		Info:       buildDeviceInfoView(device),
 		ChartArea:  chartArea,
+		GDD:        gddPanel,
 		Latest:     buildLatestReadingsView(id, latest),
 		DeleteName: device.Name,
 	}

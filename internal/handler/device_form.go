@@ -8,19 +8,58 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/HiroshiKawano/go_iot/internal/repository"
 	"github.com/go-playground/validator/v10"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // deviceForm はデバイス登録・更新が c.ShouldBind で受ける binding 構造体。
 // MAC の形式検証・正規化・一意検査は binding では表現できないため handler 内で行い、
 // ここでは必須・文字数・ステータスの許容値のみをタグで担保する。
 type deviceForm struct {
-	Name       string `form:"name"        binding:"required,max=255"`
-	MacAddress string `form:"mac_address" binding:"required"`           // 形式/正規化/一意は handler で
-	Locality   string `form:"locality"`                                 // 沖縄の地域 (domain.Locality)。存在検証は handler で procedural に行う
-	Crop       string `form:"crop"`                                     // 栽培作物 (domain.Crop)。任意・存在検証は handler で procedural に行う
-	IsActive   string `form:"is_active"   binding:"required,oneof=1 0"` // "1"=稼働中 / "0"=停止中
+	Name         string `form:"name"          binding:"required,max=255"`
+	MacAddress   string `form:"mac_address"   binding:"required"`           // 形式/正規化/一意は handler で
+	Locality     string `form:"locality"`                                   // 沖縄の地域 (domain.Locality)。存在検証は handler で procedural に行う
+	Crop         string `form:"crop"`                                       // 栽培作物 (domain.Crop)。任意・存在検証は handler で procedural に行う
+	PlantingDate string `form:"planting_date"`                              // 定植/播種日 (GDD 積算の起点)。任意・空可・形式/未来日は handler で procedural に検証
+	IsActive     string `form:"is_active"     binding:"required,oneof=1 0"` // "1"=稼働中 / "0"=停止中
+}
+
+// 定植日の手続き検証メッセージ (binding では未来日・日付形式を表現できないため handler 内)。
+const (
+	plantingDateFormatMessage = "定植日は正しい日付（YYYY-MM-DD）で入力してください"
+	plantingDateFutureMessage = "定植日は未来日にできません"
+)
+
+// parsePlantingDate は定植日フォーム値を保存用 pgtype.Date と field error に変換する。
+// 空 → NULL (Valid:false・error なし)・不正形式 → 形式 error・未来日 (今日 JST より後) → 未来日 error。
+// 日付のみ比較ゆえ TZ 差で前後しないよう暦日 (y/m/d) で評価する (要件 2.6)。
+func parsePlantingDate(s string, now time.Time) (pgtype.Date, string) {
+	if s == "" {
+		return pgtype.Date{}, "" // 空は NULL (任意項目)
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return pgtype.Date{}, plantingDateFormatMessage
+	}
+	// 暦日比較: 入力日付 (パース結果の y/m/d) と今日 JST の y/m/d を UTC 0:00 に正規化して比較する。
+	plant := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	nowJST := now.In(jst)
+	today := time.Date(nowJST.Year(), nowJST.Month(), nowJST.Day(), 0, 0, 0, 0, time.UTC)
+	if plant.After(today) {
+		return pgtype.Date{}, plantingDateFutureMessage
+	}
+	return pgtype.Date{Time: t, Valid: true}, ""
+}
+
+// devicePlantingDateValue はデバイスの定植日 (pgtype.Date) を復元用の "YYYY-MM-DD" へ変換する (未設定は "")。
+func devicePlantingDateValue(d repository.Device) string {
+	if d.PlantingDate.Valid {
+		return d.PlantingDate.Time.Format("2006-01-02")
+	}
+	return ""
 }
 
 // macFormat は MACアドレスの許容形式 (16進2桁をコロン区切りで6組)。

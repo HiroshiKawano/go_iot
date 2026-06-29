@@ -57,3 +57,19 @@ type DewpointChartSpec struct {
 	Temperature  []float64 // 気温 T 重ね線（series[1]）
 	Condensation []Run     // 結露帯（xAxis 範囲の寒色 markArea）。空なら帯なし
 }
+
+// GDDChartSpec は GDD 累積曲線専用 ECharts option ビルダー（GDDChartOptionJSON）への入力契約。
+// 温湿度/VPD/露点の各 Spec とは別型に隔離し、それらの無回帰を守る（P2/P3/P6 無回帰）。
+//
+// 他パネルとの決定的な違い: x 軸が時刻 category でなく**経過日数の value 軸**である。
+// 予測到達日（データ範囲外の未来）を markLine の `xAxis: 数値` で表現するため value 軸が必須で、
+// series[0] のデータは [経過日数, 累積GDD] の座標ペアで与える（Labels を持たない）。
+// 期間セレクタ非連動ゆえ温湿度等の時刻ラベルとは無関係（定植日→現在の全期間）。
+type GDDChartSpec struct {
+	ElapsedDays []float64 // x: 各 present 日の経過日数（0 起点・gap は不連続）。Cumulative と同長
+	Cumulative  []float64 // y: 累積 GDD（series[0]・単調非減少）。ElapsedDays と同長
+	Color       string    // 累積線の基準色（--color-gdd・暖色）
+	TargetGDD   float64   // 収穫目標 GDD（水平 markLine の y）
+	ForecastDay float64   // 予測到達経過日（垂直 markLine／markPoint の x）。HasForecast=true のとき使用
+	HasForecast bool      // false なら予測 markLine/markPoint を出さない（予測不能・到達済み）
+}

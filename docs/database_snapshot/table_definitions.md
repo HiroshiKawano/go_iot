@@ -117,6 +117,7 @@ ESP8266デバイス管理
 | deleted_at | timestamp with time zone | YES | - | 論理削除日時 (NULL = 有効) |
 | locality | character varying(20) | YES | - | 圃場所在地の地域キー (沖縄53地域・domain.Locality と対応。親市町村は Locality.Municipality() で導出) |
 | crop | character varying(20) | YES | - | 栽培作物キー (domain.Crop と対応・VPD 適正帯の切替に使用。NULL=未設定で既定帯 0.3-1.5kPa) |
+| planting_date | date | YES | - | 定植/播種日 (GDD 積算の起点・domain.GDDModel と併用。NULL=未設定で GDD パネル非表示) |
 
 **索引**
 

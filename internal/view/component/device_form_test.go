@@ -26,9 +26,34 @@ func baseDeviceFormView() DeviceFormView {
 			{Value: "ingen", Label: "インゲン", Selected: false},
 			{Value: "leafy_vegetable", Label: "葉野菜", Selected: false},
 		},
-		IsActive: "1",
-		Errors:   map[string]string{},
+		PlantingDate: "2026-04-01",
+		IsActive:     "1",
+		Errors:       map[string]string{},
 	}
+}
+
+// TestDeviceForm_定植日のdate入力と値復元 は GDD 累積の起点となる定植/播種日が
+// 作物 select の隣に素の date input (Tom Select 非対象) として描画され、保存値が value で復元されることを固定する (R2.1/2.3)。
+func TestDeviceForm_定植日のdate入力と値復元(t *testing.T) {
+	html := render(t, DeviceForm(baseDeviceFormView()))
+
+	// 定植日は <input type="date" name="planting_date">（任意・空可）。
+	assertContains(t, html, `type="date"`)
+	assertContains(t, html, `name="planting_date"`)
+	// 保存値が value で復元される。
+	assertContains(t, html, `value="2026-04-01"`)
+	// Tom Select 非対象（素の input）ゆえ js-tom-select は所在地+作物の2つのまま（増えない）。
+	if got := strings.Count(html, "js-tom-select"); got != 2 {
+		t.Errorf("js-tom-select の数 = %d, want 2 (定植日は素の input で増やさない)", got)
+	}
+}
+
+// TestDeviceForm_定植日の項目別エラーを描画 は未来日等の検証エラーが planting_date 用 .error-message に出ることを固定する (R2.6)。
+func TestDeviceForm_定植日の項目別エラーを描画(t *testing.T) {
+	v := baseDeviceFormView()
+	v.Errors = map[string]string{"planting_date": "定植日は未来日にできません"}
+	html := render(t, DeviceForm(v))
+	assertContains(t, html, "定植日は未来日にできません")
 }
 
 // TestDeviceForm_作物selectと空optionと選択復元 は栽培作物の検索可能 select が

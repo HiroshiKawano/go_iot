@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/HiroshiKawano/go_iot/internal/auth"
 	"github.com/HiroshiKawano/go_iot/internal/authz"
@@ -99,6 +100,11 @@ func (h *DeviceHandler) Create(c *gin.Context) {
 	if !validCropInput(form.Crop) {
 		errs["crop"] = cropInvalidMessage
 	}
+	// 定植日: 空可・形式/未来日を procedural に検証 (locality/crop と同型・空→NULL)。
+	plantingDate, pdErr := parsePlantingDate(form.PlantingDate, time.Now())
+	if pdErr != "" {
+		errs["planting_date"] = pdErr
+	}
 
 	if len(errs) > 0 {
 		h.reRenderCreate(c, form, errs)
@@ -106,13 +112,14 @@ func (h *DeviceHandler) Create(c *gin.Context) {
 	}
 
 	device, err := h.Repo.CreateDevice(ctx, repository.CreateDeviceParams{
-		UserID:     uid,
-		Name:       form.Name,
-		MacAddress: mac,
-		Location:   nil, // 新規デバイスは旧自由入力 location を持たない (所在地は locality)
-		Locality:   nullableStr(form.Locality),
-		Crop:       nullableStr(form.Crop),
-		IsActive:   parseIsActive(form.IsActive),
+		UserID:       uid,
+		Name:         form.Name,
+		MacAddress:   mac,
+		Location:     nil, // 新規デバイスは旧自由入力 location を持たない (所在地は locality)
+		Locality:     nullableStr(form.Locality),
+		Crop:         nullableStr(form.Crop),
+		PlantingDate: plantingDate,
+		IsActive:     parseIsActive(form.IsActive),
 	})
 	if err != nil {
 		renderError(c, http.StatusInternalServerError)
@@ -166,11 +173,12 @@ func (h *DeviceHandler) ShowEditForm(c *gin.Context) {
 	}
 
 	form := deviceForm{
-		Name:       device.Name,
-		MacAddress: device.MacAddress,
-		Locality:   deviceLocalityValue(device),
-		Crop:       deviceCropValue(device),
-		IsActive:   radioFromIsActive(device.IsActive),
+		Name:         device.Name,
+		MacAddress:   device.MacAddress,
+		Locality:     deviceLocalityValue(device),
+		Crop:         deviceCropValue(device),
+		PlantingDate: devicePlantingDateValue(device),
+		IsActive:     radioFromIsActive(device.IsActive),
 	}
 	v := buildEditView(csrf.Token(c.Request), user.Name, id, device.Name, form, map[string]string{})
 	renderPage(c, http.StatusOK, page.DeviceEditPage(v))
@@ -215,6 +223,11 @@ func (h *DeviceHandler) Update(c *gin.Context) {
 	if !validCropInput(form.Crop) {
 		errs["crop"] = cropInvalidMessage
 	}
+	// 定植日: 空可・形式/未来日を procedural に検証 (locality/crop と同型・空→NULL)。
+	plantingDate, pdErr := parsePlantingDate(form.PlantingDate, time.Now())
+	if pdErr != "" {
+		errs["planting_date"] = pdErr
+	}
 
 	if len(errs) > 0 {
 		h.reRenderEdit(c, id, device.Name, form, errs)
@@ -222,13 +235,14 @@ func (h *DeviceHandler) Update(c *gin.Context) {
 	}
 
 	updated, err := h.Repo.UpdateDevice(ctx, repository.UpdateDeviceParams{
-		ID:         id,
-		Name:       form.Name,
-		MacAddress: mac,
-		Location:   device.Location, // 旧自由入力 location は編集対象外。既存値を保全 (非破壊)
-		Locality:   nullableStr(form.Locality),
-		Crop:       nullableStr(form.Crop),
-		IsActive:   parseIsActive(form.IsActive),
+		ID:           id,
+		Name:         form.Name,
+		MacAddress:   mac,
+		Location:     device.Location, // 旧自由入力 location は編集対象外。既存値を保全 (非破壊)
+		Locality:     nullableStr(form.Locality),
+		Crop:         nullableStr(form.Crop),
+		PlantingDate: plantingDate,
+		IsActive:     parseIsActive(form.IsActive),
 	})
 	if err != nil {
 		renderError(c, http.StatusInternalServerError)
@@ -293,18 +307,19 @@ func buildCreateView(token, userName string, form deviceForm, errs map[string]st
 			Nav: component.SidebarNav{},
 		},
 		Form: component.DeviceFormView{
-			CSRFToken:  token,
-			Action:     "/devices",
-			IsEdit:     false,
-			CancelURL:  "/dashboard",
-			Name:       form.Name,
-			MacAddress: form.MacAddress,
-			Locality:   form.Locality,
-			Localities: localityOptions(form.Locality),
-			Crop:       form.Crop,
-			Crops:      cropOptions(form.Crop),
-			IsActive:   form.IsActive,
-			Errors:     errs,
+			CSRFToken:    token,
+			Action:       "/devices",
+			IsEdit:       false,
+			CancelURL:    "/dashboard",
+			Name:         form.Name,
+			MacAddress:   form.MacAddress,
+			Locality:     form.Locality,
+			Localities:   localityOptions(form.Locality),
+			Crop:         form.Crop,
+			Crops:        cropOptions(form.Crop),
+			PlantingDate: form.PlantingDate,
+			IsActive:     form.IsActive,
+			Errors:       errs,
 		},
 	}
 }
@@ -326,18 +341,19 @@ func buildEditView(token, userName string, id int64, deviceName string, form dev
 		},
 		DeviceName: deviceName,
 		Form: component.DeviceFormView{
-			CSRFToken:  token,
-			Action:     path,
-			IsEdit:     true,
-			CancelURL:  path,
-			Name:       form.Name,
-			MacAddress: form.MacAddress,
-			Locality:   form.Locality,
-			Localities: localityOptions(form.Locality),
-			Crop:       form.Crop,
-			Crops:      cropOptions(form.Crop),
-			IsActive:   form.IsActive,
-			Errors:     errs,
+			CSRFToken:    token,
+			Action:       path,
+			IsEdit:       true,
+			CancelURL:    path,
+			Name:         form.Name,
+			MacAddress:   form.MacAddress,
+			Locality:     form.Locality,
+			Localities:   localityOptions(form.Locality),
+			Crop:         form.Crop,
+			Crops:        cropOptions(form.Crop),
+			PlantingDate: form.PlantingDate,
+			IsActive:     form.IsActive,
+			Errors:       errs,
 		},
 	}
 }

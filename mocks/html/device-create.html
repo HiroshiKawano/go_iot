@@ -87,6 +87,15 @@
             <span class="error-message"></span>
           </div>
 
+          <!-- 定植/播種日（任意・空可・GDD 積算の起点）。作物 select の隣の素の date input（Tom Select 非対象）。
+               未来日は「定植日は未来日にできません」で再描画する（実装側検証）。 -->
+          <div class="form-group">
+            <label>定植/播種日</label>
+            <input type="date" name="planting_date" value="">
+            <span class="form-help">GDD（積算温度・収穫予測）の起点。未設定でも他の項目は利用できます。</span>
+            <span class="error-message"></span>
+          </div>
+
           <div class="form-group">
             <label>ステータス</label>
             <div class="radio-group">

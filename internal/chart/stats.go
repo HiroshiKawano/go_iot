@@ -112,6 +112,45 @@ func CV(values []float64, epsilon float64) (cv float64, ok bool) {
 	return StdDev(values) / m, true
 }
 
+// LinearFit は (xs, ys) に最小二乗で直線 y = slope·x + intercept を当てはめ、傾き・切片を返す。
+// GDD の到達日外挿（gdd.go::ForecastDaysToTarget）専用でなく回帰の汎用純関数として置く（将来の trend 検出が再利用可）。
+//
+//	slope     = Σ(xᵢ−x̄)(yᵢ−ȳ) / Σ(xᵢ−x̄)²
+//	intercept = ȳ − slope·x̄
+//
+// ok=false: len<2（点が足りない）／ Σ(xᵢ−x̄)²=0（x の分散0＝全点同一 x で傾き定義不能）。
+// このとき slope/intercept は 0 を返す（呼び出し側は ok で分岐する）。
+// 長さ不一致は短い方に合わせて防御的に扱う（純粋層の入力非破壊・math のみ依存）。
+func LinearFit(xs, ys []float64) (slope, intercept float64, ok bool) {
+	n := len(xs)
+	if len(ys) < n {
+		n = len(ys)
+	}
+	if n < 2 {
+		return 0, 0, false
+	}
+	var sx, sy float64
+	for i := 0; i < n; i++ {
+		sx += xs[i]
+		sy += ys[i]
+	}
+	mx := sx / float64(n)
+	my := sy / float64(n)
+
+	var sxx, sxy float64
+	for i := 0; i < n; i++ {
+		dx := xs[i] - mx
+		sxx += dx * dx
+		sxy += dx * (ys[i] - my)
+	}
+	if sxx == 0 {
+		return 0, 0, false // x の分散0（全点同一 x）
+	}
+	slope = sxy / sxx
+	intercept = my - slope*mx
+	return slope, intercept, true
+}
+
 // --- 内部ヘルパ（パッケージ非公開・純粋） ---
 
 // windowSlice は index i を末尾とする窓幅 window の部分スライスを返す。

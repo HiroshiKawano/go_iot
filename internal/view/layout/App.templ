@@ -148,8 +148,11 @@ templ App(data AppLayoutData) {
 						var inst = echarts.init(el);
 						// クライアント付与: 右端の現在値ラベル (endLabel・R2.3) と間引き (lttb・R7.1)。
 						// 単位はコンテナの data-unit から取る ("℃"/"%")。
+						// data-no-connect (GDD・経過日数 value 軸) は系列が [x,y] 座標ペアゆえ、スカラ前提の
+						// endLabel formatter (p.value+unit) が配列を文字列化して壊れる。よって時刻 category 軸の
+						// 主要チャート (温湿度/VPD/露点) にのみ付与し、GDD は除外する。
 						var unit = el.getAttribute('data-unit') || '';
-						if (option.series && option.series[0]) {
+						if (!el.hasAttribute('data-no-connect') && option.series && option.series[0]) {
 							option.series[0].endLabel = {
 								show: true,
 								formatter: function(p) { return p.value + unit; }
@@ -178,16 +181,19 @@ templ App(data AppLayoutData) {
 						inst.setOption(option);
 						return inst;
 					}
-					// scope 配下の [data-echarts] を初期化し、得た2インスタンスを connect で連動させる (R3.3)。
+					// scope 配下の [data-echarts] を初期化し、connect 可能なインスタンスを連動させる (R3.3)。
+					// GDD チャート (#gdd-chart) は経過日数 value 軸ゆえ時刻 category 軸の連動が無意味で、
+					// [data-no-connect] を付けて connect 収集からのみ除外する。init/dispose は全 [data-echarts]
+					// 対象のまま (後方互換・既存4チャートは属性なしで従来どおり連動・R7.4)。
 					function initScope(scope) {
 						if (typeof echarts === 'undefined') return;
 						var root = scope || document;
-						var instances = [];
+						var connectable = [];
 						root.querySelectorAll('[data-echarts]').forEach(function(el) {
 							var inst = initContainer(el);
-							if (inst) instances.push(inst);
+							if (inst && !el.hasAttribute('data-no-connect')) connectable.push(inst);
 						});
-						if (instances.length > 1) echarts.connect(instances);
+						if (connectable.length > 1) echarts.connect(connectable);
 					}
 					// scope 配下の既存インスタンスを破棄する (swap 前のリーク防止・R6.2)。
 					function disposeScope(scope) {

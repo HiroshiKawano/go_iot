@@ -1,0 +1,75 @@
+package component
+
+// GDDPanel は GDD（積算温度・収穫予測）パネルを描画する（mocks/html/device-show.html の GDD パネルを写経）。
+// 露点・VPD に続く派生指標ダッシュボードの第3弾。device-show **ページ**が DeviceChartArea の兄弟として
+// 直接呼ぶ（期間フラグメント外＝period 非連動・定植日→現在の全期間）。
+//
+// 他パネルと決定的に異なる点:
+//   - x=経過日数の value 軸ゆえ echarts.connect から除外する（#gdd-chart に data-no-connect 付与）。
+//     init/dispose は全 [data-echarts] 対象のまま（App.templ initScope は connect 収集のみ除外・後方互換）。
+//   - GDD チャートのマウント先 #gdd-chart（data-echarts data-no-connect data-unit="℃·日" data-color）と
+//     兄弟 option script（累積曲線＋目標 markLine＋予測 markLine/markPoint を内包）を出す。
+//
+// 前提欠落（作物に Tbase なし／定植日 NULL 等）は handler が Guidance を埋め、ここは導線注記のみ描く
+// （#gdd-chart・カード・ステージ表を出さず破綻させない・R6.3）。研究用スコープに限定し農家向け平易表示
+// （信号色の収穫カウントダウン・圃場共有 URL）は含めない（R8.3）。
+templ GDDPanel(v GDDPanelView) {
+	// handler は常に Guidance（前提欠落）か OptionJSON（データあり）のどちらかを埋める（6.1/6.2）。
+	// 両方空の zero 値（未結線・無関係 fixture）では何も描かない（孤立見出しを出さない）。
+	if v.Guidance != "" {
+		// 前提欠落: 設定導線の注記のみ（縮退・レイアウト維持）。
+		<h2 class="u-mbs-6">GDD（積算温度・収穫予測）</h2>
+		<p class="form-help">{ v.Guidance }</p>
+	} else if v.OptionJSON != "" {
+		<h2 class="u-mbs-6">GDD（積算温度・収穫予測）</h2>
+		<p class="form-help">{ "作物: " + v.CropLabel }</p>
+		<div class="chart-wrapper">
+			<div id="gdd-chart" data-echarts data-no-connect data-unit="℃·日" data-color={ v.Color }></div>
+			@templ.Raw(optionScript("gdd-chart-option", v.OptionJSON))
+		</div>
+		// GDD 数値カード（現在累積/残り積算/予測収穫日/現在ステージ/経過日数）。.summary-grid-4 をモックから流用。
+		<div class="summary-grid summary-grid-4 u-mbs-6">
+			<div class="summary-box"><div class="label">現在累積GDD</div><div class="value">{ v.Card.Cumulative }</div></div>
+			<div class="summary-box"><div class="label">残り積算温度</div><div class="value">{ v.Card.Remaining }</div></div>
+			<div class="summary-box"><div class="label">予測収穫日</div><div class="value">{ v.Card.ForecastDate }</div></div>
+			<div class="summary-box"><div class="label">現在ステージ</div><div class="value">{ v.Card.Stage }</div></div>
+		</div>
+		// 経過日数は補助情報として別行で示す（4枚カード＝主要指標の流用に揃える）。
+		<p class="form-help">{ "経過日数: " + v.Card.ElapsedDays }</p>
+		@gddStageTable(v.Stages)
+		// 近似注記（予測が線形外挿の目安である旨・R3.4）。
+		if v.Note != "" {
+			<p class="form-help">{ v.Note }</p>
+		}
+	}
+}
+
+// gddStageTable は生育ステージ⇔GDD 対応表を .data-table で描画する。
+// 現在の累積が該当する段は Current=true で「← 現在」マークを付ける（handler が判定済み）。
+templ gddStageTable(rows []GrowthStageRow) {
+	<h2 class="u-mbs-6">生育ステージ（GDD 対応）</h2>
+	<div class="table-wrapper">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>ステージ</th>
+					<th>到達GDD</th>
+					<th>現在</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range rows {
+					<tr>
+						<td>{ row.Name }</td>
+						<td>{ row.GDD }</td>
+						<td>
+							if row.Current {
+								← 現在
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}

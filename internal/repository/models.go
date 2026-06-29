@@ -62,6 +62,8 @@ type Device struct {
 	Locality *string `json:"locality"`
 	// 栽培作物キー (domain.Crop と対応・VPD 適正帯の切替に使用。NULL=未設定で既定帯 0.3-1.5kPa)
 	Crop *string `json:"crop"`
+	// 定植/播種日 (GDD 積算の起点・domain.GDDModel と併用。NULL=未設定で GDD パネル非表示)
+	PlantingDate pgtype.Date `json:"planting_date"`
 }
 
 // デバイスAPI用 Bearer トークン (Sanctum相当)

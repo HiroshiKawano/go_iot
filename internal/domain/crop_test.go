@@ -221,6 +221,83 @@ func TestCrop_DiseaseModel_AllCropsNonEmpty(t *testing.T) {
 	}
 }
 
+// ---- 3.1 GDDModel（作物別 Tbase・生育ステージ・収穫目標 GDD） -----------------
+
+// TestCrop_GDDModel は作物別 GDD モデルが、米で具体値・他は既定フォールバックを返し、
+// Stages が GDD 昇順・名称非空・Tbase 正値の不変条件を満たすことを固定する（要件 5.1〜5.4）。
+// 数値そのものの妥当性は暫定でテスト対象外（実機/文献で確定＝GO 後スモーク）。具体値の「存在」を固定する。
+func TestCrop_GDDModel(t *testing.T) {
+	tests := []struct {
+		name         string
+		crop         Crop
+		wantNonEmpty bool // 具体的な Stages（非空）を期待するか
+	}{
+		{"rice 具体値（GDD 本命作物）", CropRice, true},
+		// 未確定作物は既定フォールバック（段階拡張で後追い可）。
+		{"sugarcane 未定義→既定", CropSugarcane, false},
+		{"goya 未定義→既定", CropGoya, false},
+		{"leafy_vegetable 未定義→既定", CropLeafyVegetable, false},
+		// 未設定（空）/ 不正 → 既定フォールバック（要件 5.4）。
+		{"未設定(空)→既定", Crop(""), false},
+		{"不正値→既定", Crop("invalid"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := tt.crop.GDDModel()
+			// Tbase は常に具体値（既定でも正値）で、Stages が空でも日次 GDD は算出可能（要件 5.4）。
+			if m.Tbase <= 0 {
+				t.Errorf("Tbase = %v, want >0", m.Tbase)
+			}
+			if tt.wantNonEmpty {
+				if len(m.Stages) == 0 {
+					t.Errorf("crop %q: Stages が空、具体値を期待", tt.crop)
+				}
+			} else if len(m.Stages) != 0 {
+				// 未定義作物は DefaultGDDModel（Stages 空）にフォールバックする。
+				t.Errorf("crop %q: 既定フォールバックのはずが Stages 非空 %+v", tt.crop, m.Stages)
+			}
+			// 不変条件: Stages は GDD 昇順（CumulativeGDD/GrowthStageIndex の前提）。
+			for i := 1; i < len(m.Stages); i++ {
+				if m.Stages[i].GDD < m.Stages[i-1].GDD {
+					t.Errorf("Stages が昇順でない: [%d]=%v < [%d]=%v", i, m.Stages[i].GDD, i-1, m.Stages[i-1].GDD)
+				}
+			}
+			// 各ステージ名は表示用ゆえ非空。
+			for _, s := range m.Stages {
+				if s.Name == "" {
+					t.Errorf("ステージ名が空 %+v", s)
+				}
+			}
+		})
+	}
+}
+
+// TestCrop_GDDModel_Rice は米の具体値（Tbase=10・非空 Stages・収穫目標>0）を固定する（要件 5.2）。
+func TestCrop_GDDModel_Rice(t *testing.T) {
+	m := CropRice.GDDModel()
+	if m.Tbase != 10 {
+		t.Errorf("Rice Tbase = %v, want 10", m.Tbase)
+	}
+	if len(m.Stages) == 0 {
+		t.Fatal("Rice Stages が空、具体的な生育ステージを期待")
+	}
+	// 最終段=収穫目標 GDD（昇順の最大・>0）。
+	last := m.Stages[len(m.Stages)-1]
+	if last.GDD <= 0 {
+		t.Errorf("収穫目標 GDD（最終段）= %v, want >0", last.GDD)
+	}
+}
+
+// TestDefaultGDDModel は既定 GDD モデル（5.4 フォールバックの基準値）を固定する。
+func TestDefaultGDDModel(t *testing.T) {
+	if DefaultGDDModel.Tbase <= 0 {
+		t.Errorf("DefaultGDDModel.Tbase = %v, want >0", DefaultGDDModel.Tbase)
+	}
+	if len(DefaultGDDModel.Stages) != 0 {
+		t.Errorf("DefaultGDDModel.Stages = %+v, want 空（収穫目標未定義）", DefaultGDDModel.Stages)
+	}
+}
+
 func TestParseCrop(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		c, err := ParseCrop("goya")

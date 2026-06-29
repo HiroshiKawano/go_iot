@@ -170,6 +170,44 @@ type HighHumidityEventRow struct {
 	MinSpread string // 区間内最小スプレッド "0.3℃" (結露しやすさ=湿り側ほど小)
 }
 
+// GDDPanelView は GDD (積算温度) 累積・収穫予測パネル (device-show ページ・研究用) の表示データ。
+// すべて整形済み primitive で保持し、pgtype/repository 型を持ち込まない (view 純粋性)。
+// VPD・露点に続く派生指標ダッシュボードの第3弾 (GDD パネル)。温湿度/VPD/露点とは独立 (別 option・別 DTO=無回帰)。
+//
+// 他パネルと決定的に異なる: 期間セレクタ非連動 (定植日→現在の全期間)・x=経過日数の value 軸ゆえ
+// echarts.connect から除外する (templ の #gdd-chart に data-no-connect を付与)。
+// OptionJSON は累積曲線＋目標 markLine＋予測 markLine/markPoint を内包した HTML 安全 JSON
+// (internal/chart.GDDChartOptionJSON が構築・空なら非描画)。Color は累積線の基準色 (--color-gdd・暖色)。
+// Guidance は前提欠落時の導線注記 (作物・定植日を設定すると GDD を表示できる旨・非空なら通常表示せず注記のみ)。
+// Note は予測が線形外挿の目安である旨の固定注記 (要件 3.4)。
+type GDDPanelView struct {
+	OptionJSON string           // <script type="application/json"> 埋込用 HTML 安全 JSON (markLine/markPoint 内包)。空なら非描画
+	Color      string           // 累積線の基準色 "#…" (--color-gdd・data-color へ)
+	CropLabel  string           // 作物名 "米" or "既定"
+	Card       GDDCardView      // GDD 数値カード (累積/残り積算/予測収穫日/現在ステージ/経過日数)
+	Stages     []GrowthStageRow // 生育ステージ⇔GDD 対応表 (現在段マーク付き)
+	Guidance   string           // 前提欠落時の導線注記 (空なら通常表示)
+	Note       string           // 予測が線形外挿の目安である旨の固定注記 (要件 3.4)
+}
+
+// GDDCardView は GDD 数値カード1枚分の表示データ (整形済み・単位付き文字列 or "—")。
+// 現在累積=最新累積 GDD、残り積算=収穫目標まで、予測収穫日=線形外挿、現在ステージ=生育段名、経過日数=定植日から。
+type GDDCardView struct {
+	Cumulative   string // 現在累積 GDD "1234 ℃·日" / "—"
+	Remaining    string // 残り積算温度 "456 ℃·日" / "—"
+	ForecastDate string // 予測収穫日 "2026-09-15" / "—" (予測不能は "—")
+	Stage        string // 現在の生育ステージ名 / "—"
+	ElapsedDays  string // 経過日数 "42 日"
+}
+
+// GrowthStageRow は生育ステージ⇔GDD 対応表1行分の表示データ (整形済み)。
+// Name はステージ名、GDD は到達しきい値の表示文字列、Current は現在この段かのマーク用フラグ。
+type GrowthStageRow struct {
+	Name    string // ステージ名 "出穂"
+	GDD     string // 到達しきい値 "800 ℃·日"
+	Current bool   // 現在この段か (templ 側で現在行をマーク)
+}
+
 // StatCardView は数値カード1メトリック分の表示データ (整形済み・単位付き文字列 or "—")。
 // 現在値=最新計測点、最高/最低=期間内、日較差=最高−最低 (R1.1)。
 type StatCardView struct {
@@ -357,18 +395,19 @@ type SelectOption struct {
 // (旧来の location 自由入力を置換)。Locality は復元用の選択値、Localities は handler が
 // domain.AllLocalities() から組んだ Selected 込みの選択肢。
 type DeviceFormView struct {
-	CSRFToken  string            // hidden gorilla.csrf.Token 用
-	Action     string            // 送信先 "/devices"(登録) / "/devices/{id}"(編集)
-	IsEdit     bool              // true で hidden _method=put を出し、ボタンを「更新」にする
-	CancelURL  string            // キャンセル先 "/dashboard"(登録) / "/devices/{id}"(編集)
-	Name       string            // 入力値復元
-	MacAddress string            // 入力値復元
-	Locality   string            // 設置場所の選択値 (domain.Locality の値・未設定は "")
-	Localities []SelectOption    // 地域 select の選択肢 (Selected 込み)
-	Crop       string            // 栽培作物の選択値 (domain.Crop の値・未設定は ""=既定しきい値)
-	Crops      []SelectOption    // 作物 select の選択肢 (Selected 込み・locality と同型)
-	IsActive   string            // "1"/"0" の radio checked 復元用
-	Errors     map[string]string // field → 日本語メッセージ
+	CSRFToken    string            // hidden gorilla.csrf.Token 用
+	Action       string            // 送信先 "/devices"(登録) / "/devices/{id}"(編集)
+	IsEdit       bool              // true で hidden _method=put を出し、ボタンを「更新」にする
+	CancelURL    string            // キャンセル先 "/dashboard"(登録) / "/devices/{id}"(編集)
+	Name         string            // 入力値復元
+	MacAddress   string            // 入力値復元
+	Locality     string            // 設置場所の選択値 (domain.Locality の値・未設定は "")
+	Localities   []SelectOption    // 地域 select の選択肢 (Selected 込み)
+	Crop         string            // 栽培作物の選択値 (domain.Crop の値・未設定は ""=既定しきい値)
+	Crops        []SelectOption    // 作物 select の選択肢 (Selected 込み・locality と同型)
+	PlantingDate string            // 定植/播種日 "YYYY-MM-DD" の入力値復元 (任意・空可・GDD 累積の起点)
+	IsActive     string            // "1"/"0" の radio checked 復元用
+	Errors       map[string]string // field → 日本語メッセージ
 }
 
 // PageLink は番号付きページネーションのページ番号リンク1個 (AlertHistoryPagination 用)。

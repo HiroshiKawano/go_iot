@@ -355,3 +355,100 @@ func TestCV(t *testing.T) {
 		})
 	}
 }
+
+// ---- 2.1 LinearFit (最小二乗の線形回帰) ------------------------------------
+
+func TestLinearFit(t *testing.T) {
+	tests := []struct {
+		name          string
+		xs, ys        []float64
+		wantSlope     float64
+		wantIntercept float64
+		wantOK        bool
+	}{
+		{
+			// 完全な直線 y=2x+1 は傾き2・切片1 で厳密一致。
+			name:          "完全直線 y=2x+1",
+			xs:            []float64{0, 1, 2, 3},
+			ys:            []float64{1, 3, 5, 7},
+			wantSlope:     2,
+			wantIntercept: 1,
+			wantOK:        true,
+		},
+		{
+			// 教科書の最小二乗例。x̄=3,ȳ=4・Σ(x-x̄)(y-ȳ)=6・Σ(x-x̄)²=10 → 傾き0.6・切片2.2。
+			name:          "ノイズ込み既知例 傾き0.6/切片2.2",
+			xs:            []float64{1, 2, 3, 4, 5},
+			ys:            []float64{2, 4, 5, 4, 5},
+			wantSlope:     0.6,
+			wantIntercept: 2.2,
+			wantOK:        true,
+		},
+		{
+			// 右肩下がり: 傾き負も算出する（ForecastDaysToTarget 側で ok=false 判定に使う材料）。
+			name:          "負の傾き y=-2x+6",
+			xs:            []float64{0, 1, 2},
+			ys:            []float64{6, 4, 2},
+			wantSlope:     -2,
+			wantIntercept: 6,
+			wantOK:        true,
+		},
+		{
+			// x が全て同値 → 分散0 で傾き定義不能 → ok=false。
+			name:   "x分散0は ok=false",
+			xs:     []float64{3, 3, 3},
+			ys:     []float64{1, 2, 3},
+			wantOK: false,
+		},
+		{
+			name:   "単一点は ok=false",
+			xs:     []float64{5},
+			ys:     []float64{7},
+			wantOK: false,
+		},
+		{
+			name:   "空は ok=false",
+			xs:     []float64{},
+			ys:     []float64{},
+			wantOK: false,
+		},
+		{
+			// 長さ不一致は短い方(3点)に合わせて防御的に当てはめる。先頭3点は y=2x+1。
+			name:          "長さ不一致は短い方で当てはめ",
+			xs:            []float64{0, 1, 2, 3},
+			ys:            []float64{1, 3, 5},
+			wantSlope:     2,
+			wantIntercept: 1,
+			wantOK:        true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotSlope, gotIntercept, gotOK := LinearFit(tt.xs, tt.ys)
+			if gotOK != tt.wantOK {
+				t.Fatalf("LinearFit(%v,%v) ok=%v, want %v", tt.xs, tt.ys, gotOK, tt.wantOK)
+			}
+			if !tt.wantOK {
+				return
+			}
+			if math.Abs(gotSlope-tt.wantSlope) > floatTol {
+				t.Errorf("slope = %v, want %v", gotSlope, tt.wantSlope)
+			}
+			if math.Abs(gotIntercept-tt.wantIntercept) > floatTol {
+				t.Errorf("intercept = %v, want %v", gotIntercept, tt.wantIntercept)
+			}
+		})
+	}
+}
+
+// TestLinearFit_NonDestructive は入力スライスを破壊しないことを保証する（純粋層の不変条件）。
+func TestLinearFit_NonDestructive(t *testing.T) {
+	xs := []float64{1, 2, 3}
+	ys := []float64{2, 4, 6}
+	xsCopy := append([]float64(nil), xs...)
+	ysCopy := append([]float64(nil), ys...)
+	LinearFit(xs, ys)
+	if !floatSliceEqual(xs, xsCopy) || !floatSliceEqual(ys, ysCopy) {
+		t.Errorf("LinearFit が入力を破壊した xs=%v ys=%v", xs, ys)
+	}
+}

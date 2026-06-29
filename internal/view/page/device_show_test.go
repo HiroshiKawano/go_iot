@@ -35,7 +35,33 @@ func baseDeviceShowView() DeviceShowView {
 			DeviceID: 1,
 			Rows:     []component.ReadingRow{{RecordedAt: "2026-04-20 14:30", Temp: "28.50", Humidity: "65.30"}},
 		},
+		GDD: component.GDDPanelView{
+			OptionJSON: `{"series":[{"type":"line"}]}`,
+			Color:      "#e03131",
+			CropLabel:  "米",
+			Card:       component.GDDCardView{Cumulative: "500 ℃·日", Remaining: "900 ℃·日", ForecastDate: "2026-09-15", Stage: "分げつ", ElapsedDays: "30 日"},
+			Stages:     []component.GrowthStageRow{{Name: "発芽", GDD: "0 ℃·日"}, {Name: "分げつ", GDD: "300 ℃·日", Current: true}},
+			Note:       "予測収穫日は線形外挿による目安です。",
+		},
 		DeleteName: "ハウスA温湿度計",
+	}
+}
+
+// R6.1/6.2: GDD パネルは期間セレクタ非連動（定植日→現在の全期間）。期間切替は #device-chart-area の
+// innerHTML を差し替えるため、GDD パネルがこの swap 範囲の「外」にあること（＝period 切替で消えない）を構造で固定する。
+// あわせて #gdd-chart に data-no-connect（connect 除外マーカー）が付くことを確認する（R7.4）。
+func TestDeviceShowPage_GDDパネルはグラフ領域swap範囲外で非連動(t *testing.T) {
+	html := render(t, DeviceShowPage(baseDeviceShowView()))
+
+	// GDD パネルがページに描画される（#gdd-chart・data-no-connect）。
+	assertContains(t, html, `id="gdd-chart"`)
+	assertContains(t, html, "data-no-connect")
+	assertContains(t, html, "GDD（積算温度・収穫予測）")
+
+	// GDD は period 非連動ゆえ device-chart-area の swap 範囲外に据え置く。
+	inner := innerOfDeviceChartArea(t, html)
+	if strings.Contains(inner, `id="gdd-chart"`) {
+		t.Errorf("gdd-chart が device-chart-area の swap 範囲内にある (期間切替で消える=period 連動になってしまう):\n%s", inner)
 	}
 }
 

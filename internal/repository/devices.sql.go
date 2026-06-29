@@ -7,22 +7,25 @@ package repository
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createDevice = `-- name: CreateDevice :one
-INSERT INTO devices (user_id, name, mac_address, location, is_active, locality, crop)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop
+INSERT INTO devices (user_id, name, mac_address, location, is_active, locality, crop, planting_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop, planting_date
 `
 
 type CreateDeviceParams struct {
-	UserID     int64   `json:"user_id"`
-	Name       string  `json:"name"`
-	MacAddress string  `json:"mac_address"`
-	Location   *string `json:"location"`
-	IsActive   bool    `json:"is_active"`
-	Locality   *string `json:"locality"`
-	Crop       *string `json:"crop"`
+	UserID       int64       `json:"user_id"`
+	Name         string      `json:"name"`
+	MacAddress   string      `json:"mac_address"`
+	Location     *string     `json:"location"`
+	IsActive     bool        `json:"is_active"`
+	Locality     *string     `json:"locality"`
+	Crop         *string     `json:"crop"`
+	PlantingDate pgtype.Date `json:"planting_date"`
 }
 
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error) {
@@ -34,6 +37,7 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 		arg.IsActive,
 		arg.Locality,
 		arg.Crop,
+		arg.PlantingDate,
 	)
 	var i Device
 	err := row.Scan(
@@ -49,12 +53,13 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 		&i.DeletedAt,
 		&i.Locality,
 		&i.Crop,
+		&i.PlantingDate,
 	)
 	return i, err
 }
 
 const getDevice = `-- name: GetDevice :one
-SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop FROM devices
+SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop, planting_date FROM devices
  WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -74,12 +79,13 @@ func (q *Queries) GetDevice(ctx context.Context, id int64) (Device, error) {
 		&i.DeletedAt,
 		&i.Locality,
 		&i.Crop,
+		&i.PlantingDate,
 	)
 	return i, err
 }
 
 const getDeviceByMacAddress = `-- name: GetDeviceByMacAddress :one
-SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop FROM devices
+SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop, planting_date FROM devices
  WHERE mac_address = $1 AND deleted_at IS NULL
 `
 
@@ -99,12 +105,13 @@ func (q *Queries) GetDeviceByMacAddress(ctx context.Context, macAddress string) 
 		&i.DeletedAt,
 		&i.Locality,
 		&i.Crop,
+		&i.PlantingDate,
 	)
 	return i, err
 }
 
 const listAllDevices = `-- name: ListAllDevices :many
-SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop FROM devices
+SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop, planting_date FROM devices
  WHERE deleted_at IS NULL
  ORDER BY id
 `
@@ -132,6 +139,7 @@ func (q *Queries) ListAllDevices(ctx context.Context) ([]Device, error) {
 			&i.DeletedAt,
 			&i.Locality,
 			&i.Crop,
+			&i.PlantingDate,
 		); err != nil {
 			return nil, err
 		}
@@ -144,7 +152,7 @@ func (q *Queries) ListAllDevices(ctx context.Context) ([]Device, error) {
 }
 
 const listDevicesByUser = `-- name: ListDevicesByUser :many
-SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop FROM devices
+SELECT id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop, planting_date FROM devices
  WHERE user_id = $1 AND deleted_at IS NULL
  ORDER BY created_at DESC
 `
@@ -171,6 +179,7 @@ func (q *Queries) ListDevicesByUser(ctx context.Context, userID int64) ([]Device
 			&i.DeletedAt,
 			&i.Locality,
 			&i.Crop,
+			&i.PlantingDate,
 		); err != nil {
 			return nil, err
 		}
@@ -196,25 +205,27 @@ func (q *Queries) SoftDeleteDevice(ctx context.Context, id int64) error {
 
 const updateDevice = `-- name: UpdateDevice :one
 UPDATE devices
-   SET name        = $2,
-       mac_address = $3,
-       location    = $4,
-       is_active   = $5,
-       locality    = $6,
-       crop        = $7,
-       updated_at  = NOW()
+   SET name          = $2,
+       mac_address   = $3,
+       location      = $4,
+       is_active     = $5,
+       locality      = $6,
+       crop          = $7,
+       planting_date = $8,
+       updated_at    = NOW()
  WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop
+RETURNING id, user_id, name, mac_address, location, is_active, last_communicated_at, created_at, updated_at, deleted_at, locality, crop, planting_date
 `
 
 type UpdateDeviceParams struct {
-	ID         int64   `json:"id"`
-	Name       string  `json:"name"`
-	MacAddress string  `json:"mac_address"`
-	Location   *string `json:"location"`
-	IsActive   bool    `json:"is_active"`
-	Locality   *string `json:"locality"`
-	Crop       *string `json:"crop"`
+	ID           int64       `json:"id"`
+	Name         string      `json:"name"`
+	MacAddress   string      `json:"mac_address"`
+	Location     *string     `json:"location"`
+	IsActive     bool        `json:"is_active"`
+	Locality     *string     `json:"locality"`
+	Crop         *string     `json:"crop"`
+	PlantingDate pgtype.Date `json:"planting_date"`
 }
 
 func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error) {
@@ -226,6 +237,7 @@ func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Dev
 		arg.IsActive,
 		arg.Locality,
 		arg.Crop,
+		arg.PlantingDate,
 	)
 	var i Device
 	err := row.Scan(
@@ -241,6 +253,7 @@ func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Dev
 		&i.DeletedAt,
 		&i.Locality,
 		&i.Crop,
+		&i.PlantingDate,
 	)
 	return i, err
 }

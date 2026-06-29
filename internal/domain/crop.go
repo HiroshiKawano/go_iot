@@ -9,8 +9,8 @@ import "fmt"
 //
 //	make db-snapshot を再実行すること (design.md Revalidation Triggers)。
 //
-// 識別子 (値) は英語キー、Label() は日本語。VPD 適正帯のみを保持し、
-// GDD 基準温度・病害モデル等の他属性は別フェーズが非破壊的に追加する前提。
+// 識別子 (値) は英語キー、Label() は日本語。作物別の派生指標属性 — VPD 適正帯 (VPDRange)・
+// 病害モデル (DiseaseModel)・GDD モデル (GDDModel) — を保持する (いずれも DB 列を増やさず Go 定数)。
 type Crop string
 
 const (
@@ -132,6 +132,51 @@ func (c Crop) DiseaseModel() DiseaseModel {
 	}
 	// 露地（サトウキビ/米/パイナップル/いも）・未設定・不正は既定にフォールバック。
 	return DefaultDiseaseModel
+}
+
+// GrowthStage は生育ステージ1段（表示名＋到達しきい値 GDD）。
+// Stages は GDD 昇順で並べ、最終段の GDD が収穫目標を表す（GrowthStageIndex の昇順前提）。
+type GrowthStage struct {
+	Name string  // 表示用ステージ名（"発芽"/"出穂"/"収穫" 等）
+	GDD  float64 // この段に到達する累積 GDD しきい値 [℃·日]
+}
+
+// GDDModel は作物別の GDD（積算温度）モデル。VPDRange/DiseaseModel と同じく
+// DB には持たず Go 定数で保持する（§100・DB 列を増やさない＝スキーマ非変更）。
+// Stages が空でも Tbase で日次 GDD・累積は算出でき、収穫目標・残り積算・予測のみ縮退する（要件 5.4）。
+// 値は文献ベースの暫定値で、確定はユーザー（沖縄実地知見=権威）/文献で行い本型と crop_test.go を更新する。
+type GDDModel struct {
+	Tbase  float64       // 基準温度 [℃]（日次 GDD = max((Tmax+Tmin)/2 − Tbase, 0)）
+	Stages []GrowthStage // GDD 昇順。最終段=収穫目標。空でも Tbase で日次/累積は算出可
+}
+
+// DefaultGDDModel は作物未設定・GDD 属性未定義作物のフォールバック GDD モデル（要件 5.4）。
+// 既定 Tbase 10℃ で日次 GDD・累積は算出できるが、Stages 空ゆえ収穫目標・残り積算・到達日予測は
+// handler が "—" に縮退する（生育ステージ表も空）。
+var DefaultGDDModel = GDDModel{Tbase: 10, Stages: nil}
+
+// GDDModel は作物別の GDD モデルを返す（要件 5.1〜5.3）。
+// 未知・空・GDD 属性未定義の作物は DefaultGDDModel にフォールバックする（要件 5.4）。
+// Stages は常に GDD 昇順・最終段=収穫目標を満たす。VPDRange/DiseaseModel と同じ作物グルーピング作法で、
+// 値の確定時にこの1メソッドを更新する。本フェーズは米のみ具体値（他は段階拡張）。
+func (c Crop) GDDModel() GDDModel {
+	switch c {
+	case CropRice:
+		// 水稲（二期作の出穂予測=GDD の教科書作物）。Tbase=10℃・有効積算温度の暫定ステージ（℃·日）。
+		// 数値は文献ベースの暫定値で、ユーザー（沖縄実地知見=権威）/文献の確定時に更新する（GO 後スモークで目視）。
+		return GDDModel{
+			Tbase: 10,
+			Stages: []GrowthStage{
+				{Name: "発芽", GDD: 0},
+				{Name: "分げつ", GDD: 300},
+				{Name: "出穂", GDD: 800},
+				{Name: "登熟", GDD: 1100},
+				{Name: "収穫", GDD: 1400},
+			},
+		}
+	}
+	// サトウキビ/ゴーヤ等・未設定・不正は既定（Tbase のみ・Stages 空）にフォールバック。
+	return DefaultGDDModel
 }
 
 // ParseCrop は文字列から Crop への変換を試み、不正値ならエラーを返す。
