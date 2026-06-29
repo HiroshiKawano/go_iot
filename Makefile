@@ -1,4 +1,4 @@
-.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status seed seed-testsensor migrate-locations gen-token sensor-sim sqlc templ sync-css db-snapshot clean
+.PHONY: help setup up down dev build run tidy migrate-up migrate-down migrate-create migrate-status seed seed-testsensor seed-trendsensor migrate-locations gen-token sensor-sim sqlc templ sync-css db-snapshot clean
 
 # .env を読み込む (存在すれば)
 ifneq (,$(wildcard .env))
@@ -55,6 +55,9 @@ seed: ## 開発用テストデータを投入 (既存のアプリデータは削
 
 seed-testsensor: ## 表示テスト用「沖縄テストセンサー」を別デバイスで追加 (既存データは削除しない)
 	go run ./cmd/seed-testsensor
+
+seed-trendsensor: ## 統計分析(長期トレンド)検証用「長期トレンドテスト(沖縄・10年)」を別デバイスで追加 (既存データは削除しない)
+	go run ./cmd/seed-trendsensor
 
 migrate-locations: ## 既存 location を構造化所在地 locality へ非破壊・冪等に移行 (既存データは削除しない)
 	go run ./cmd/migrate-locations
