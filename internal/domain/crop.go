@@ -83,6 +83,57 @@ func (c Crop) VPDRange() (lower, upper float64) {
 	return DefaultVPDLower, DefaultVPDUpper
 }
 
+// DiseaseModel は作物別の病害しきい値（結露・葉面湿潤・発病好適温度帯）。
+// VPDRange と同じく DB には持たず Go 定数で保持する（§100・DB 列を増やさない＝スキーマ非変更）。
+// 葉面温度センサ不在のため葉面温度は気温で近似し、結露は露点スプレッド T−Td の代理しきい値で判定する。
+// 値は文献ベースの暫定値で、確定はユーザー（沖縄実地知見=権威）/文献で行い本型と crop_test.go を更新する。
+type DiseaseModel struct {
+	CondensationMaxSpread float64 // 結露帯と見なすスプレッド T−Td の上限 [℃]（葉面温度=気温近似の代理）
+	WetnessRHThreshold    float64 // 葉面湿潤/高湿度と見なす RH 下限 [%]
+	HighHumidityMinHours  float64 // 高湿度イベントの最小継続 [時間]（handler が点数 minRun へ換算）
+	DiseaseTempLow        float64 // 発病好適温度帯 下限 [℃]
+	DiseaseTempHigh       float64 // 発病好適温度帯 上限 [℃]
+}
+
+// DefaultDiseaseModel は作物未設定・露地・未定義作物のフォールバック病害モデル（要件 5.4/6.3）。
+// 既定でも全作物で病害スコアが具体値を持つため、病害スコア欄は常に非空になる（要件 5.2）。
+var DefaultDiseaseModel = DiseaseModel{
+	CondensationMaxSpread: 2.0,
+	WetnessRHThreshold:    90,
+	HighHumidityMinHours:  1.0,
+	DiseaseTempLow:        15,
+	DiseaseTempHigh:       25,
+}
+
+// DiseaseModel は作物別の病害モデルしきい値を返す（要件 6.1/6.2）。
+// 未知・空・病害属性未定義の作物は DefaultDiseaseModel にフォールバックする（要件 5.4/6.3）。
+// 常に DiseaseTempLow <= DiseaseTempHigh を満たす（DiseaseScore の事前条件）。
+// VPDRange と同じ作物グルーピング作法で、値の確定時にこの1メソッドを更新する。
+func (c Crop) DiseaseModel() DiseaseModel {
+	switch c {
+	case CropGoya, CropIngen, CropUri, CropMango:
+		// 施設果菜（灰色かび病・うどんこ病の発病好適温度帯・暫定）。
+		return DiseaseModel{
+			CondensationMaxSpread: 2.0,
+			WetnessRHThreshold:    90,
+			HighHumidityMinHours:  1.0,
+			DiseaseTempLow:        15,
+			DiseaseTempHigh:       25,
+		}
+	case CropLeafyVegetable:
+		// 施設葉菜・温度帯やや狭め（暫定）。
+		return DiseaseModel{
+			CondensationMaxSpread: 2.0,
+			WetnessRHThreshold:    90,
+			HighHumidityMinHours:  1.0,
+			DiseaseTempLow:        15,
+			DiseaseTempHigh:       22,
+		}
+	}
+	// 露地（サトウキビ/米/パイナップル/いも）・未設定・不正は既定にフォールバック。
+	return DefaultDiseaseModel
+}
+
 // ParseCrop は文字列から Crop への変換を試み、不正値ならエラーを返す。
 func ParseCrop(s string) (Crop, error) {
 	c := Crop(s)

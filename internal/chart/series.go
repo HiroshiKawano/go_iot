@@ -42,3 +42,18 @@ type VPDChartSpec struct {
 	Upper  float64   // 適正帯上限 [kPa]
 	YMax   float64   // y 軸上限（高VPD側の乾きすぎゾーン可視化のため handler が算出）
 }
+
+// DewpointChartSpec は露点専用 ECharts option ビルダー（DewpointChartOptionJSON）への入力契約。
+// 温湿度用 ChartSpec・VPD 用 VPDChartSpec とは別型に隔離し、両者の無回帰を守る（P2/P3 無回帰）。
+//
+// series[0]=露点 Td 線（主役・寒色 DewColor）、series[1]=気温 T 重ね線（気温が露点に接近=結露しやすさを見せる）。
+// Condensation は結露帯（spread ≤ しきい値の連続区間・湿り側）で、xAxis 範囲の寒色 markArea でハイライトする。
+// y 軸は気温と露点が同℃レンジゆえ auto 範囲（VPD の YMax 算出は不要）。
+// 各スライスは Labels と同じ並び・同じ長さを前提とする（handler が pgconv で整形して渡す）。
+type DewpointChartSpec struct {
+	Labels       []string  // X 軸カテゴリ（温湿度/VPD と共通の時刻ラベル列）
+	DewColor     string    // 露点 Td 線の基準色（--color-dewpoint・寒色＝湿り側）
+	Dewpoint     []float64 // 露点 Td 系列（series[0]・必須）
+	Temperature  []float64 // 気温 T 重ね線（series[1]）
+	Condensation []Run     // 結露帯（xAxis 範囲の寒色 markArea）。空なら帯なし
+}

@@ -81,6 +81,12 @@ type DeviceChartAreaView struct {
 	// 温湿度同様 if HasData 内に描画するため非表示)。温湿度フィールドとは独立 (無回帰)。
 	VPD VPDPanelView
 
+	// Dewpoint は露点・病害リスク蓄積解析パネル (dewpoint-disease-risk・末尾非破壊追加)。
+	// HasData=true のときのみ handler が組む (温湿度データから読み取り時算出)。VPD パネルの下に描画する。
+	// templ 側は Dewpoint.OptionJSON が非空のときのみ描画する (HasData なら buildChartArea が必ず組む=VPD と等価。
+	// OptionJSON 空の既存 fixture では非表示=無回帰)。温湿度/VPD フィールドとは独立 (無回帰)。
+	Dewpoint DewpointPanelView
+
 	// HasGap は欠測ギャップ可視化 (data-quality-meta・末尾非破壊追加) を行ったか。
 	// true のとき欠測区間でグラフ線が分断され markArea でハイライトされる。templ は凡例/注記
 	// (静的な器) を HasGap=true のときに描画する。欠測なしは従来描画 (false・無回帰)。
@@ -121,6 +127,47 @@ type VPDHourlyRow struct {
 	AvgVPD         string // "0.35" (単位なし・列見出しに kPa)
 	InRangePercent string // "40%"
 	Direction      string // "乾き" / "湿り" / "—"
+}
+
+// DewpointPanelView は露点・病害リスク蓄積解析パネル (DeviceChartArea 内・研究用) の表示データ。
+// すべて整形済み primitive で保持し、pgtype/repository 型を持ち込まない (view 純粋性)。
+// VPD パネルに続く派生指標ダッシュボードの第2弾 (露点パネル)。温湿度/VPD とは独立 (別 option・別 DTO=無回帰)。
+// OptionJSON は露点 Td 線＋気温重ね＋結露帯 markArea を内包した HTML 安全 JSON
+// (internal/chart.DewpointChartOptionJSON が構築)。DewColor は露点線の基準色 (--color-dewpoint・寒色)。
+// Card は露点数値カード、Daily は葉面湿潤時間＋病害スコアの日次行、Events は高湿度継続イベント行。
+type DewpointPanelView struct {
+	OptionJSON string                 // <script type="application/json"> 埋込用 HTML 安全 JSON (結露帯 markArea 内包)
+	DewColor   string                 // 露点線の基準色 "#4263eb" (--color-dewpoint・寒色＝湿り側・data-color へ)
+	Note       string                 // 近似注記 (葉面温度を気温で近似した代理判定である旨・要件 2.3)
+	Card       DewpointCardView       // 露点数値カード (現在露点/現在スプレッド/本日の葉面湿潤時間/直近の結露帯)
+	Daily      []DewpointDailyRow     // 葉面湿潤時間＋病害スコア (JST 暦日昇順)
+	Events     []HighHumidityEventRow // 高湿度継続イベント (時刻昇順・該当なしは空)
+}
+
+// DewpointCardView は露点数値カード1枚分の表示データ (整形済み・単位付き文字列 or "—")。
+// 現在露点=最新点 Td、現在スプレッド=最新点 T−Td、本日の葉面湿潤時間=今日の積算、直近の結露帯=最新点が結露帯内か。
+type DewpointCardView struct {
+	CurrentDewpoint    string // 例 "13.9℃" / "—"
+	CurrentSpread      string // 例 "1.5℃" / "—" (現在スプレッド T−Td・小さいほど結露しやすい)
+	TodayWetHours      string // 例 "3.5 時間" / "—" (本日の葉面湿潤時間)
+	RecentCondensation string // "結露中" / "なし" / "—" (直近の結露帯有無・湿り側)
+}
+
+// DewpointDailyRow は葉面湿潤時間＋病害スコアの日次行 (整形済み・JST 暦日)。
+// WetHours は RH≧しきい値の連続時間の暦日積算、DiseaseScore は温度帯×葉面湿潤の合成下地。
+type DewpointDailyRow struct {
+	Date         string // "2026-04-20"
+	WetHours     string // "3.5 時間" (葉面湿潤時間/日)
+	DiseaseScore string // "40%" (病害スコア下地・温度帯×葉面湿潤の最小合成)
+}
+
+// HighHumidityEventRow は高湿度継続イベント1件分の表示データ (整形済み・時刻昇順)。
+// RH≧しきい値が最小継続以上続いた区間の開始/終了/継続時間/区間内最小スプレッドを保持する。
+type HighHumidityEventRow struct {
+	Start     string // 開始 "04/20 03:00" (JST)
+	End       string // 終了 "04/20 05:30" (JST)
+	Duration  string // 継続時間 "2.5 時間"
+	MinSpread string // 区間内最小スプレッド "0.3℃" (結露しやすさ=湿り側ほど小)
 }
 
 // StatCardView は数値カード1メトリック分の表示データ (整形済み・単位付き文字列 or "—")。

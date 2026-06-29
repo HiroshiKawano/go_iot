@@ -64,9 +64,92 @@ templ DeviceChartArea(v DeviceChartAreaView) {
 		}
 		// 飽差 VPD 適正帯ダッシュボード (研究用)。データ有時のみ・日次表の下 (モック写経)。
 		@vpdPanel(v.VPD)
+		// 露点・病害リスク蓄積解析パネル (研究用)。VPD パネルの下 (モック写経)。
+		// Dewpoint.OptionJSON が非空 (=handler が組んだ) ときのみ描画する (空 fixture では非表示=無回帰)。
+		if v.Dewpoint.OptionJSON != "" {
+			@dewpointPanel(v.Dewpoint)
+		}
 	} else {
 		<div class="chart-placeholder">データはまだありません</div>
 	}
+}
+
+// dewpointPanel は露点・病害リスク蓄積解析パネルを描画する (mocks/html/device-show.html の露点パネルを写経)。
+// 露点チャートのマウント先 #dewpoint-chart (data-echarts data-unit="℃" data-color) と兄弟 option script
+// (露点 Td 線＋気温重ね＋結露帯 markArea を内包・既存 EChartsInitializer が走査描画) を出し、
+// 露点数値カード (.summary-grid-4 流用)・葉面湿潤時間/病害スコアの日次表 (.data-table 流用)・
+// 高湿度継続イベント表 (.data-table 流用)・近似注記を描画する。結露帯/葉面湿潤は湿り側=寒色で表現する。
+// 研究用スコープに限定し農家向け平易表示 (信号色の病害警告・圃場共有 URL) は含めない (要件 8.3)。
+templ dewpointPanel(v DewpointPanelView) {
+	<h2 class="u-mbs-6">露点・病害リスク（蓄積解析）</h2>
+	<p class="form-help">{ v.Note }</p>
+	<div class="chart-wrapper">
+		<div id="dewpoint-chart" data-echarts data-unit="℃" data-color={ v.DewColor }></div>
+		@templ.Raw(optionScript("dewpoint-chart-option", v.OptionJSON))
+	</div>
+	// 露点数値カード (現在露点/現在スプレッド/本日の葉面湿潤時間/直近の結露帯)。.summary-grid-4 をモックから流用。
+	<div class="summary-grid summary-grid-4 u-mbs-6">
+		<div class="summary-box"><div class="label">現在露点</div><div class="value">{ v.Card.CurrentDewpoint }</div></div>
+		<div class="summary-box"><div class="label">現在スプレッド</div><div class="value">{ v.Card.CurrentSpread }</div></div>
+		<div class="summary-box"><div class="label">本日の葉面湿潤</div><div class="value">{ v.Card.TodayWetHours }</div></div>
+		<div class="summary-box"><div class="label">直近の結露帯</div><div class="value">{ v.Card.RecentCondensation }</div></div>
+	</div>
+	@dewpointDailyTable(v.Daily)
+	@highHumidityEventTable(v.Events)
+}
+
+// dewpointDailyTable は葉面湿潤時間＋病害スコア下地の日次表を .data-table で描画する。
+// 葉面湿潤時間は JST 暦日ごとの積算 (handler 整形済み)・病害スコア下地は温度帯×葉面湿潤の最小合成。
+templ dewpointDailyTable(rows []DewpointDailyRow) {
+	<h2 class="u-mbs-6">葉面湿潤時間・病害スコア（日次）</h2>
+	<div class="table-wrapper">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>日付</th>
+					<th>葉面湿潤時間</th>
+					<th>病害スコア下地</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range rows {
+					<tr>
+						<td>{ row.Date }</td>
+						<td>{ row.WetHours }</td>
+						<td>{ row.DiseaseScore }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+// highHumidityEventTable は高湿度継続イベント表 (開始/終了/継続/区間内最小スプレッド) を .data-table で描画する。
+// RH≧しきい値が最小継続以上続いた区間のみ・該当なしは空テーブル (handler 整形済み)。
+templ highHumidityEventTable(rows []HighHumidityEventRow) {
+	<h2 class="u-mbs-6">高湿度継続イベント</h2>
+	<div class="table-wrapper">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>開始</th>
+					<th>終了</th>
+					<th>継続</th>
+					<th>最小スプレッド</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range rows {
+					<tr>
+						<td>{ row.Start }</td>
+						<td>{ row.End }</td>
+						<td>{ row.Duration }</td>
+						<td>{ row.MinSpread }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
 }
 
 // vpdPanel は飽差 VPD 適正帯ダッシュボードを描画する (mocks/html/device-show.html の VPD パネルを写経)。

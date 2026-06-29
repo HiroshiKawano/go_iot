@@ -24,8 +24,8 @@ func vpdRegressionRepo() *fakeDeviceRepo {
 	d.Crop = &cropStr
 	repo.devices[1] = d
 	repo.recentReadings = []repository.SensorReading{
-		sensorRow(1, time.Date(2026, 4, 20, 3, 0, 0, 0, time.UTC), 25, 50), // 12時 JST・高VPD=乾きすぎ超過
-		sensorRow(1, time.Date(2026, 4, 20, 3, 30, 0, 0, time.UTC), 20, 70), // 12時 JST・適正
+		sensorRow(1, time.Date(2026, 4, 20, 3, 0, 0, 0, time.UTC), 25, 50),   // 12時 JST・高VPD=乾きすぎ超過
+		sensorRow(1, time.Date(2026, 4, 20, 3, 30, 0, 0, time.UTC), 20, 70),  // 12時 JST・適正
 		sensorRow(1, time.Date(2026, 4, 20, 21, 0, 0, 0, time.UTC), 10, 100), // 翌6時 JST・低VPD=湿りすぎ
 	}
 	return repo
@@ -111,9 +111,9 @@ func TestRegression_Show_VPDパネルと温湿度可視化が共存(t *testing.T
 		t.Error("湿度 option が従来と一致しない")
 	}
 
-	// option script は温/湿/VPD の 3 本。
-	if got := strings.Count(body, `type="application/json"`); got != 3 {
-		t.Errorf("option script 数 = %d, want 3 (温度/湿度/VPD)", got)
+	// option script は温/湿/VPD/露点 の 4 本 (露点・病害リスクパネル追加・温湿度/VPD option は不変)。
+	if got := strings.Count(body, `type="application/json"`); got != 4 {
+		t.Errorf("option script 数 = %d, want 4 (温度/湿度/VPD/露点)", got)
 	}
 }
 
@@ -184,7 +184,7 @@ func TestRegression_空データでVPD非表示とプレースホルダ(t *testi
 // --- 6.1 認可: 非所有デバイスは VPD 含め 404 (列挙防止・無回帰) ---
 
 func TestRegression_非所有はVPD含め404列挙防止(t *testing.T) {
-	repo := vpdRegressionRepo() // device1 の所有者は 7
+	repo := vpdRegressionRepo()                                 // device1 の所有者は 7
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 999) // 別ユーザー
 
 	for _, path := range []string{"/devices/1", "/devices/1/chart?period=24h"} {

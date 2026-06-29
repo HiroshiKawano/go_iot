@@ -79,6 +79,79 @@ func TestDeviceChartArea_期間7dでactiveとidとHTMX属性(t *testing.T) {
 	}
 }
 
+// dewpointSampleAreaView は露点パネルを内包した DeviceChartAreaView（描画テスト用の代表値）。
+func dewpointSampleAreaView() DeviceChartAreaView {
+	return DeviceChartAreaView{
+		DeviceID: 1, Period: "3d", HasData: true,
+		TemperatureOptionJSON: "{}", HumidityOptionJSON: "{}",
+		TemperatureUnit: "℃", HumidityUnit: "%",
+		TemperatureColor: "#e8590c", HumidityColor: "#1971c2",
+		Dewpoint: DewpointPanelView{
+			OptionJSON: `{"series":[{"markArea":{}}]}`,
+			DewColor:   "#4263eb",
+			Note:       "葉面温度センサ不在のため気温で近似。結露帯は露点スプレッド（気温−露点）≦ しきい値の代理判定。",
+			Card: DewpointCardView{
+				CurrentDewpoint: "13.9℃", CurrentSpread: "1.5℃",
+				TodayWetHours: "3.5 時間", RecentCondensation: "結露中",
+			},
+			Daily: []DewpointDailyRow{
+				{Date: "2026-04-20", WetHours: "3.5 時間", DiseaseScore: "40%"},
+			},
+			Events: []HighHumidityEventRow{
+				{Start: "04/20 03:00", End: "04/20 05:30", Duration: "2.5 時間", MinSpread: "0.3℃"},
+			},
+		},
+	}
+}
+
+func TestDeviceChartArea_露点パネルを描画する(t *testing.T) {
+	html := render(t, DeviceChartArea(dewpointSampleAreaView()))
+	for _, want := range []string{
+		`id="dewpoint-chart"`,        // 露点チャートマウント先
+		`data-color="#4263eb"`,       // 露点基準色（寒色）
+		`id="dewpoint-chart-option"`, // 露点 option script
+		"現在露点", "13.9℃",              // 露点カード
+		"現在スプレッド", "1.5℃",
+		"結露中",               // 直近の結露帯（湿り側）
+		"2026-04-20", "40%", // 葉面湿潤日次表（病害スコア下地列）
+		"04/20 03:00", "04/20 05:30", "0.3℃", // 高湿度イベント表
+		"近似", // 近似注記
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("露点パネル描画に %q が含まれていない", want)
+		}
+	}
+	// 露点チャートは ℃ 単位（data-unit="℃" が温度チャートと露点チャートの2箇所に出る）。
+	if got := strings.Count(html, `data-unit="℃"`); got < 2 {
+		t.Errorf(`data-unit="℃" の数 = %d, want ≥2（温度＋露点）`, got)
+	}
+}
+
+// 研究用スコープ: 露点パネルは農家向け平易表示（信号色の病害警告・圃場共有 URL）を含めない（要件 8.3）。
+func TestDeviceChartArea_露点パネルは農家向け表示を含めない(t *testing.T) {
+	html := render(t, DeviceChartArea(dewpointSampleAreaView()))
+	for _, ng := range []string{"圃場共有", "病害警告", "シェア", "危険", "安全"} {
+		if strings.Contains(html, ng) {
+			t.Errorf("研究用スコープ外の農家向け表示 %q が混入している", ng)
+		}
+	}
+}
+
+// HasData=true でも Dewpoint 未設定（OptionJSON 空）のときは露点パネルを描画しない（既存 fixture 無回帰のガード）。
+func TestDeviceChartArea_露点未設定では描画しない(t *testing.T) {
+	v := DeviceChartAreaView{
+		DeviceID: 1, Period: "24h", HasData: true,
+		TemperatureOptionJSON: "{}", HumidityOptionJSON: "{}",
+		TemperatureUnit: "℃", HumidityUnit: "%",
+		TemperatureColor: "#e8590c", HumidityColor: "#1971c2",
+		// Dewpoint は zero 値（OptionJSON 空）。
+	}
+	html := render(t, DeviceChartArea(v))
+	if strings.Contains(html, `id="dewpoint-chart"`) {
+		t.Errorf("Dewpoint 未設定なのに露点パネルが描画されている")
+	}
+}
+
 // HasData=false のときはグラフ scaffold を出さず「データはまだありません」ブロックのみ。
 func TestDeviceChartArea_データ無しは空メッセージのみ(t *testing.T) {
 	html := render(t, DeviceChartArea(DeviceChartAreaView{DeviceID: 5, Period: "24h", HasData: false}))

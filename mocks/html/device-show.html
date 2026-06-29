@@ -219,6 +219,64 @@
             </tbody>
           </table>
         </div>
+
+        <!-- 露点・病害リスク（蓄積解析）: 温湿度から読み取り時算出する派生指標パネル（研究用）。
+             VPD パネルの下に表示する（実装(templ)では if HasData 内・VPD パネルの下に内包し、期間切替で更新）。
+             グラフ内部描画（露点 Td 線・気温重ね・結露帯 markArea 塗り）はモック反映対象外＝器のみ反映
+             （feedback_mock_graph_rendering_exception）。露点線/結露帯は #dewpoint-chart の data-echarts option script で描画する。
+             結露・葉面湿潤・高湿度は「湿り側＝寒色（--color-dewpoint）」で表現する（物理規約）。
+             農家向け表示（信号色での病害警告・圃場共有 URL）は本フェーズに含めない（研究用スコープ）。 -->
+        <h2 class="u-mbs-6">露点・病害リスク（蓄積解析）</h2>
+        <p class="form-help">葉面温度センサ不在のため気温で近似。結露帯は露点スプレッド（気温−露点）≦ しきい値の代理判定で、厳密な「葉面温度 ≦ 露点」判定ではない。</p>
+
+        <div class="chart-wrapper">
+          <div id="dewpoint-chart" data-echarts data-unit="℃" data-color="#4263eb" class="chart-placeholder">露点グラフ (℃ / 露点Td線＋気温重ね・結露帯 markArea: 湿り側=寒色, 横軸:時間)</div>
+        </div>
+
+        <!-- 露点数値カード（現在露点/現在スプレッド/本日の葉面湿潤時間/直近の結露帯）。空データ時は各値「—」。 -->
+        <div class="summary-grid summary-grid-4 u-mbs-6">
+          <div class="summary-box"><div class="label">現在露点</div><div class="value">13.9℃</div></div>
+          <div class="summary-box"><div class="label">現在スプレッド</div><div class="value">1.5℃</div></div>
+          <div class="summary-box"><div class="label">本日の葉面湿潤</div><div class="value">3.5 時間</div></div>
+          <div class="summary-box"><div class="label">直近の結露帯</div><div class="value">結露中</div></div>
+        </div>
+
+        <!-- 葉面湿潤時間・病害スコア（日次）。RH≧しきい値の連続時間の JST 暦日積算＋温度帯×葉面湿潤の病害スコア下地。 -->
+        <h2 class="u-mbs-6">葉面湿潤時間・病害スコア（日次）</h2>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>日付</th>
+                <th>葉面湿潤時間</th>
+                <th>病害スコア下地</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>2026-04-20</td><td>3.5 時間</td><td>40%</td></tr>
+              <tr><td>2026-04-21</td><td>1.2 時間</td><td>15%</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 高湿度継続イベント（RH≧しきい値が最小継続以上続いた区間の開始/終了/継続/区間内最小スプレッド）。
+             該当なしは空テーブル。最小スプレッドが小さいほど結露しやすい（湿り側）。 -->
+        <h2 class="u-mbs-6">高湿度継続イベント</h2>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>開始</th>
+                <th>終了</th>
+                <th>継続</th>
+                <th>最小スプレッド</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>04/20 03:00</td><td>04/20 05:30</td><td>2.5 時間</td><td>0.3℃</td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="card">

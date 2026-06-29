@@ -133,6 +133,94 @@ func TestAllCrops(t *testing.T) {
 	}
 }
 
+// TestCrop_DiseaseModel は作物別の病害モデルしきい値を固定する（要件 5.4, 6.1, 6.2, 6.3）。
+// 施設果菜=暫定値・施設葉菜=温度帯狭め・露地/未設定/不正は DefaultDiseaseModel にフォールバック。
+func TestCrop_DiseaseModel(t *testing.T) {
+	greenhouseFruit := DiseaseModel{
+		CondensationMaxSpread: 2.0,
+		WetnessRHThreshold:    90,
+		HighHumidityMinHours:  1.0,
+		DiseaseTempLow:        15,
+		DiseaseTempHigh:       25,
+	}
+	leafy := DiseaseModel{
+		CondensationMaxSpread: 2.0,
+		WetnessRHThreshold:    90,
+		HighHumidityMinHours:  1.0,
+		DiseaseTempLow:        15,
+		DiseaseTempHigh:       22,
+	}
+	tests := []struct {
+		name string
+		crop Crop
+		want DiseaseModel
+	}{
+		// 施設果菜（灰色かび病・うどんこ病・暫定値）
+		{"goya 施設果菜", CropGoya, greenhouseFruit},
+		{"ingen 施設果菜", CropIngen, greenhouseFruit},
+		{"uri 施設果菜", CropUri, greenhouseFruit},
+		{"mango 施設果菜", CropMango, greenhouseFruit},
+		// 施設葉菜（温度帯やや狭め・暫定値）
+		{"leafy_vegetable 施設葉菜", CropLeafyVegetable, leafy},
+		// 露地 → 既定フォールバック
+		{"sugarcane 露地=既定", CropSugarcane, DefaultDiseaseModel},
+		{"rice 露地=既定", CropRice, DefaultDiseaseModel},
+		{"pineapple 露地=既定", CropPineapple, DefaultDiseaseModel},
+		{"imo 露地=既定", CropImo, DefaultDiseaseModel},
+		// 未設定（空）/ 不正 → 既定フォールバック
+		{"未設定(空)→既定", Crop(""), DefaultDiseaseModel},
+		{"不正値→既定", Crop("invalid"), DefaultDiseaseModel},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.crop.DiseaseModel()
+			if got != tt.want {
+				t.Errorf("DiseaseModel() = %+v, want %+v", got, tt.want)
+			}
+			// 不変条件: 発病好適温度帯は下限 ≤ 上限（DiseaseScore の事前条件）。
+			if got.DiseaseTempLow > got.DiseaseTempHigh {
+				t.Errorf("DiseaseTempLow %v > DiseaseTempHigh %v（不変条件違反）", got.DiseaseTempLow, got.DiseaseTempHigh)
+			}
+			// しきい値は物理的に妥当な正値（結露上限 ≥0・RH 0..100・最小継続 >0）。
+			if got.CondensationMaxSpread < 0 {
+				t.Errorf("CondensationMaxSpread = %v, want ≥0", got.CondensationMaxSpread)
+			}
+			if got.WetnessRHThreshold < 0 || got.WetnessRHThreshold > 100 {
+				t.Errorf("WetnessRHThreshold = %v, want 0..100", got.WetnessRHThreshold)
+			}
+			if got.HighHumidityMinHours <= 0 {
+				t.Errorf("HighHumidityMinHours = %v, want >0", got.HighHumidityMinHours)
+			}
+		})
+	}
+}
+
+// TestDefaultDiseaseModel は既定病害モデルの値を要件どおり固定する（5.4 フォールバックの基準値）。
+func TestDefaultDiseaseModel(t *testing.T) {
+	want := DiseaseModel{
+		CondensationMaxSpread: 2.0,
+		WetnessRHThreshold:    90,
+		HighHumidityMinHours:  1.0,
+		DiseaseTempLow:        15,
+		DiseaseTempHigh:       25,
+	}
+	if DefaultDiseaseModel != want {
+		t.Errorf("DefaultDiseaseModel = %+v, want %+v", DefaultDiseaseModel, want)
+	}
+}
+
+// TestCrop_DiseaseModel_AllCropsNonEmpty は全9作物＋未設定/不正で病害モデルが
+// 具体値（DiseaseTempLow ≤ DiseaseTempHigh の有効帯）を返し、欄が常に非空になることを保証する（要件 5.2）。
+func TestCrop_DiseaseModel_AllCropsNonEmpty(t *testing.T) {
+	cases := append(AllCrops(), Crop(""), Crop("invalid"))
+	for _, c := range cases {
+		dm := c.DiseaseModel()
+		if dm.DiseaseTempLow > dm.DiseaseTempHigh {
+			t.Errorf("crop %q: 無効な温度帯 %v..%v", c, dm.DiseaseTempLow, dm.DiseaseTempHigh)
+		}
+	}
+}
+
 func TestParseCrop(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		c, err := ParseCrop("goya")

@@ -321,7 +321,15 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, device repository.De
 
 	// VPD (飽差) 適正帯ダッシュボードを温湿度データから読み取り時に組む (デバイスの作物で適正帯を解決)。
 	// 温湿度 option/カード/日次表とは独立 (別 option・別 DTO=無回帰・R8)。JSON 化失敗は温湿度同様 500。
-	vpdPanel, err := buildVPDPanel(labels, temps, hums, rows, deviceCrop(device), period)
+	crop := deviceCrop(device)
+	vpdPanel, err := buildVPDPanel(labels, temps, hums, rows, crop, period)
+	if err != nil {
+		return component.DeviceChartAreaView{}, err
+	}
+
+	// 露点・病害リスク蓄積解析パネルを温湿度データから読み取り時に組む (デバイスの作物で病害しきい値を解決)。
+	// VPD パネルの直後に組み込む。温湿度/VPD option/カード/日次表とは独立 (別 option・別 DTO=無回帰・R7)。
+	dewpointPanel, err := buildDewpointPanel(labels, temps, hums, rows, crop, period, now)
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
 	}
@@ -342,6 +350,7 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, device repository.De
 		TemperatureDaily:      tempDaily,
 		HumidityDaily:         humDaily,
 		VPD:                   vpdPanel,
+		Dewpoint:              dewpointPanel,
 		HasGap:                hasGap,
 	}, nil
 }

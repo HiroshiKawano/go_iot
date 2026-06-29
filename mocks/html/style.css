@@ -69,6 +69,7 @@
     --color-text: #212529;
     --color-border: #dedfe3;              /* 旧 var(--divider) を実値化 */
     --color-vpd: #0ca678;                 /* 飽差VPD系列・適正帯滞在率バーの基準色（温度橙/湿度青と区別） */
+    --color-dewpoint: #4263eb;            /* 露点Td系列・結露帯の基準色（寒色＝湿り側・温度橙/湿度青/VPD緑と区別） */
 
     /* --- スペーススケール（4px グリッド。旧 Lism --s* を実値化） --- */
     --space-1: 0.25rem;   /* 4px  （旧 --s5）  */

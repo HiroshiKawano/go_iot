@@ -197,9 +197,9 @@ func TestShow_200で情報と既定24hアクティブと最新計測(t *testing.
 	if got := strings.Count(body, `id="humidity-chart"`); got != 1 {
 		t.Errorf(`id="humidity-chart" が %d 個 (want 1・一意)`, got)
 	}
-	// option script は温/湿/VPD の 3 本 (VPD 適正帯ダッシュボード追加・温湿度 option は不変)
-	if got := strings.Count(body, `type="application/json"`); got != 3 {
-		t.Errorf("option script の数 = %d, want 3 (温度/湿度/VPD)", got)
+	// option script は温/湿/VPD/露点の 4 本 (露点・病害リスクパネル追加・温湿度/VPD option は不変)
+	if got := strings.Count(body, `type="application/json"`); got != 4 {
+		t.Errorf("option script の数 = %d, want 4 (温度/湿度/VPD/露点)", got)
 	}
 	if !strings.Contains(body, `id="vpd-chart-option"`) {
 		t.Errorf("VPD option script が含まれていない")
@@ -546,9 +546,9 @@ func TestChart_HXリクエストでグラフ領域フラグメントのみ返す
 	if !activeButtonHas(body, "7日間") {
 		t.Errorf("7日間 がアクティブでない:\n%s", body)
 	}
-	// 温度/湿度/VPD の option script は 3 本 (フラグメントはレイアウト非包含のため他に json script なし)
-	if got := strings.Count(body, `type="application/json"`); got != 3 {
-		t.Errorf("option script の数 = %d, want 3 (温度/湿度/VPD)", got)
+	// 温度/湿度/VPD/露点 の option script は 4 本 (フラグメントはレイアウト非包含のため他に json script なし)
+	if got := strings.Count(body, `type="application/json"`); got != 4 {
+		t.Errorf("option script の数 = %d, want 4 (温度/湿度/VPD/露点)", got)
 	}
 	for _, want := range []string{`id="temperature-chart-option"`, `id="humidity-chart-option"`, `id="vpd-chart-option"`, "data-echarts"} {
 		if !strings.Contains(body, want) {
