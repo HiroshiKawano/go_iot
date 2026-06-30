@@ -82,6 +82,105 @@ func TestApplyGapGrid_欠測スロットを挿入し系列とLabelsを揃える(
 // f64 はポインタ float ヘルパ。
 func f64(v float64) *float64 { return &v }
 
+// 日スケール SMA 各系列も欠測スロットで直前値 carry-forward され、拡張後 Labels と同長になること
+// （元 spec 非破壊・P5 markArea は従来どおり）（sma-window タスク4・R1.1, 6.2）。
+func TestApplyGapGrid_日スケールSMAも欠測スロットでcarryForward(t *testing.T) {
+	// 3点・点1の後に2スロット欠測。日スケール SMA 2系列。
+	spec := chart.ChartSpec{
+		Labels: []string{"a", "b", "c"},
+		Unit:   "℃",
+		Color:  "#000",
+		Raw:    []float64{10, 20, 30},
+		SMA:    []float64{10, 15, 25},
+		DaySMAs: []chart.DaySMASeries{
+			{Label: "移動平均 3日", Values: []float64{11, 16, 26}},
+			{Label: "移動平均 7日", Values: []float64{12, 17, 27}},
+		},
+	}
+	slotsAfter := []int{0, 2, 0} // 点1の後に2スロット
+
+	out := applyGapGrid(spec, slotsAfter)
+
+	wantLen := 5 // 元3 + 2スロット
+	if len(out.Labels) != wantLen {
+		t.Fatalf("Labels 長=%d, want %d", len(out.Labels), wantLen)
+	}
+	if len(out.DaySMAs) != 2 {
+		t.Fatalf("DaySMAs 数=%d, want 2", len(out.DaySMAs))
+	}
+
+	// ext index: 0=点a, 1=点b, 2=gap, 3=gap, 4=点c。
+	// 欠測スロット(2,3)は点1(b)の値を carry-forward する（既存 SMA と同じ規律）。
+	wantValues := map[string][]float64{
+		"移動平均 3日": {11, 16, 16, 16, 26},
+		"移動平均 7日": {12, 17, 17, 17, 27},
+	}
+	for _, s := range out.DaySMAs {
+		want, ok := wantValues[s.Label]
+		if !ok {
+			t.Errorf("想定外の系列ラベル %q", s.Label)
+			continue
+		}
+		// 拡張後の各日スケール系列長 == Labels 長。
+		if len(s.Values) != wantLen {
+			t.Errorf("%s 長=%d, want %d (Labels と揃っていない)", s.Label, len(s.Values), wantLen)
+		}
+		for i, v := range want {
+			if i < len(s.Values) && s.Values[i] != v {
+				t.Errorf("%s[%d]=%v, want %v (carry-forward 不一致)", s.Label, i, s.Values[i], v)
+			}
+		}
+	}
+
+	// P5 の欠測 markArea(GapBands) は従来どおり 1 帯(ext 1→4)。
+	if len(out.GapBands) != 1 || out.GapBands[0].StartIdx != 1 || out.GapBands[0].EndIdx != 4 {
+		t.Errorf("GapBands=%+v, want [{1,4}]", out.GapBands)
+	}
+
+	// 元 spec は破壊されない (イミュータブル)。元の DaySMAs は長さ3のまま。
+	for i, s := range spec.DaySMAs {
+		if len(s.Values) != 3 {
+			t.Errorf("元 spec.DaySMAs[%d] が破壊された: 長さ=%d, want 3", i, len(s.Values))
+		}
+	}
+}
+
+// 日スケール系列の長さが Labels と不一致(契約崩れ)のときは panic せず元のまま通す（防御）。
+func TestApplyGapGrid_日スケール長不一致は元のまま通す(t *testing.T) {
+	spec := chart.ChartSpec{
+		Labels: []string{"a", "b", "c"},
+		Unit:   "℃",
+		Color:  "#000",
+		Raw:    []float64{10, 20, 30},
+		DaySMAs: []chart.DaySMASeries{
+			{Label: "移動平均 3日", Values: []float64{11, 16}}, // n=3 と不一致(2)
+		},
+	}
+	out := applyGapGrid(spec, []int{0, 2, 0})
+	if len(out.DaySMAs) != 1 {
+		t.Fatalf("DaySMAs 数=%d, want 1", len(out.DaySMAs))
+	}
+	// 拡張せず元の値長(2)のまま通す（index panic を起こさない）。
+	if len(out.DaySMAs[0].Values) != 2 {
+		t.Errorf("長さ不一致系列は元のまま通す想定: 長さ=%d, want 2", len(out.DaySMAs[0].Values))
+	}
+}
+
+// 日スケール系列が空(nil)のときは従来挙動を完全に保つ（後方互換・出力に DaySMAs を作らない）。
+func TestApplyGapGrid_日スケール空は従来挙動(t *testing.T) {
+	spec := chart.ChartSpec{
+		Labels: []string{"a", "b", "c"},
+		Unit:   "℃",
+		Color:  "#000",
+		Raw:    []float64{10, 20, 30},
+		SMA:    []float64{10, 15, 25},
+	}
+	out := applyGapGrid(spec, []int{0, 2, 0})
+	if len(out.DaySMAs) != 0 {
+		t.Errorf("日スケール空なのに out.DaySMAs=%v", out.DaySMAs)
+	}
+}
+
 // ---- 5.1 buildChartArea 統合 (欠測あり/なし) --------------------------------
 
 // gapRows は中央値5分に対し1区間だけ30分ギャップを含む生データ (24h)。

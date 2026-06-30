@@ -338,10 +338,12 @@ func TestShow_情報パネルに認識名の所在地を表示(t *testing.T) {
 func TestShow_period7dは生データ折れ線と7dアクティブ(t *testing.T) {
 	repo := showDeviceRepo()
 	// 7d は 24h と同じ生データ折れ線。複数日のため X ラベルは "M/D HH:MM" (日付併記)。
-	repo.recentReadings = []repository.SensorReading{
-		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00), // 14:00 JST
-		sensorRow(1, time.Date(2026, 4, 19, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+	// 7d は可視窓スライスのため now 基準の直近2点を使い、期待ラベルは本番フォーマッタで動的計算する。
+	rows := []repository.SensorReading{
+		sensorRow(1, time.Now().AddDate(0, 0, -3), 27.00, 60.00),
+		sensorRow(1, time.Now().AddDate(0, 0, -2), 29.00, 66.00),
 	}
+	repo.recentReadings = rows
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	w := getPath(r, "/devices/1?period=7d")
@@ -352,9 +354,11 @@ func TestShow_period7dは生データ折れ線と7dアクティブ(t *testing.T)
 	if !activeButtonHas(body, "7日間") {
 		t.Errorf("7日間 がアクティブでない:\n%s", body)
 	}
-	// 生データ1系列 → 日付付き時刻ラベル "M/D HH:MM" が option JSON の xAxis に出る。
-	if !strings.Contains(body, "4/18 14:00") || !strings.Contains(body, "4/19 14:00") {
-		t.Errorf("7d 生データの日付時刻ラベル(JST)が無い:\n%s", body)
+	// 生データ1系列 → 日付付き時刻ラベル "M/D HH:MM"(JST) が option JSON の xAxis に出る。
+	for _, rr := range rows {
+		if want := dayTimeLabel(rr.RecordedAt); !strings.Contains(body, want) {
+			t.Errorf("7d 生データの日付時刻ラベル %q(JST) が無い:\n%s", want, body)
+		}
 	}
 }
 
@@ -523,9 +527,10 @@ func hxGet(r http.Handler, path string) *httptest.ResponseRecorder {
 
 func TestChart_HXリクエストでグラフ領域フラグメントのみ返す(t *testing.T) {
 	repo := showDeviceRepo()
-	repo.recentReadings = []repository.SensorReading{ // 7d は生データ折れ線経路
-		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00),
-		sensorRow(1, time.Date(2026, 4, 19, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+	// 7d は生データ折れ線経路。可視窓スライスのため now 基準の直近行を使う。
+	repo.recentReadings = []repository.SensorReading{
+		sensorRow(1, time.Now().AddDate(0, 0, -3), 27.00, 60.00),
+		sensorRow(1, time.Now().AddDate(0, 0, -2), 29.00, 66.00),
 	}
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
@@ -659,10 +664,12 @@ func TestChart_3dは生データで取得(t *testing.T) {
 func TestChart_30dは生データ折れ線で取得(t *testing.T) {
 	repo := showDeviceRepo()
 	// 30d も 24h/3d/7d と同じ生データ折れ線 (単一系列)。日付付き時刻ラベル + Y軸「最高/最低」見出し。
-	repo.recentReadings = []repository.SensorReading{
-		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00), // 14:00 JST
-		sensorRow(1, time.Date(2026, 5, 18, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+	// 30d は可視窓スライスのため now 基準の直近2点を使い、期待ラベルは本番フォーマッタで動的計算する。
+	rows := []repository.SensorReading{
+		sensorRow(1, time.Now().AddDate(0, 0, -20), 27.00, 60.00),
+		sensorRow(1, time.Now().AddDate(0, 0, -2), 29.00, 66.00),
 	}
+	repo.recentReadings = rows
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	w := hxGet(r, "/devices/1/chart?period=30d")
@@ -676,8 +683,8 @@ func TestChart_30dは生データ折れ線で取得(t *testing.T) {
 	// 生データ単一系列 → 日付付き時刻ラベルが option JSON の xAxis に出る。
 	// (最高/最低は ECharts の markPoint(type max/min) でクライアント描画されるため
 	//  サーバー JSON には日本語見出しは含まれない)
-	if !strings.Contains(body, "4/18 14:00") {
-		t.Errorf("30d 生データの日付時刻ラベルが無い:\n%s", body)
+	if want := dayTimeLabel(rows[0].RecordedAt); !strings.Contains(body, want) {
+		t.Errorf("30d 生データの日付時刻ラベル %q が無い:\n%s", want, body)
 	}
 	// markPoint(最高/最低) は option に含まれる
 	for _, want := range []string{`"type":"max"`, `"type":"min"`} {
@@ -814,11 +821,8 @@ func TestChart_オーバーレイ系列が既定オフで供給される(t *test
 	for _, period := range []string{"24h", "3d", "7d", "30d"} {
 		t.Run(period, func(t *testing.T) {
 			repo := showDeviceRepo()
-			repo.recentReadings = []repository.SensorReading{
-				sensorRow(1, time.Date(2026, 4, 20, 3, 0, 0, 0, time.UTC), 27.00, 60.00),
-				sensorRow(1, time.Date(2026, 4, 20, 4, 0, 0, 0, time.UTC), 28.00, 63.00),
-				sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
-			}
+			// 7d/30d は可視窓スライスのため now 基準の直近行を使う (regressionRows)。
+			repo.recentReadings = regressionRows()
 			r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 			w := hxGet(r, "/devices/1/chart?period="+period)
@@ -908,10 +912,14 @@ func TestShow_空データで数値カードがダッシュ(t *testing.T) {
 
 func TestChart_日次集計表は複数日のみ表示(t *testing.T) {
 	repo := showDeviceRepo()
-	repo.recentReadings = []repository.SensorReading{
-		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00), // 04-18 14:00 JST
-		sensorRow(1, time.Date(2026, 4, 19, 5, 0, 0, 0, time.UTC), 29.00, 66.00), // 04-19 14:00 JST
+	// 7d は可視窓スライスのため now 基準の直近2暦日(JST)を使い、期待日付は jstDay で動的計算する。
+	d1 := time.Now().AddDate(0, 0, -3)
+	d2 := time.Now().AddDate(0, 0, -2)
+	rows := []repository.SensorReading{
+		sensorRow(1, d1, 27.00, 60.00),
+		sensorRow(1, d2, 29.00, 66.00),
 	}
+	repo.recentReadings = rows
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	// 24h: 日次集計表は出さない (R5.3)。
@@ -926,7 +934,9 @@ func TestChart_日次集計表は複数日のみ表示(t *testing.T) {
 		t.Fatalf("status=%d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	for _, want := range []string{"日次集計（温度）", "日次集計（湿度）", "平均", "日較差", "σ", "CV", "2026-04-18", "2026-04-19"} {
+	wants := []string{"日次集計（温度）", "日次集計（湿度）", "平均", "日較差", "σ", "CV",
+		jstDay(rows[0].RecordedAt).Format("2006-01-02"), jstDay(rows[1].RecordedAt).Format("2006-01-02")}
+	for _, want := range wants {
 		if !strings.Contains(body, want) {
 			t.Errorf("7d 日次集計表に %q が無い:\n%s", want, body)
 		}
@@ -935,11 +945,15 @@ func TestChart_日次集計表は複数日のみ表示(t *testing.T) {
 
 func TestChart_日次集計の欠測日はダッシュ(t *testing.T) {
 	repo := showDeviceRepo()
-	// 04-18 と 04-20 のみ (04-19 は欠測)。
-	repo.recentReadings = []repository.SensorReading{
-		sensorRow(1, time.Date(2026, 4, 18, 5, 0, 0, 0, time.UTC), 27.00, 60.00),
-		sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+	// 直近の連続3暦日(JST)のうち中日を欠測させる (now 基準・可視窓スライス対応)。
+	d1 := time.Now().AddDate(0, 0, -3) // 集計表の最古日
+	dMid := time.Now().AddDate(0, 0, -2)
+	d3 := time.Now().AddDate(0, 0, -1) // 集計表の最新日
+	rows := []repository.SensorReading{
+		sensorRow(1, d1, 27.00, 60.00),
+		sensorRow(1, d3, 29.00, 66.00), // 中日(dMid)は欠測
 	}
+	repo.recentReadings = rows
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
 	w := hxGet(r, "/devices/1/chart?period=7d")
@@ -947,8 +961,12 @@ func TestChart_日次集計の欠測日はダッシュ(t *testing.T) {
 		t.Fatalf("status=%d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	// 欠測日 04-19 も行として現れ (体裁維持)、値は "—"。
-	for _, want := range []string{"2026-04-18", "2026-04-19", "2026-04-20", "—"} {
+	// 欠測日(中日)も行として現れ (体裁維持)、値は "—"。
+	for _, want := range []string{
+		jstDay(rows[0].RecordedAt).Format("2006-01-02"),
+		jstDay(pgconv.Timestamptz(dMid)).Format("2006-01-02"),
+		jstDay(rows[1].RecordedAt).Format("2006-01-02"), "—",
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("欠測日処理の %q が無い:\n%s", want, body)
 		}
@@ -960,12 +978,16 @@ func TestChart_日次集計の欠測日はダッシュ(t *testing.T) {
 // periodButtonLabels は期間値→ボタン表示文言 (アクティブ往復検証用)。
 var periodButtonLabels = map[string]string{"24h": "24時間", "3d": "3日間", "7d": "7日間", "30d": "30日間"}
 
-// regressionRows は無回帰テスト用の決定的な生行 (同日3点)。
+// regressionRows は無回帰テスト用の決定的な生行 (等間隔1時間の3点)。
+// 7d/30d ビューはルックバック取得後に可視窓 (periodSince 以降) へスライスするため、
+// 全期間 (24h/3d/7d/30d) の可視窓に入るよう now を基準とした直近3点とする (固定過去日だと
+// 7d/30d で可視窓0件＝HasData=false になり無回帰検証が空振りする)。
 func regressionRows() []repository.SensorReading {
+	now := time.Now()
 	return []repository.SensorReading{
-		sensorRow(1, time.Date(2026, 4, 20, 3, 0, 0, 0, time.UTC), 27.00, 60.00),
-		sensorRow(1, time.Date(2026, 4, 20, 4, 0, 0, 0, time.UTC), 28.00, 63.00),
-		sensorRow(1, time.Date(2026, 4, 20, 5, 0, 0, 0, time.UTC), 29.00, 66.00),
+		sensorRow(1, now.Add(-3*time.Hour), 27.00, 60.00),
+		sensorRow(1, now.Add(-2*time.Hour), 28.00, 63.00),
+		sensorRow(1, now.Add(-1*time.Hour), 29.00, 66.00),
 	}
 }
 

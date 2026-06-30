@@ -106,9 +106,9 @@ func SensSlope(xs []float64) SenResult {
 			slopes = append(slopes, (xs[l]-xs[k])/float64(l-k))
 		}
 	}
-	slope := median(slopes)
+	slope := Median(slopes)
 	// median(arange(n)) = (n-1)/2（奇偶共通）。
-	intercept := median(xs) - float64(n-1)/2.0*slope
+	intercept := Median(xs) - float64(n-1)/2.0*slope
 	return SenResult{Slope: slope, Intercept: intercept}
 }
 

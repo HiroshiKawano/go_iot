@@ -20,6 +20,23 @@ type ChartSpec struct {
 	// 設定時のみ series[0] を欠測スロット nil で分断し連続欠測区間を markArea でハイライトする。
 	RawNullable []*float64 // 欠測スロット nil を含む series[0] 拡張データ（非 nil 時は Raw に優先・nil 要素は ECharts null）
 	GapBands    []GapBand  // 連続欠測区間（xAxis インデックス範囲）。markArea ハイライト対象
+
+	// 日スケール移動平均（sma-window-select・末尾非破壊追加）。
+	// nil/空のときは完全に従来挙動（後方互換の不変条件＝P2/P5 と同方式）であり、
+	// 設定時のみ既存系列の後ろへ各日スケール SMA を凡例トグル（既定オフ）の細線として重ねる。
+	// 既存の単数 SMA（点数窓・約1日まで）は温存し、本フィールドは「数日〜2週間」スケールを追加で張る。
+	DaySMAs []DaySMASeries
+}
+
+// DaySMASeries は 1 本の日スケール単純移動平均（SMA）追加系列を表す。
+// 既存の生実測線・点数窓 SMA・正常帯・乖離率の上へ重ねる凡例トグル系列で、既定オフ・細線・
+// データ点マーカーなし・端ラベルなしで描画される（生実測線が主役・誤用防止に SMA のみ）。
+//
+// Values は handler 側で 2桁丸め済み・可視窓長（Labels と同じ並び・同じ長さ）で渡す。
+// 不変条件: len(Values) == len(ChartSpec.Labels)（applyGapGrid 拡張後も維持）。
+type DaySMASeries struct {
+	Label  string    // 凡例ラベル・系列名（中立な「移動平均 N日」）。凡例トグルと legend.selected のキー
+	Values []float64 // 平滑値（2桁丸め済み・Labels と同長・同並び）
 }
 
 // GapBand は連続欠測区間を xAxis（カテゴリ）インデックスの範囲 [StartIdx, EndIdx] で表す。

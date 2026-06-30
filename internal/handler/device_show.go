@@ -260,28 +260,40 @@ func smaWindowFor(period string) int {
 // 描画/対話 (十字ホバー・最高最低・現在値・温湿度連動) はクライアントの ECharts が担う (S5)。
 func (h *DeviceHandler) buildChartArea(ctx context.Context, device repository.Device, period string, now time.Time) (component.DeviceChartAreaView, error) {
 	deviceID := device.ID
-	rows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
+
+	// 日スケール SMA 窓 (7d/30d のみ非空・24h/3d は nil)。非空のときは左端 warm-up のため
+	// 取得起点を最長窓ぶん手前へ広げ、可視窓 (visibleSince 以降) だけを既存パスへ渡す (5.1/6.2)。
+	windows := dayScaleWindowsFor(period)
+	visibleSince := periodSince(period, now)
+	fetchStart := visibleSince
+	if maxDays := maxWindowDays(windows); maxDays > 0 {
+		fetchStart = visibleSince.AddDate(0, 0, -maxDays)
+	}
+
+	fullRows, err := h.Repo.ListRecentSensorReadings(ctx, repository.ListRecentSensorReadingsParams{
 		DeviceID:   deviceID,
-		RecordedAt: pgconv.Timestamptz(periodSince(period, now)),
+		RecordedAt: pgconv.Timestamptz(fetchStart),
 	})
 	if err != nil {
 		return component.DeviceChartAreaView{}, err
 	}
 
-	// 計測 0 件: option を構築せず空メッセージのみ。カードは "—" でレイアウトを保つ (R1.4)。
-	// VPD パネルも組まない (HasData=false で templ 側非表示・R4.5/5.4/6.3)。
+	// 可視窓 = visibleSince 以降の行。24h/3d は fetchStart==visibleSince ゆえ visibleStart=0
+	// (fullRows と一致＝既存パス完全保持・6.1/6.2)。ルックバック分は日スケール SMA の warm-up 専用。
+	visibleStart := 0
+	if len(windows) > 0 {
+		visibleStart = visibleStartIndex(fullRows, visibleSince)
+	}
+	rows := fullRows[visibleStart:]
+
+	// 可視窓 0 件: option を構築せず空メッセージのみ (ルックバックにデータがあっても可視が空なら空表示・6.4)。
+	// カードは "—" でレイアウトを保つ (R1.4)。VPD パネルも組まない (HasData=false で templ 側非表示・R4.5/5.4/6.3)。
 	if len(rows) == 0 {
-		return component.DeviceChartAreaView{
-			DeviceID:        deviceID,
-			Period:          period,
-			HasData:         false,
-			TemperatureCard: emptyStatCard(),
-			HumidityCard:    emptyStatCard(),
-			ShowDaily:       false,
-		}, nil
+		return emptyChartArea(deviceID, period), nil
 	}
 
 	// 生行 → 温度/湿度の float 列 ＋ X ラベル列 (pgconv 境界変換・計算層は float64 のみ)。
+	// 可視窓 (rows) を使うため、生実測線・overlaySpec・gap・日次表・VPD/露点は今日と同一入力 (バイト等価・6.2)。
 	label := rawLabelFor(period)
 	labels := make([]string, len(rows))
 	temps := make([]float64, len(rows))
@@ -295,6 +307,15 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, device repository.De
 	window := smaWindowFor(period)
 	tempSpec := overlaySpec(labels, temps, tempChartUnit, tempLineColor, window)
 	humSpec := overlaySpec(labels, hums, humidityChartUnit, humidityLineColor, window)
+
+	// 日スケール SMA (7d/30d のみ): 全系列で算出し可視窓へスライスして付与する。applyGapGrid の前に
+	// 付与し、欠測グリッド拡張の対象に含める (タスク4)。窓なしは付与せず従来挙動 (DaySMAs nil)。
+	if len(windows) > 0 {
+		ppd := estimatePointsPerDay(fullRows)
+		fullTemps, fullHums := readingValues(fullRows)
+		tempSpec.DaySMAs = daySMASeriesFor(windows, fullTemps, ppd, visibleStart)
+		humSpec.DaySMAs = daySMASeriesFor(windows, fullHums, ppd, visibleStart)
+	}
 
 	// 欠測ギャップ可視化 (data-quality-meta): 間隔中央値から欠測区間を検出し拡張グリッド化する。
 	// MissingStats の round(間隔/中央値)-1 が「中央値の約1.5倍超で欠測」を符号化する (gapFactor≒1.5)。
@@ -364,11 +385,24 @@ func (h *DeviceHandler) buildChartArea(ctx context.Context, device repository.De
 	}, nil
 }
 
+// emptyChartArea は計測 0 件 (または可視窓 0 件) のグラフ領域 View を返す。
+// option を構築せず空メッセージのみ・カードは "—" でレイアウトを保つ (R1.4/6.4)。
+func emptyChartArea(deviceID int64, period string) component.DeviceChartAreaView {
+	return component.DeviceChartAreaView{
+		DeviceID:        deviceID,
+		Period:          period,
+		HasData:         false,
+		TemperatureCard: emptyStatCard(),
+		HumidityCard:    emptyStatCard(),
+		ShowDaily:       false,
+	}
+}
+
 // applyGapGrid は欠測スロット数列 (slotsAfter[i] = 点 i の後に挿入する nil スロット数) に従い
 // ChartSpec を拡張グリッド化する。Labels と全系列を同一インデックス空間へ揃え、生実測線は
 // RawNullable で分断 (欠測スロット=nil・補間しない)、連続欠測区間は GapBands で markArea
-// ハイライトする。オーバーレイ (SMA/正常帯) は既定 off ゆえ直前値で carry-forward して整列を保ち、
-// 乖離率 (nil 許容) は欠測スロットを nil で分断する。元 spec は破壊せず新 spec を返す。
+// ハイライトする。オーバーレイ (SMA/正常帯/日スケール SMA) は既定 off ゆえ直前値で carry-forward して
+// 整列を保ち、乖離率 (nil 許容) は欠測スロットを nil で分断する。元 spec は破壊せず新 spec を返す。
 func applyGapGrid(spec chart.ChartSpec, slotsAfter []int) chart.ChartSpec {
 	n := len(spec.Labels)
 	hasSMA := len(spec.SMA) == n
@@ -380,6 +414,17 @@ func applyGapGrid(spec chart.ChartSpec, slotsAfter []int) chart.ChartSpec {
 	var extSMA, extLower, extWidth []float64
 	var extDev []*float64
 	var bands []chart.GapBand
+
+	// 日スケール SMA 各系列の拡張先。長さが n と一致する系列のみ carry-forward 対象とし、
+	// 不一致 (想定外) は後段で元のまま通す (防御的・index panic 回避)。
+	extDaySMAs := make([][]float64, len(spec.DaySMAs))
+	dayValid := make([]bool, len(spec.DaySMAs))
+	for di, s := range spec.DaySMAs {
+		if len(s.Values) == n {
+			dayValid[di] = true
+			extDaySMAs[di] = make([]float64, 0, n)
+		}
+	}
 
 	ext := 0 // 拡張グリッド上の現在インデックス
 	for i := 0; i < n; i++ {
@@ -397,6 +442,11 @@ func applyGapGrid(spec chart.ChartSpec, slotsAfter []int) chart.ChartSpec {
 		}
 		if hasDev {
 			extDev = append(extDev, spec.Deviation[i])
+		}
+		for di := range spec.DaySMAs {
+			if dayValid[di] {
+				extDaySMAs[di] = append(extDaySMAs[di], spec.DaySMAs[di].Values[i])
+			}
 		}
 		ext++
 
@@ -421,6 +471,11 @@ func applyGapGrid(spec chart.ChartSpec, slotsAfter []int) chart.ChartSpec {
 			if hasDev {
 				extDev = append(extDev, nil) // 乖離率は nil 許容ゆえ分断
 			}
+			for di := range spec.DaySMAs {
+				if dayValid[di] {
+					extDaySMAs[di] = append(extDaySMAs[di], spec.DaySMAs[di].Values[i]) // 直前値で carry-forward
+				}
+			}
 		}
 		ext += slots
 		// 連続欠測区間 = 点 i (startExt) 〜 点 i+1 (ext) の xAxis 範囲。
@@ -439,6 +494,18 @@ func applyGapGrid(spec chart.ChartSpec, slotsAfter []int) chart.ChartSpec {
 	}
 	if hasDev {
 		out.Deviation = extDev
+	}
+	// 日スケール SMA を拡張系列で差し替える (元 spec.DaySMAs は非破壊・新スライスを割り当てる)。
+	if len(spec.DaySMAs) > 0 {
+		outDay := make([]chart.DaySMASeries, len(spec.DaySMAs))
+		for di, s := range spec.DaySMAs {
+			if dayValid[di] {
+				outDay[di] = chart.DaySMASeries{Label: s.Label, Values: extDaySMAs[di]}
+			} else {
+				outDay[di] = s // 長さ不一致は元のまま (防御・実運用では起きない)
+			}
+		}
+		out.DaySMAs = outDay
 	}
 	out.GapBands = bands
 	return out
