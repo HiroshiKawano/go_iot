@@ -38,22 +38,24 @@ type fakeDeviceRepo struct {
 	lastUpdate   repository.UpdateDeviceParams
 
 	// --- デバイス詳細画面 (device-detail) 用 ---
-	latestReadings []repository.SensorReading // ListLatestSensorReadings 戻り値
-	latestErr      error
-	recentReadings []repository.SensorReading // ListRecentSensorReadings 戻り値 (24h 生データ)
-	recentErr      error
-	dailyAggs      []repository.ListDailySensorAggregatesRow // ListDailySensorAggregates 戻り値
-	dailyErr       error
-	softDeleteErr  error
-	softDeleteID   int64 // 最後に論理削除を要求された id
-	softDeleted    bool  // SoftDeleteDevice 呼び出し記録
+	latestReadings   []repository.SensorReading // ListLatestSensorReadings 戻り値
+	latestErr        error
+	recentReadings   []repository.SensorReading // ListRecentSensorReadings 戻り値 (24h 生データ)
+	recentErr        error
+	lastRecentParams repository.ListRecentSensorReadingsParams // 最後に渡された取得パラメータ (取得起点 RecordedAt 検証用)
+	dailyAggs        []repository.ListDailySensorAggregatesRow // ListDailySensorAggregates 戻り値
+	dailyErr         error
+	softDeleteErr    error
+	softDeleteID     int64 // 最後に論理削除を要求された id
+	softDeleted      bool  // SoftDeleteDevice 呼び出し記録
 }
 
 func (f *fakeDeviceRepo) ListLatestSensorReadings(_ context.Context, _ int64) ([]repository.SensorReading, error) {
 	return f.latestReadings, f.latestErr
 }
 
-func (f *fakeDeviceRepo) ListRecentSensorReadings(_ context.Context, _ repository.ListRecentSensorReadingsParams) ([]repository.SensorReading, error) {
+func (f *fakeDeviceRepo) ListRecentSensorReadings(_ context.Context, arg repository.ListRecentSensorReadingsParams) ([]repository.SensorReading, error) {
+	f.lastRecentParams = arg // 取得起点 (ルックバックの手前広げ) を捕捉する
 	return f.recentReadings, f.recentErr
 }
 

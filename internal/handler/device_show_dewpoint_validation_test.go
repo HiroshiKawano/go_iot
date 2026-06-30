@@ -26,12 +26,16 @@ func dewpointMultiDayRepo() *fakeDeviceRepo {
 	d := repo.devices[1]
 	d.Crop = &cropStr
 	repo.devices[1] = d
-	// JST 暦日 = UTC+9。UTC 01:00 = JST 10:00 (04-20)、UTC 04-21 00:00 = JST 09:00 (04-21)。
+	// 7d/30d は可視窓スライスのため now 基準の直近2暦日(JST)に置く (固定過去日だと可視窓0件になる)。
+	// 2日前・1日前は必ず別 JST 暦日 (24時間差) ゆえ露点日次表は2行になる。全点 wet (spread 小=結露)。
+	now := time.Now()
+	day1 := now.AddDate(0, 0, -2)
+	day2 := now.AddDate(0, 0, -1)
 	repo.recentReadings = []repository.SensorReading{
-		sensorRow(1, time.Date(2026, 4, 20, 1, 0, 0, 0, time.UTC), 20, 98), // 04-20 wet (spread 小=結露)
-		sensorRow(1, time.Date(2026, 4, 20, 1, 5, 0, 0, time.UTC), 20, 98), // 04-20 wet
-		sensorRow(1, time.Date(2026, 4, 21, 0, 0, 0, 0, time.UTC), 20, 98), // 04-21 wet
-		sensorRow(1, time.Date(2026, 4, 21, 0, 5, 0, 0, time.UTC), 20, 98), // 04-21 wet
+		sensorRow(1, day1, 20, 98),
+		sensorRow(1, day1.Add(5*time.Minute), 20, 98),
+		sensorRow(1, day2, 20, 98),
+		sensorRow(1, day2.Add(5*time.Minute), 20, 98),
 	}
 	return repo
 }
@@ -62,7 +66,8 @@ func TestValidation_Chart_4期間で露点パネルが描画される(t *testing
 }
 
 func TestValidation_露点日次表が暦日数に追従(t *testing.T) {
-	// 2 暦日(04-20/04-21)にまたがるデータ → 露点日次表は 2 行(両日付が出る)。
+	// 2 暦日(JST)にまたがるデータ → 露点日次表は 2 行(両日付が出る)。
+	// 期待日付は本番フォーマッタ(jstDay)で行から動的計算する(now 基準フィクスチャに追従)。
 	repo := dewpointMultiDayRepo()
 	r := newShowRouterWithUser(&DeviceHandler{Repo: repo}, 7)
 
@@ -71,7 +76,14 @@ func TestValidation_露点日次表が暦日数に追従(t *testing.T) {
 		t.Fatalf("status=%d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	for _, date := range []string{"2026-04-20", "2026-04-21"} {
+	wantDates := map[string]bool{}
+	for _, rr := range repo.recentReadings {
+		wantDates[jstDay(rr.RecordedAt).Format("2006-01-02")] = true
+	}
+	if len(wantDates) != 2 {
+		t.Fatalf("フィクスチャが2暦日(JST)になっていない: %d 日", len(wantDates))
+	}
+	for date := range wantDates {
 		if !strings.Contains(body, date) {
 			t.Errorf("露点日次表に %q が含まれていない（暦日追従）", date)
 		}

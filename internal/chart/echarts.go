@@ -36,7 +36,8 @@ func ChartOptionJSON(spec ChartSpec) (string, error) {
 	hasSMA := len(spec.SMA) > 0
 	hasBand := len(spec.BandLower) > 0 && len(spec.BandWidth) > 0
 	hasDeviation := len(spec.Deviation) > 0
-	hasOverlay := hasSMA || hasBand || hasDeviation
+	hasDaySMA := len(spec.DaySMAs) > 0
+	hasOverlay := hasSMA || hasBand || hasDeviation || hasDaySMA
 
 	line := charts.NewLine()
 
@@ -68,6 +69,11 @@ func ChartOptionJSON(spec ChartSpec) (string, error) {
 		if hasDeviation {
 			legendData = append(legendData, seriesNameDeviation)
 			selected[seriesNameDeviation] = false
+		}
+		// 日スケール SMA（DaySMAs）: 各ラベルを既存オーバーレイの後ろへ追加し既定オフ。
+		for _, s := range spec.DaySMAs {
+			legendData = append(legendData, s.Label)
+			selected[s.Label] = false
 		}
 		global = append(global, charts.WithLegendOpts(opts.Legend{
 			Show:     opts.Bool(true),
@@ -135,6 +141,17 @@ func ChartOptionJSON(spec ChartSpec) (string, error) {
 		)
 	}
 
+	// 日スケール SMA（DaySMAs）: 既存系列の後ろへ重ねる追加系列。
+	// 基準色・dashed 細線・symbol 非表示で描画し、markPoint/endLabel は付けない
+	// （生実測線が主役・client は series[0] のみへ endLabel/sampling を付与）。SMA のみ（EMA/WMA・OHLC なし）。
+	// 併置時の視認差のため index で線幅を僅かに変える（細線の範囲に収める）。
+	for i, s := range spec.DaySMAs {
+		line.AddSeries(s.Label, lineData(s.Values),
+			charts.WithLineStyleOpts(opts.LineStyle{Color: spec.Color, Type: "dashed", Width: daySMALineWidth(i)}),
+			charts.WithLineChartOpts(opts.LineChart{ShowSymbol: opts.Bool(false)}),
+		)
+	}
+
 	// Validate() で xAxis データを option へ反映してから option マップを取り出す。
 	line.Validate()
 
@@ -154,6 +171,17 @@ func ChartOptionJSON(spec ChartSpec) (string, error) {
 		}
 	}
 	return out, nil
+}
+
+// daySMALineWidth は日スケール SMA 追加系列の線幅を index ごとに返す。
+// 生実測線より控えめな細線の範囲（1.0〜2.0）に収めつつ、複数併置時に窓ごとの視認差を作る。
+// 窓は最大3本（R2.4）ゆえ index は 0〜2 を想定し、上限 2.0 でクランプする。
+func daySMALineWidth(index int) float32 {
+	w := 1.0 + 0.5*float32(index)
+	if w > 2.0 {
+		return 2.0
+	}
+	return w
 }
 
 // lineData は []float64 を opts.LineData 列へ変換する。

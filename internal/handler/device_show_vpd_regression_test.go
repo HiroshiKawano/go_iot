@@ -23,10 +23,13 @@ func vpdRegressionRepo() *fakeDeviceRepo {
 	d := repo.devices[1]
 	d.Crop = &cropStr
 	repo.devices[1] = d
+	// 7d/30d は可視窓スライスのため now 基準の直近行を使う (固定過去日だと可視窓0件になる)。
+	// 相対スパン (0/+30分/+18時間) を保持し、従来同様 18時間ジャンプの欠測ギャップを発生させる。
+	base := time.Now().Add(-19 * time.Hour) // 最古点でも 24h ビュー内に収める
 	repo.recentReadings = []repository.SensorReading{
-		sensorRow(1, time.Date(2026, 4, 20, 3, 0, 0, 0, time.UTC), 25, 50),   // 12時 JST・高VPD=乾きすぎ超過
-		sensorRow(1, time.Date(2026, 4, 20, 3, 30, 0, 0, time.UTC), 20, 70),  // 12時 JST・適正
-		sensorRow(1, time.Date(2026, 4, 20, 21, 0, 0, 0, time.UTC), 10, 100), // 翌6時 JST・低VPD=湿りすぎ
+		sensorRow(1, base, 25, 50),                      // 高VPD=乾きすぎ超過
+		sensorRow(1, base.Add(30*time.Minute), 20, 70),  // 適正
+		sensorRow(1, base.Add(18*time.Hour), 10, 100),   // 低VPD=湿りすぎ (18時間ギャップ)
 	}
 	return repo
 }
@@ -47,6 +50,14 @@ func expectedTempHumOptions(t *testing.T, rows []repository.SensorReading, perio
 	window := smaWindowFor(period)
 	tempSpec := overlaySpec(labels, temps, tempChartUnit, tempLineColor, window)
 	humSpec := overlaySpec(labels, hums, humidityChartUnit, humidityLineColor, window)
+	// buildChartArea と同一に日スケール SMA を付与する (sma-window-select 追加後の期待値)。
+	// 本ヘルパの rows は全可視窓 (ルックバックなし=visibleStart 0) を前提とするため、
+	// fullValues=temps/hums・visibleStart=0 で buildChartArea を忠実にミラーする。
+	if windows := dayScaleWindowsFor(period); len(windows) > 0 {
+		ppd := estimatePointsPerDay(rows)
+		tempSpec.DaySMAs = daySMASeriesFor(windows, temps, ppd, 0)
+		humSpec.DaySMAs = daySMASeriesFor(windows, hums, ppd, 0)
+	}
 	// buildChartArea と同一の欠測ギャップ配線をミラーする (data-quality-meta 追加後の期待値)。
 	// この回帰テストの意図は「VPD 追加が温湿度 option を変えない」= 温湿度パイプライン独立性であり、
 	// 欠測ありデータでは温湿度 option も gap グリッドを通す (それが正しい温湿度パイプライン出力)。

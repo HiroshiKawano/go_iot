@@ -37,7 +37,7 @@ func MissingStats(intervalSecs []float64) (rate float64, missingCount int, gaps 
 	if len(intervalSecs) < 2 {
 		return 0, 0, nil, false
 	}
-	med := median(intervalSecs)
+	med := Median(intervalSecs)
 	if med <= 0 {
 		return 0, 0, nil, false
 	}
@@ -201,8 +201,9 @@ const (
 
 // --- 内部ヘルパ（パッケージ非公開・純粋） ---
 
-// median は中央値を返す（入力は破壊しない）。空は 0。偶数長は中央2要素の平均。
-func median(xs []float64) float64 {
+// Median は中央値を返す（入力は破壊しない）。空は 0。偶数長は中央2要素の平均。
+// handler の点数換算（estimatePointsPerDay）が間隔中央値を再利用するためエクスポートする。
+func Median(xs []float64) float64 {
 	n := len(xs)
 	if n == 0 {
 		return 0
