@@ -37,6 +37,14 @@ templ DeviceShowPage(v DeviceShowView) {
 					@component.GDDPanel(v.GDD)
 				</section>
 			}
+			// 高温ストレス（THI・熱帯夜・絶対湿度・日較差）パネル。GDD パネルの下に置く兄弟ブロック
+			// （period 非連動・直近1年/全蓄積年ゆえ期間切替で再描画させない・heat-stress-thi）。
+			// 内容（導線注記 or 系列あり）がある時のみ section を出す（空の器を出さない・GDDPanel と同型）。
+			if v.ChartArea.HeatStress.HasData || v.ChartArea.HeatStress.Guidance != "" {
+				<section class="card">
+					@component.HeatStressPanel(v.ChartArea.HeatStress)
+				</section>
+			}
 			@component.LatestReadingsTable(v.Latest)
 			<div class="modal-overlay" x-show="deleteModalOpen" x-cloak>
 				<div class="modal-content">

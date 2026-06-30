@@ -45,6 +45,9 @@ type fakeDeviceRepo struct {
 	lastRecentParams repository.ListRecentSensorReadingsParams // 最後に渡された取得パラメータ (取得起点 RecordedAt 検証用)
 	dailyAggs        []repository.ListDailySensorAggregatesRow // ListDailySensorAggregates 戻り値
 	dailyErr         error
+	dailyAggsJST     []repository.ListDailySensorAggregatesJSTRow // ListDailySensorAggregatesJST 戻り値 (heat-stress-thi)
+	dailyJSTErr      error
+	lastDailyJSTParams repository.ListDailySensorAggregatesJSTParams // 最後の取得パラメータ (取得起点検証用)
 	softDeleteErr    error
 	softDeleteID     int64 // 最後に論理削除を要求された id
 	softDeleted      bool  // SoftDeleteDevice 呼び出し記録
@@ -61,6 +64,11 @@ func (f *fakeDeviceRepo) ListRecentSensorReadings(_ context.Context, arg reposit
 
 func (f *fakeDeviceRepo) ListDailySensorAggregates(_ context.Context, _ repository.ListDailySensorAggregatesParams) ([]repository.ListDailySensorAggregatesRow, error) {
 	return f.dailyAggs, f.dailyErr
+}
+
+func (f *fakeDeviceRepo) ListDailySensorAggregatesJST(_ context.Context, arg repository.ListDailySensorAggregatesJSTParams) ([]repository.ListDailySensorAggregatesJSTRow, error) {
+	f.lastDailyJSTParams = arg
+	return f.dailyAggsJST, f.dailyJSTErr
 }
 
 func (f *fakeDeviceRepo) SoftDeleteDevice(_ context.Context, id int64) error {

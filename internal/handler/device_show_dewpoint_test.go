@@ -389,8 +389,9 @@ func TestShow_露点パネルを描画する(t *testing.T) {
 			t.Errorf("詳細ページに %q が含まれていない（露点パネル）", want)
 		}
 	}
-	// option script は温/湿/VPD/露点の 4 本。
-	if got := strings.Count(body, `type="application/json"`); got != 4 {
-		t.Errorf("option script 数 = %d, want 4（温度/湿度/VPD/露点）", got)
+	// option script は温/湿/VPD/露点 + 高温ストレス(THI/熱帯夜calendar/夜温ΔT/AH) の 8 本
+	// (heat-stress-thi パネル追加・温湿度/VPD/露点 option は不変)。
+	if got := strings.Count(body, `type="application/json"`); got != 8 {
+		t.Errorf("option script 数 = %d, want 8（温度/湿度/VPD/露点/THI/熱帯夜/夜温ΔT/AH）", got)
 	}
 }

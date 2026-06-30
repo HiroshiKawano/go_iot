@@ -51,6 +51,9 @@ type DeviceRepo interface {
 	ListLatestSensorReadings(ctx context.Context, deviceID int64) ([]repository.SensorReading, error)
 	ListRecentSensorReadings(ctx context.Context, arg repository.ListRecentSensorReadingsParams) ([]repository.SensorReading, error)
 	ListDailySensorAggregates(ctx context.Context, arg repository.ListDailySensorAggregatesParams) ([]repository.ListDailySensorAggregatesRow, error)
+	// JST 暦日バケットの日次集約 (heat-stress-thi で追加・熱帯夜 calendar/夜温/ΔT/年間日数トレンド用)。
+	// 既存 ListDailySensorAggregates(UTC バケット) とは別物 (3d/7d/30d グラフ用は無改変で温存)。
+	ListDailySensorAggregatesJST(ctx context.Context, arg repository.ListDailySensorAggregatesJSTParams) ([]repository.ListDailySensorAggregatesJSTRow, error)
 	SoftDeleteDevice(ctx context.Context, id int64) error
 }
 

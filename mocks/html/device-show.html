@@ -328,6 +328,76 @@
         <p class="form-help">予測収穫日は線形外挿による目安です（季節変動は織り込みません）。</p>
       </section>
 
+      <!-- 高温ストレス（THI・熱帯夜・絶対湿度AH・日較差ΔT）パネル: 温湿度から読み取り時算出する派生指標パネル（研究用）。
+           VPD・露点・GDD に続く派生指標ダッシュボードの第4弾。熱帯夜カレンダーは年スケール（暦日×月）ゆえ
+           期間セレクタ**非連動**で直近1年を固定描画する（GDD と同型）。独立 section（期間選択カードの外）に置く。
+           calendar/heatmap は visualMap 連続色（時刻 category 軸でない）ゆえ echarts.connect から除外する
+           （各コンテナに data-no-connect）。
+           グラフ内部描画（THI ヒートマップのセル濃淡・熱帯夜カレンダーのセル濃淡・夜温/ΔT 線・AH 線・
+           年間日数 bar＋Sen 傾き markLine）はモック反映対象外＝器のみ反映（feedback_mock_graph_rendering_exception）。
+           各系列は #thi-heatmap / #tropical-night-calendar / #night-temp-delta / #ah-line / #tropical-night-trend の
+           data-echarts option script で描画する（本タスクはモック正本のみ・本番 templ 描画は Task 6）。
+           暑熱（高 THI／高夜温＝暑い）は「暖色（--color-heat）＝危険側」で一貫表現する（物理規約・VPD の乾き側／
+           露点の湿り側と取り違えない別軸）。データ無し（計測ゼロ／対象年に熱帯夜なし）時は導線注記のみへ縮退する。
+           農家向け表示（信号色の高温警告・圃場共有 URL）・高温アラート通知は本フェーズに含めない（研究用スコープ）。 -->
+      <section class="card">
+        <h2 class="u-mbs-6">高温ストレス（THI・熱帯夜・絶対湿度・日較差）</h2>
+        <p class="form-help">夜温＝JST 暦日の最低気温。熱帯夜＝夜温 25℃ 以上（作物非依存の既定しきい値）。</p>
+
+        <!-- 高温ストレス数値カード（現在THI/現在AH/直近夜温/熱帯夜連続日数）。空データ時は各値「—」。 -->
+        <div class="summary-grid summary-grid-4 u-mbs-6">
+          <div class="summary-box"><div class="label">現在THI</div><div class="value">79.5</div></div>
+          <div class="summary-box"><div class="label">現在AH</div><div class="value">18.2 g/m³</div></div>
+          <div class="summary-box"><div class="label">直近夜温</div><div class="value">26.3℃</div></div>
+          <div class="summary-box"><div class="label">熱帯夜連続</div><div class="value">最長 12 日 / 現在 5 日</div></div>
+        </div>
+
+        <!-- 暑熱カラースケール凡例（visualMap・暑熱=暖色の向き）。ECharts の visualMap 本体はグラフ内に描かれるが、
+             凡例の枠と境界ラベル（涼＝安全 → 暑＝危険）は静的な器としてモック反映する（独自クラス .heat-scale）。
+             グラデは低（涼・安全）→ 高（暑・危険）で薄黄→橙→赤→濃赤の単調暖色（高 THI/高夜温ほど濃い暖色）。 -->
+        <div class="heat-scale" role="img" aria-label="暑熱カラースケール 涼（安全）から暑（危険）">
+          <div class="heat-scale-bar"></div>
+          <div class="heat-scale-labels">
+            <span>涼（安全）</span>
+            <span>暑（危険）</span>
+          </div>
+        </div>
+
+        <!-- THI 時間帯×日ヒートマップ（hour-of-day × 日・平均THIをストレス度の暖色濃淡で表示）。 -->
+        <h2 class="u-mbs-6">THI 時間帯×日ヒートマップ</h2>
+        <div class="chart-wrapper">
+          <div id="thi-heatmap" data-echarts data-no-connect data-unit="THI" data-color="#d6336c" class="chart-placeholder">THIヒートマップ (時間帯×日 / 平均THIの暖色濃淡＋visualMap連続色, x:時刻 y:日)</div>
+        </div>
+
+        <!-- 熱帯夜カレンダー（暦日×月・夜温の高さを暖色濃淡で表示。本フェーズの主役）。直近1年・period 非連動。 -->
+        <h2 class="u-mbs-6">熱帯夜カレンダー（直近1年）</h2>
+        <div class="chart-wrapper">
+          <div id="tropical-night-calendar" data-echarts data-no-connect data-unit="℃" data-color="#d6336c" class="chart-placeholder">熱帯夜カレンダー (暦日×月 / 夜温の暖色濃淡＋visualMap, 直近365日)</div>
+        </div>
+
+        <!-- 夜温推移・日較差ΔT（日次・直近1年）。夜温＝日最低気温／ΔT＝日最高−日最低。暑熱で日較差が縮む状況を読む。 -->
+        <h2 class="u-mbs-6">夜温推移・日較差ΔT（日次）</h2>
+        <div class="chart-wrapper">
+          <div id="night-temp-delta" data-echarts data-no-connect data-unit="℃" data-color="#d6336c" class="chart-placeholder">夜温/日較差グラフ (℃ / 夜温推移＋日較差ΔTの2線, 横軸:日)</div>
+        </div>
+
+        <!-- 絶対湿度 AH（除湿負荷）時系列。実水蒸気圧から算出（VPD と同一の飽和水蒸気圧式を再利用）。 -->
+        <h2 class="u-mbs-6">絶対湿度 AH（除湿負荷）</h2>
+        <div class="chart-wrapper">
+          <div id="ah-line" data-echarts data-no-connect data-unit="g/m³" data-color="#d6336c" class="chart-placeholder">AHグラフ (g/m³ / 絶対湿度の時系列, 横軸:時間)</div>
+        </div>
+
+        <!-- 熱帯夜 年間日数トレンド（多年蓄積≥2年時のみ・年間熱帯夜日数 bar＋Sen 傾き markLine）。
+             P8 の共通トレンド基盤（Mann-Kendall/Sen 傾き）を再利用。数年では Sen 傾き＋符号＋記述統計に留め、
+             有意性は断定しない（検出力の留保）。1年以下は非表示＋複数年必要の注記へ縮退する。 -->
+        <h2 class="u-mbs-6">熱帯夜 年間日数トレンド</h2>
+        <div class="chart-wrapper">
+          <div id="tropical-night-trend" data-echarts data-no-connect data-unit="日" data-color="#d6336c" class="chart-placeholder">年間日数トレンド (日/年 / 年間熱帯夜日数 bar＋Sen 傾き markLine)</div>
+        </div>
+        <!-- 検出力の留保注記（Sen 傾き＋符号・非有意≠トレンド無し・複数年必要）。 -->
+        <p class="form-help">Sen 傾き: +0.6 日/年（増加傾向・参考）。統計的に非有意であってもトレンドが無いことを意味しません（評価には複数年の蓄積が必要です）。</p>
+      </section>
+
       <section class="card">
         <h2>最新計測データ</h2>
         <!-- R03: table はラッパー内, R04: thead/tbody 分離, R11: 2件以上, R12: 空メッセージ -->

@@ -139,6 +139,16 @@ func (h *DeviceHandler) Show(c *gin.Context) {
 		return
 	}
 
+	// 高温ストレス（THI・熱帯夜・絶対湿度・日較差）パネルを period 非連動で組む（直近1年/全蓄積年・期間フラグメント外）。
+	// GDD と同型で Show 経路のみで組み（buildChartArea には入れない＝Chart フラグメントで再計算されない・heat-stress-thi）、
+	// 所有者認可は上の RequireDeviceOwner に相乗りする。DeviceChartAreaView 末尾へ詰めページが GDD の下に描画する。
+	heatPanel, err := h.buildHeatStressPanel(ctx, device, now)
+	if err != nil {
+		renderError(c, http.StatusInternalServerError)
+		return
+	}
+	chartArea.HeatStress = heatPanel
+
 	v := page.DeviceShowView{
 		Layout: layout.AppLayoutData{
 			Title:     device.Name + deviceShowTitleSuffix,
