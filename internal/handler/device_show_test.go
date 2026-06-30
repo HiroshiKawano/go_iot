@@ -197,9 +197,10 @@ func TestShow_200で情報と既定24hアクティブと最新計測(t *testing.
 	if got := strings.Count(body, `id="humidity-chart"`); got != 1 {
 		t.Errorf(`id="humidity-chart" が %d 個 (want 1・一意)`, got)
 	}
-	// option script は温/湿/VPD/露点の 4 本 (露点・病害リスクパネル追加・温湿度/VPD option は不変)
-	if got := strings.Count(body, `type="application/json"`); got != 4 {
-		t.Errorf("option script の数 = %d, want 4 (温度/湿度/VPD/露点)", got)
+	// option script は温/湿/VPD/露点 + 高温ストレス(THI/熱帯夜calendar/夜温ΔT/AH) の 8 本
+	// (heat-stress-thi パネル追加・温湿度/VPD/露点 option は不変。生行があると THI/AH も読み取り時算出される)。
+	if got := strings.Count(body, `type="application/json"`); got != 8 {
+		t.Errorf("option script の数 = %d, want 8 (温度/湿度/VPD/露点/THI/熱帯夜/夜温ΔT/AH)", got)
 	}
 	if !strings.Contains(body, `id="vpd-chart-option"`) {
 		t.Errorf("VPD option script が含まれていない")

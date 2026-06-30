@@ -72,6 +72,7 @@
     --color-dewpoint: #4263eb;            /* 露点Td系列・結露帯の基準色（寒色＝湿り側・温度橙/湿度青/VPD緑と区別） */
     --color-gdd: #e03131;                 /* GDD累積曲線・予測到達マークの基準色（暖色＝積算温度＝生育が早い側・温度橙/湿度青/VPD緑/露点青と区別） */
     --color-trend: #7048e8;               /* 統計分析ページ: ロールアップ平均線・Sen トレンド線の基準色（紫＝長期トレンド系・温度橙/湿度青/VPD緑/露点青/GDD赤と区別） */
+    --color-heat: #d6336c;                 /* 高温ストレス（THI/熱帯夜/AH/ΔT）の基準色・暑熱カラースケールの最濃側（暖色＝暑い＝危険側・温度橙/GDD赤#e03131 と判別する hue・実機スモークで最終確定） */
 
     /* --- スペーススケール（4px グリッド。旧 Lism --s* を実値化） --- */
     --space-1: 0.25rem;   /* 4px  （旧 --s5）  */
@@ -624,6 +625,27 @@
 .vpd-bar-fill {
   height: 100%;
   background: var(--color-vpd);
+}
+
+/* --- 暑熱カラースケール凡例（高温ストレスパネル・独自クラス＝モック単一ソースの新規器） --- */
+/* ECharts の visualMap 本体はグラフ内に描かれる（動的描画ゆえモック反映の例外）が、凡例の枠と境界ラベル
+   （涼＝安全 → 暑＝危険）は静的な器としてモック反映する。グラデは暑熱＝暖色の向き（低→高で薄黄→橙→赤→
+   濃赤の単調暖色・高 THI/高夜温ほど濃い暖色）。右端の最濃側に --color-heat（暑熱＝危険側の基準色）を据える。 */
+.heat-scale {
+  margin-bottom: var(--space-6);
+}
+.heat-scale-bar {
+  height: 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: linear-gradient(to right, #fff5b1, #ffa94d, #f03e3e, var(--color-heat));
+}
+.heat-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-sm);
+  color: var(--color-muted);
+  margin-top: var(--space-1);
 }
 
 /* --- 品質バッジ（data-quality-meta・独自クラス＝モック単一ソースの新規器） --- */

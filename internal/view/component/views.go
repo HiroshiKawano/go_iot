@@ -91,6 +91,13 @@ type DeviceChartAreaView struct {
 	// true のとき欠測区間でグラフ線が分断され markArea でハイライトされる。templ は凡例/注記
 	// (静的な器) を HasGap=true のときに描画する。欠測なしは従来描画 (false・無回帰)。
 	HasGap bool
+
+	// HeatStress は高温ストレス (THI・熱帯夜・絶対湿度AH・日較差ΔT) 蓄積解析パネル
+	// (heat-stress-thi・末尾非破壊追加・派生指標ダッシュボードの第4弾)。HasData=true のときのみ
+	// handler が組む (温湿度データから読み取り時算出)。GDD パネルの下に描画する。
+	// 熱帯夜 calendar は年スケールゆえ期間セレクタ非連動 (GDD と同型)。
+	// 温湿度/VPD/露点/GDD フィールドとは独立 (別 option・別 DTO=無回帰)。
+	HeatStress HeatStressPanelView
 }
 
 // VPDPanelView は VPD 適正帯ダッシュボードのパネル (DeviceChartArea 内・研究用) の表示データ。
@@ -206,6 +213,47 @@ type GrowthStageRow struct {
 	Name    string // ステージ名 "出穂"
 	GDD     string // 到達しきい値 "800 ℃·日"
 	Current bool   // 現在この段か (templ 側で現在行をマーク)
+}
+
+// HeatStressPanelView は高温ストレス (THI・熱帯夜・絶対湿度AH・日較差ΔT) 蓄積解析パネル
+// (device-show ページ・研究用) の表示データ。すべて整形済み primitive で保持し、
+// pgtype/repository/chart 型を持ち込まない (view 純粋性)。VPD・露点・GDD に続く派生指標
+// ダッシュボードの第4弾 (高温ストレスパネル)。温湿度/VPD/露点/GDD とは独立 (別 option・別 DTO=無回帰)。
+//
+// 各 *JSON は handler が internal/chart の各ビルダで組んだ HTML 安全 JSON (空データは "{}")。
+//   - THIHeatmapJSON : THI 時間帯×日ヒートマップ (連続暖色 visualMap)
+//   - CalendarJSON   : 熱帯夜カレンダー (calendar 座標系・直近1年・period 非連動)
+//   - NightDeltaJSON : 夜温推移＋日較差ΔT の2 line
+//   - AHJSON         : 絶対湿度AH (除湿負荷) の line
+//   - TrendJSON      : 熱帯夜年間日数の棒＋Sen 傾き markLine (HasTrend 時のみ・空は "{}")
+// Color は暑熱=暖色の基準色 (--color-heat・data-color へ)。Guidance は計測ゼロ時の導線注記
+// (非空なら通常表示せず注記のみ)。TrendNote は「非有意≠トレンド無し・複数年必要」の検出力留保注記。
+// Card は数値カード、TropicalLongest/Current は熱帯夜連続日数 (最長/現在・整形済み or "—")。
+type HeatStressPanelView struct {
+	HasData        bool   // 計測ゼロは false (templ は Guidance のみ描画・レイアウト非破壊)
+	Guidance       string // 計測ゼロ時の導線注記 (空なら通常表示)
+	Color          string // 暑熱=暖色の基準色 "#d6336c" (--color-heat・data-color へ)
+	THIHeatmapJSON string // THI 時間帯×日ヒートマップ option (HTML 安全 JSON・空は "{}")
+	CalendarJSON   string // 熱帯夜カレンダー option (HTML 安全 JSON・空は "{}")
+	NightDeltaJSON string // 夜温推移＋日較差ΔT option (HTML 安全 JSON・空は "{}")
+	AHJSON         string // 絶対湿度AH option (HTML 安全 JSON・空は "{}")
+	HasTrend       bool   // 2年以上の蓄積があり年間日数トレンドを描けるか (false は trend 非描画)
+	TrendJSON      string // 熱帯夜年間日数トレンド option (HasTrend 時のみ・空は "{}")
+	TrendNote      string // 検出力の留保注記 (非有意≠トレンド無し・複数年必要)
+
+	Card            HeatStressCardView // 数値カード (現在THI/現在AH/直近夜温/Sen 傾き＋符号)
+	TropicalLongest string             // 熱帯夜連続日数 最長 "12 日" / "—"
+	TropicalCurrent string             // 熱帯夜連続日数 現在 "5 日" / "—"
+}
+
+// HeatStressCardView は高温ストレス数値カード1枚分の表示データ (整形済み・単位付き文字列 or "—")。
+// 現在THI=最新点の温湿度指数、現在AH=最新点の絶対湿度、直近夜温=直近の夜温 (日最低気温)、
+// SenSlopeSign=熱帯夜年間日数の Sen 傾き＋符号 (例 "+0.6 日/年（増加傾向・参考）"・トレンド無しは "—")。
+type HeatStressCardView struct {
+	CurrentTHI      string // 例 "79.5" / "—"
+	CurrentAH       string // 例 "18.2 g/m³" / "—"
+	LatestNightTemp string // 例 "26.3℃" / "—" (直近夜温=日最低気温)
+	SenSlopeSign    string // 例 "+0.6 日/年（増加傾向・参考）" / "—" (Sen 傾き＋符号・参考値)
 }
 
 // StatCardView は数値カード1メトリック分の表示データ (整形済み・単位付き文字列 or "—")。

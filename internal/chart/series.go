@@ -118,3 +118,57 @@ type TrendChartSpec struct {
 	// 非有意/未算出時は空（markArea を出さない・末尾非破壊追加で Run 型を VPD/露点と共有）。
 	Significant []Run
 }
+
+// HeatCell は THI 時間帯×日ヒートマップの1セル（heatmap データ点 [Hour, Day, Value]）を表す。
+// Hour は x 軸の時刻インデックス（0..23）、Day は y 軸の日インデックス（THIDayLabels の位置）、
+// Value は当該（日×時刻）バケットの平均 THI。欠測セルは省略する（handler が満たすセルだけ渡す）。
+type HeatCell struct {
+	Hour  int     // x: 時刻（0..23）
+	Day   int     // y: 日インデックス（THIDayLabels の添字）
+	Value float64 // 平均 THI
+}
+
+// DateValue は熱帯夜 calendar の1セル（heatmap データ点 ["YYYY-MM-DD", Value]）を表す。
+// Date は JST 暦日（"YYYY-MM-DD"）、Value は夜温（日最低気温）。欠測日は省略する。
+type DateValue struct {
+	Date  string  // "YYYY-MM-DD"（JST 暦日）
+	Value float64 // 夜温（日最低気温）
+}
+
+// HeatStressChartSpec は高温ストレス描画層（heatstress_echarts.go）の各 option ビルダーへの
+// 型安全な入力契約。温湿度/VPD/露点/GDD/トレンドの各 Spec とは別型に隔離し、それらの無回帰を守る
+// （P2/P3/P6/P7/P8 無回帰・design D の別型隔離）。
+//
+// 5 つのサブチャート（THI hour×day heatmap・熱帯夜 calendar・夜温/ΔT line・AH line・
+// 年間日数トレンド bar）への入力を1構造体にまとめる。各群は nil/空のとき当該 option が空（"{}"）になる。
+// time/DB 非依存（handler がバケット境界・JST 整形・float 化を済ませて渡す）。
+type HeatStressChartSpec struct {
+	// THI 時間帯×日ヒートマップ（直近 rawWindow 日 × 24 時間・x=時刻 y=日）。
+	THIHourDay   []HeatCell // 平均 THI セル（欠測セルは省略）
+	THIDayLabels []string   // y 軸（日）ラベル
+	THIMin       float64    // visualMap レンジ下限（暑熱=暖色の薄端）
+	THIMax       float64    // visualMap レンジ上限（暑熱=暖色の濃端）
+
+	// 熱帯夜 calendar（直近1年・暦日×月）。
+	CalendarRange []string    // ["YYYY-MM-DD","YYYY-MM-DD"]（直近1年の開始・終了）
+	CalendarCells []DateValue // 夜温セル（欠測日は省略）
+	NightMin      float64     // visualMap レンジ下限（夜温）
+	NightMax      float64     // visualMap レンジ上限（夜温）
+
+	// 夜温推移・日較差ΔT（直近1年 daily・2 line）。
+	DayLabels  []string  // X 軸カテゴリ（日ラベル）
+	NightTemps []float64 // 夜温（日最低気温）系列
+	DeltaT     []float64 // 日較差ΔT（日最高−日最低）系列
+
+	// 絶対湿度 AH（直近 rawWindow・per-reading line）。
+	AHLabels []string  // X 軸カテゴリ（時刻ラベル）
+	AH       []float64 // AH[g/m³] 系列
+
+	// 熱帯夜 年間日数トレンド（≥2年時のみ・bar + Sen 傾き markLine）。
+	HasTrend     bool      // false なら trend option は空（"{}"）
+	YearLabels   []string  // X 軸カテゴリ（年ラベル）
+	YearlyCounts []float64 // 各年の熱帯夜日数（bar）
+	SenLine      []float64 // Sen 傾き線の値列（YearLabels と同長・両端点で markLine を引く）
+
+	Color string // 基準色（--color-heat・暑熱=暖色の最濃側）
+}

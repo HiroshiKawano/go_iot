@@ -78,6 +78,13 @@ func (f fakeDeviceQuerier) ListDailySensorAggregates(_ context.Context, _ reposi
 	return nil, nil
 }
 
+// ListDailySensorAggregatesJST は heat-stress-thi の buildHeatStressPanel が呼ぶ JST 日次集約。
+// 埋め込み Querier(nil) のままだと実行時 nil 参照 panic → 500 になるため空データで明示実装する
+// （計測ゼロ→高温ストレスパネルは Guidance のみへ縮退・device-show は 200 を維持）。
+func (f fakeDeviceQuerier) ListDailySensorAggregatesJST(_ context.Context, _ repository.ListDailySensorAggregatesJSTParams) ([]repository.ListDailySensorAggregatesJSTRow, error) {
+	return nil, nil
+}
+
 func (f fakeDeviceQuerier) SoftDeleteDevice(_ context.Context, _ int64) error {
 	return nil
 }

@@ -1,0 +1,82 @@
+package component
+
+// HeatStressPanel は高温ストレス（THI・熱帯夜・絶対湿度AH・日較差ΔT）蓄積解析パネルを描画する
+// （mocks/html/device-show.html の高温ストレスパネルを写経）。VPD・露点・GDD に続く派生指標
+// ダッシュボードの第4弾。device-show **ページ**が DeviceChartArea の兄弟として直接呼ぶ
+// （期間フラグメント #device-chart-area の**外**＝period 非連動・直近1年/全蓄積年で固定・GDD と同型）。
+//
+// 他パネルと決定的に異なる点:
+//   - 熱帯夜 calendar/THI heatmap は visualMap 連続色（時刻 category 軸でない）ゆえ echarts.connect から
+//     除外する（全コンテナに data-no-connect 付与）。init/dispose は全 [data-echarts] 対象のまま
+//     （App.templ initScope は connect 収集のみ除外・後方互換）。
+//   - グラフ内部描画（ヒートマップ/カレンダーのセル濃淡・線・bar＋Sen markLine）は option script で供給
+//     （feedback_mock_graph_rendering_exception）。器（カード/凡例枠/カラースケール）はモック準拠で維持。
+//
+// 暑熱（高 THI／高夜温＝暑い）は「暖色（--color-heat・data-color）＝危険側」で一貫表現する（要件 7.1）。
+// 計測ゼロは handler が Guidance を埋め、ここは導線注記のみ描く（チャート器・カードを出さず破綻させない・要件 9.2）。
+// 研究用スコープに限定し農家向け平易表示（信号色の高温警告・圃場共有 URL）は含めない（要件 11.3）。
+templ HeatStressPanel(v HeatStressPanelView) {
+	if v.HasData {
+		<h2 class="u-mbs-6">高温ストレス（THI・熱帯夜・絶対湿度・日較差）</h2>
+		<p class="form-help">夜温＝JST 暦日の最低気温。熱帯夜＝夜温 25℃ 以上（作物非依存の既定しきい値）。</p>
+		// 高温ストレス数値カード（現在THI/現在AH/直近夜温/熱帯夜連続）。.summary-grid-4 をモックから流用。
+		<div class="summary-grid summary-grid-4 u-mbs-6">
+			<div class="summary-box"><div class="label">現在THI</div><div class="value">{ v.Card.CurrentTHI }</div></div>
+			<div class="summary-box"><div class="label">現在AH</div><div class="value">{ v.Card.CurrentAH }</div></div>
+			<div class="summary-box"><div class="label">直近夜温</div><div class="value">{ v.Card.LatestNightTemp }</div></div>
+			<div class="summary-box"><div class="label">熱帯夜連続</div><div class="value">{ "最長 " + v.TropicalLongest + " / 現在 " + v.TropicalCurrent }</div></div>
+		</div>
+		// 暑熱カラースケール凡例（涼＝安全 → 暑＝危険・独自 .heat-scale）。visualMap 本体はグラフ内・凡例枠は静的な器。
+		<div class="heat-scale" role="img" aria-label="暑熱カラースケール 涼（安全）から暑（危険）">
+			<div class="heat-scale-bar"></div>
+			<div class="heat-scale-labels">
+				<span>涼（安全）</span>
+				<span>暑（危険）</span>
+			</div>
+		</div>
+		// THI 時間帯×日ヒートマップ（平均THIの暖色濃淡＋visualMap・data-no-connect）。
+		<h2 class="u-mbs-6">THI 時間帯×日ヒートマップ</h2>
+		<div class="chart-wrapper">
+			<div id="thi-heatmap" data-echarts data-no-connect data-unit="THI" data-color={ v.Color }></div>
+			@templ.Raw(optionScript("thi-heatmap-option", v.THIHeatmapJSON))
+		</div>
+		// 熱帯夜カレンダー（暦日×月・夜温の暖色濃淡・直近1年・period 非連動・本フェーズの主役）。
+		<h2 class="u-mbs-6">熱帯夜カレンダー（直近1年）</h2>
+		<div class="chart-wrapper">
+			<div id="tropical-night-calendar" data-echarts data-no-connect data-unit="℃" data-color={ v.Color }></div>
+			@templ.Raw(optionScript("tropical-night-calendar-option", v.CalendarJSON))
+		</div>
+		// 夜温推移・日較差ΔT（日次・直近1年）。暑熱で日較差が縮む状況を読む。
+		<h2 class="u-mbs-6">夜温推移・日較差ΔT（日次）</h2>
+		<div class="chart-wrapper">
+			<div id="night-temp-delta" data-echarts data-no-connect data-unit="℃" data-color={ v.Color }></div>
+			@templ.Raw(optionScript("night-temp-delta-option", v.NightDeltaJSON))
+		</div>
+		// 絶対湿度 AH（除湿負荷）時系列。
+		<h2 class="u-mbs-6">絶対湿度 AH（除湿負荷）</h2>
+		<div class="chart-wrapper">
+			<div id="ah-line" data-echarts data-no-connect data-unit="g/m³" data-color={ v.Color }></div>
+			@templ.Raw(optionScript("ah-line-option", v.AHJSON))
+		</div>
+		// 熱帯夜 年間日数トレンド（≥2年時のみ・棒＋Sen 傾き markLine）。1年以下は器を出さず注記のみへ縮退（要件 6.4）。
+		if v.HasTrend {
+			<h2 class="u-mbs-6">熱帯夜 年間日数トレンド</h2>
+			<div class="chart-wrapper">
+				<div id="tropical-night-trend" data-echarts data-no-connect data-unit="日" data-color={ v.Color }></div>
+				@templ.Raw(optionScript("tropical-night-trend-option", v.TrendJSON))
+			</div>
+		}
+		// 検出力の留保注記（Sen 傾き＋符号・非有意≠トレンド無し・複数年必要）。HasData なら常時掲示。
+		if v.TrendNote != "" {
+			if v.HasTrend {
+				<p class="form-help">{ "Sen 傾き: " + v.Card.SenSlopeSign + "。" + v.TrendNote }</p>
+			} else {
+				<p class="form-help">{ v.TrendNote }</p>
+			}
+		}
+	} else if v.Guidance != "" {
+		// 計測ゼロ: 設定導線の注記のみ（縮退・レイアウト維持・要件 9.2/9.4）。
+		<h2 class="u-mbs-6">高温ストレス（THI・熱帯夜・絶対湿度・日較差）</h2>
+		<p class="form-help">{ v.Guidance }</p>
+	}
+}
