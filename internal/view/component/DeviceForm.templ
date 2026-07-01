@@ -7,7 +7,9 @@ package component
 // 項目直後の .error-message に項目別エラーを表示する。独自 CSS クラスは新設しない (§31)。
 templ DeviceForm(v DeviceFormView) {
 	<section class="card card-narrow">
-		<form id="device-form" action={ v.Action } method="post">
+		// x-data の showPlantingDate は「GDD 収穫予測用(定植/播種日)」フィールドの表示可否。
+		// 初期値はサーバが選択中作物の GDD 対応で確定し (ちらつき防止)、栽培作物変更時に @change で更新する。
+		<form id="device-form" action={ v.Action } method="post" x-data={ deviceFormAlpineData(v) }>
 			<input type="hidden" name="gorilla.csrf.Token" value={ v.CSRFToken }/>
 			if v.IsEdit {
 				<input type="hidden" name="_method" value="put"/>
@@ -35,9 +37,11 @@ templ DeviceForm(v DeviceFormView) {
 			</div>
 			// 栽培作物 (任意・VPD 適正帯の切替に使用)。所在地と同型の検索可能 select。
 			// 先頭の空 option「選択しない（既定しきい値）」は未選択=既定帯 0.3-1.5kPa を表す。
+			// @change: GDD 対応作物 (ラベルに (GDD対応)) 選択時のみ定植日フィールドを表示する (TomSelect も
+			// 素の change を dispatch する・App.templ 参照)。判定リテラルは component.GDDCropLabelSuffix と揃える。
 			<div class="form-group">
 				<label>栽培作物</label>
-				<select name="crop" class="js-tom-select">
+				<select name="crop" class="js-tom-select" @change="showPlantingDate = ($event.target.selectedOptions[0]?.text || '').includes('(GDD対応)')">
 					<option value="">選択しない（既定しきい値）</option>
 					for _, opt := range v.Crops {
 						<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
@@ -46,9 +50,11 @@ templ DeviceForm(v DeviceFormView) {
 				<span class="error-message">{ v.Errors["crop"] }</span>
 			</div>
 			// 定植/播種日 (任意・空可・GDD 累積の起点)。作物 select の隣の素の date input (Tom Select 非対象)。
+			// GDD 対応作物を選んだ時だけ表示する (x-show・x-cloak で初期化前のちらつきを防ぐ)。非表示でも
+			// input は DOM に残り値は保持される (作物を対応→未対応→対応と切り替えても定植日を失わない)。
 			// 編集時は保存値を value でプリセット・検証エラー時は入力値を復元する。
-			<div class="form-group">
-				<label>定植/播種日</label>
+			<div class="form-group" x-show="showPlantingDate" x-cloak>
+				<label>GDD収穫予測用(定植/播種日)</label>
 				<input type="date" name="planting_date" value={ v.PlantingDate }/>
 				<span class="form-help">GDD（積算温度・収穫予測）の起点。未設定でも他の項目は利用できます。</span>
 				<span class="error-message">{ v.Errors["planting_date"] }</span>

@@ -429,13 +429,20 @@ func deviceCropValue(d repository.Device) string {
 
 // cropOptions は作物 select の選択肢 (9作物) を組み立てる (locality 写経)。
 // Label は日本語作物名、Selected は現在値との一致。空 option「選択しない（既定しきい値）」は templ 側で先頭付与。
+// GDD 具体モデルを持つ作物 (米・ゴーヤ・インゲン・ウリ・いも・葉野菜) には「(GDD対応)」接尾辞を付す (表示専用・値は不変)。
+// ※ 農場運営者が選択時点で GDD 予測の可否を判別でき、かつ定植日フィールドの出し分け判定にも使われる
+//    (component.GDDCropLabelSuffix が単一の真実源)。情報パネル/VPD/CSV の作物表示は素の Crop.Label()。
 func cropOptions(selected string) []component.SelectOption {
 	all := domain.AllCrops()
 	opts := make([]component.SelectOption, 0, len(all))
 	for _, c := range all {
+		label := c.Label()
+		if c.HasGDDModel() {
+			label += component.GDDCropLabelSuffix
+		}
 		opts = append(opts, component.SelectOption{
 			Value:    string(c),
-			Label:    c.Label(),
+			Label:    label,
 			Selected: string(c) == selected,
 		})
 	}

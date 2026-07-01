@@ -36,11 +36,11 @@ func TestIntegration_作物登録フォームに空optionと9選択肢(t *testin
 	}
 	body := cw.Body.String()
 	for _, want := range []string{
-		`<select name="crop" class="js-tom-select">`,        // 所在地と同型の検索可能 select
+		`<select name="crop" class="js-tom-select"`,         // 所在地と同型の検索可能 select (属性追加に頑健)
 		`<option value="">選択しない（既定しきい値）</option>`,        // 空 option (未選択=既定帯)
-		`<option value="goya">ゴーヤ</option>`,                // 9作物
-		`<option value="sugarcane">サトウキビ</option>`,
-		`<option value="leafy_vegetable">葉野菜</option>`,
+		`<option value="goya">ゴーヤ(GDD対応)</option>`,                 // GDD 対応作物は接尾辞付き
+		`<option value="leafy_vegetable">葉野菜(GDD対応)</option>`,      // 葉野菜も GDD 対応(接尾辞付き)
+		`<option value="sugarcane">サトウキビ</option>`,                 // 未対応は接尾辞なし
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("登録フォームに %q が含まれていない", want)
@@ -69,7 +69,7 @@ func TestIntegration_作物編集で選択値復元(t *testing.T) {
 	if ew.Code != http.StatusOK {
 		t.Fatalf("GET /devices/1/edit = %d, want 200 (body=%s)", ew.Code, ew.Body.String())
 	}
-	if !strings.Contains(ew.Body.String(), `<option value="goya" selected>ゴーヤ</option>`) {
+	if !strings.Contains(ew.Body.String(), `<option value="goya" selected>ゴーヤ(GDD対応)</option>`) {
 		t.Errorf("編集フォームで作物 goya が選択復元されていない:\n%s", ew.Body.String())
 	}
 }
@@ -128,7 +128,7 @@ func TestIntegration_他項目エラー時に作物選択を復元(t *testing.T)
 	if !strings.Contains(body, "デバイス名を入力してください") {
 		t.Error("他項目 (name) のエラーが表示されていない")
 	}
-	if !strings.Contains(body, `<option value="goya" selected>ゴーヤ</option>`) {
+	if !strings.Contains(body, `<option value="goya" selected>ゴーヤ(GDD対応)</option>`) {
 		t.Error("再描画で選択作物 goya が復元されていない (R3.3)")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/HiroshiKawano/go_iot/internal/repository"
+	"github.com/HiroshiKawano/go_iot/internal/view/component"
 )
 
 // --- 5.1 デバイスフォームの作物バインド・検証・復元・保存 (locality 写経) ---
@@ -77,6 +78,53 @@ func TestUpdate_作物を更新して保存(t *testing.T) {
 	}
 	if repo.lastUpdate.Crop == nil || *repo.lastUpdate.Crop != "ingen" {
 		t.Errorf("Crop=%v, want &\"ingen\" (フォームの作物)", repo.lastUpdate.Crop)
+	}
+}
+
+// TestCropOptions_GDD対応作物に接尾辞 は作物 select の選択肢ラベルに、GDD 具体モデルを持つ作物
+// (米・ゴーヤ・インゲン・ウリ・いも) だけ「(GDD対応)」が付き、他作物には付かないことを固定する。
+// 値 (Value) は不変 (接尾辞は表示専用) で、選択復元 (Selected) が正しく効くことも確認する。
+func TestCropOptions_GDD対応作物に接尾辞(t *testing.T) {
+	opts := cropOptions("goya")
+	byValue := make(map[string]component.SelectOption, len(opts))
+	for _, o := range opts {
+		byValue[o.Value] = o
+	}
+
+	// GDD 対応作物: ラベル末尾に「(GDD対応)」が付き、値は素のキーのまま。
+	supported := map[string]string{
+		"rice": "米", "goya": "ゴーヤ", "ingen": "インゲン", "uri": "ウリ", "imo": "いも", "leafy_vegetable": "葉野菜",
+	}
+	for value, base := range supported {
+		o, ok := byValue[value]
+		if !ok {
+			t.Fatalf("作物 %q の選択肢が無い", value)
+		}
+		if want := base + "(GDD対応)"; o.Label != want {
+			t.Errorf("%q の Label = %q, want %q", value, o.Label, want)
+		}
+	}
+
+	// 未対応作物: 接尾辞は付かない (素の日本語ラベル)。
+	unsupported := map[string]string{
+		"sugarcane": "サトウキビ", "mango": "マンゴー", "pineapple": "パイナップル",
+	}
+	for value, base := range unsupported {
+		o := byValue[value]
+		if o.Label != base {
+			t.Errorf("%q の Label = %q, want %q (未対応は接尾辞なし)", value, o.Label, base)
+		}
+		if strings.Contains(o.Label, "GDD対応") {
+			t.Errorf("未対応作物 %q に (GDD対応) が付いている: %q", value, o.Label)
+		}
+	}
+
+	// 選択復元 (Selected) は Value 一致で効く (接尾辞はラベルのみゆえ影響しない)。
+	if !byValue["goya"].Selected {
+		t.Errorf("selected=goya なのに goya が Selected でない")
+	}
+	if byValue["rice"].Selected {
+		t.Errorf("selected=goya なのに rice が Selected になっている")
 	}
 }
 

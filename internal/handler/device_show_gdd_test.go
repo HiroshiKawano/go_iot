@@ -98,25 +98,25 @@ func TestBuildGDDPanel_正常系は具体値で埋まる(t *testing.T) {
 	}
 }
 
-// 6.2 縮退系: 前提欠落（作物未設定／定植日 NULL）→ Guidance 非空・OptionJSON 空。
-func TestBuildGDDPanel_前提欠落は導線注記へ縮退(t *testing.T) {
+// 6.2 縮退系: 前提未設定（作物未設定／定植日 NULL）→ 汎用の設定導線注記・OptionJSON 空。
+// 作物・定植日のどちらかが欠けている状態ゆえ「設定してください」の汎用文言（gddGuidanceNote）を出す。
+func TestBuildGDDPanel_前提未設定は設定導線へ縮退(t *testing.T) {
 	now := dateOnlyUTC(2026, 4, 4)
 	tests := []struct {
 		name   string
 		mutate func(d *repository.Device)
 	}{
 		{
-			// 定植日はあるが作物が GDD モデルを持たない（goya=既定フォールバック・Stages 空）。
-			name: "GDDモデルなし作物→導線注記",
+			// 定植日はあるが作物が未設定（NULL）。
+			name: "作物未設定（定植日あり）→設定導線",
 			mutate: func(d *repository.Device) {
-				cropStr := "goya"
-				d.Crop = &cropStr
+				d.Crop = nil
 				d.PlantingDate = pgtype.Date{Time: dateOnlyUTC(2026, 4, 1), Valid: true}
 			},
 		},
 		{
 			// 作物は米だが定植日 NULL。
-			name: "定植日NULL→導線注記",
+			name: "定植日NULL→設定導線",
 			mutate: func(d *repository.Device) {
 				cropStr := "rice"
 				d.Crop = &cropStr
@@ -136,13 +136,75 @@ func TestBuildGDDPanel_前提欠落は導線注記へ縮退(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildGDDPanel() error: %v", err)
 			}
-			if v.Guidance == "" {
-				t.Error("前提欠落で Guidance が空（導線注記が出ていない）")
+			// 汎用の設定導線注記であること（未対応作物の専用注記と区別する）。
+			if v.Guidance != gddGuidanceNote {
+				t.Errorf("Guidance = %q, want 汎用の設定導線注記 %q", v.Guidance, gddGuidanceNote)
 			}
 			if v.OptionJSON != "" {
-				t.Errorf("前提欠落で OptionJSON が非空（チャートを描いてしまっている）")
+				t.Errorf("前提未設定で OptionJSON が非空（チャートを描いてしまっている）")
 			}
 		})
+	}
+}
+
+// 6.2 縮退系: 作物・定植日は設定済みだが、その作物の GDD 具体モデルが未対応（サトウキビ等）→
+// 「設定してください」ではなく「この作物は未対応・対応作物は〇〇」を明示する専用注記へ縮退する。
+// これが設定済みユーザーの誤解（『設定したのに出ない』）を防ぐ本修正の核心。
+func TestBuildGDDPanel_未対応作物は専用注記へ縮退(t *testing.T) {
+	repo := gddRepo()
+	d := repo.devices[1]
+	cropStr := "sugarcane" // 有効な作物だが GDD 具体モデルなし（既定フォールバック）
+	d.Crop = &cropStr
+	d.PlantingDate = pgtype.Date{Time: dateOnlyUTC(2026, 4, 1), Valid: true}
+	repo.devices[1] = d
+	h := &DeviceHandler{Repo: repo}
+
+	v, err := h.buildGDDPanel(context.Background(), d, dateOnlyUTC(2026, 4, 4))
+	if err != nil {
+		t.Fatalf("buildGDDPanel() error: %v", err)
+	}
+	if v.OptionJSON != "" {
+		t.Errorf("未対応作物で OptionJSON が非空（チャートを描いてしまっている）")
+	}
+	// 汎用の設定導線注記ではない（誤解を招く文言を出さない）。
+	if v.Guidance == gddGuidanceNote {
+		t.Errorf("未対応作物に汎用の設定導線注記が出ている（設定済みユーザーの誤解を招く）: %q", v.Guidance)
+	}
+	// 当該作物名（サトウキビ）と、対応作物の一例（米・ゴーヤ）を含む案内であること。
+	for _, want := range []string{"サトウキビ", "米", "ゴーヤ"} {
+		if !strings.Contains(v.Guidance, want) {
+			t.Errorf("Guidance = %q, want %q を含む", v.Guidance, want)
+		}
+	}
+}
+
+// 6.2 正常系（段階拡張）: ゴーヤ（GDD 具体モデルあり）は前提充足で累積曲線を描く。
+// 米以外の年1作物にも GDD が拡張されたことを固定する（本修正のもう一つの核心）。
+func TestBuildGDDPanel_ゴーヤは具体GDDで描画(t *testing.T) {
+	repo := gddRepo()
+	d := repo.devices[1]
+	cropStr := "goya"
+	d.Crop = &cropStr
+	d.PlantingDate = pgtype.Date{Time: dateOnlyUTC(2026, 4, 1), Valid: true}
+	repo.devices[1] = d
+	h := &DeviceHandler{Repo: repo}
+
+	v, err := h.buildGDDPanel(context.Background(), d, dateOnlyUTC(2026, 4, 4))
+	if err != nil {
+		t.Fatalf("buildGDDPanel() error: %v", err)
+	}
+	if v.Guidance != "" {
+		t.Errorf("ゴーヤ（対応作物）で Guidance が非空: %q", v.Guidance)
+	}
+	if v.OptionJSON == "" {
+		t.Error("ゴーヤで OptionJSON が空（累積曲線が描かれていない）")
+	}
+	if v.CropLabel != "ゴーヤ" {
+		t.Errorf("CropLabel = %q, want ゴーヤ", v.CropLabel)
+	}
+	// ステージ表が具体モデル（複数段）で描かれる。
+	if len(v.Stages) < 2 {
+		t.Errorf("Stages 数 = %d, want ≥2（ゴーヤの生育ステージ）", len(v.Stages))
 	}
 }
 

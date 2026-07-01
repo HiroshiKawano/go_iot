@@ -18,10 +18,10 @@ templ GDDPanel(v GDDPanelView) {
 	// 両方空の zero 値（未結線・無関係 fixture）では何も描かない（孤立見出しを出さない）。
 	if v.Guidance != "" {
 		// 前提欠落: 設定導線の注記のみ（縮退・レイアウト維持）。
-		<h2 class="u-mbs-6">GDD（積算温度・収穫予測）</h2>
+		@gddPanelHeading()
 		<p class="form-help">{ v.Guidance }</p>
 	} else if v.OptionJSON != "" {
-		<h2 class="u-mbs-6">GDD（積算温度・収穫予測）</h2>
+		@gddPanelHeading()
 		<p class="form-help">{ "作物: " + v.CropLabel }</p>
 		<div class="chart-wrapper">
 			<div id="gdd-chart" data-echarts data-no-connect data-unit="℃·日" data-color={ v.Color }></div>
@@ -42,6 +42,17 @@ templ GDDPanel(v GDDPanelView) {
 			<p class="form-help">{ v.Note }</p>
 		}
 	}
+}
+
+// gddPanelHeading は GDD パネル見出し（タイトル＋右側の未対応作物注記）を描く（両状態で共有）。
+// 見出しの右に、GDD 収穫予測が馴染まない作物群（多年生果樹・長期作・葉野菜）を静的に案内する（状態非依存）。
+// form-help（muted/small）に u-d-inline（utilities 層で form-help の display:block を上書き）を重ね、
+// 同一行のタイトル右へ inline 表示する（独自クラス新設なし・§31）。
+templ gddPanelHeading() {
+	<h2 class="u-mbs-6">
+		GDD（積算温度・収穫予測）
+		<span class="form-help u-d-inline">多年生（マンゴー/パイナップル/サトウキビ）は、GDD収穫予測が馴染まないため未対応</span>
+	</h2>
 }
 
 // gddStageTable は生育ステージ⇔GDD 対応表を .data-table で描画する。

@@ -22,9 +22,10 @@ func baseDeviceFormView() DeviceFormView {
 		},
 		Crop: "goya",
 		Crops: []SelectOption{
-			{Value: "goya", Label: "ゴーヤ", Selected: true},
-			{Value: "ingen", Label: "インゲン", Selected: false},
-			{Value: "leafy_vegetable", Label: "葉野菜", Selected: false},
+			// GDD 対応作物は handler(cropOptions) が「(GDD対応)」接尾辞を付す。未対応(サトウキビ)は素のまま。
+			{Value: "goya", Label: "ゴーヤ(GDD対応)", Selected: true},
+			{Value: "ingen", Label: "インゲン(GDD対応)", Selected: false},
+			{Value: "sugarcane", Label: "サトウキビ", Selected: false},
 		},
 		PlantingDate: "2026-04-01",
 		IsActive:     "1",
@@ -40,11 +41,54 @@ func TestDeviceForm_定植日のdate入力と値復元(t *testing.T) {
 	// 定植日は <input type="date" name="planting_date">（任意・空可）。
 	assertContains(t, html, `type="date"`)
 	assertContains(t, html, `name="planting_date"`)
+	// ラベルは GDD 収穫予測の起点であることを明示（栽培作物は VPD/病害と共有ゆえ改名しない）。
+	assertContains(t, html, "GDD収穫予測用(定植/播種日)")
+	// GDD 対応作物選択時のみ表示するため、定植日フィールドは x-show/x-cloak で制御される。
+	assertContains(t, html, `x-show="showPlantingDate"`)
+	assertContains(t, html, "x-cloak")
+	// 栽培作物 select の変更で表示可否を切り替える (@change・(GDD対応) ラベル判定)。
+	assertContains(t, html, `@change="showPlantingDate = ($event.target.selectedOptions[0]?.text || '').includes('(GDD対応)')"`)
+	// baseDeviceFormView は goya(GDD対応) 選択ゆえ初期表示 true。
+	assertContains(t, html, `x-data="{ showPlantingDate: true }"`)
 	// 保存値が value で復元される。
 	assertContains(t, html, `value="2026-04-01"`)
 	// Tom Select 非対象（素の input）ゆえ js-tom-select は所在地+作物の2つのまま（増えない）。
 	if got := strings.Count(html, "js-tom-select"); got != 2 {
 		t.Errorf("js-tom-select の数 = %d, want 2 (定植日は素の input で増やさない)", got)
+	}
+}
+
+// TestDeviceForm_定植日の初期表示は選択作物のGDD対応で決まる は、Alpine x-data の初期 showPlantingDate が
+// 「選択中の作物ラベルに (GDD対応) 接尾辞があるか」で決まることを固定する（サーバ側でちらつきなく初期表示）。
+func TestDeviceForm_定植日の初期表示は選択作物のGDD対応で決まる(t *testing.T) {
+	tests := []struct {
+		name  string
+		crops []SelectOption
+		want  string // 期待する x-data
+	}{
+		{
+			name:  "GDD対応作物(接尾辞あり)選択→初期表示true",
+			crops: []SelectOption{{Value: "goya", Label: "ゴーヤ(GDD対応)", Selected: true}},
+			want:  `x-data="{ showPlantingDate: true }"`,
+		},
+		{
+			name:  "未対応作物(接尾辞なし)選択→初期非表示false",
+			crops: []SelectOption{{Value: "sugarcane", Label: "サトウキビ", Selected: true}},
+			want:  `x-data="{ showPlantingDate: false }"`,
+		},
+		{
+			name:  "未選択(Selectedなし)→初期非表示false",
+			crops: []SelectOption{{Value: "goya", Label: "ゴーヤ(GDD対応)", Selected: false}},
+			want:  `x-data="{ showPlantingDate: false }"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := baseDeviceFormView()
+			v.Crops = tt.crops
+			html := render(t, DeviceForm(v))
+			assertContains(t, html, tt.want)
+		})
 	}
 }
 
@@ -65,12 +109,12 @@ func TestDeviceForm_作物selectと空optionと選択復元(t *testing.T) {
 	assertContains(t, html, `name="crop"`)
 	// 先頭の空 option (未選択=既定しきい値)。
 	assertContains(t, html, `選択しない（既定しきい値）`)
-	// 選択肢 (9作物のうち代表) と日本語ラベル。
-	assertContains(t, html, "ゴーヤ")
-	assertContains(t, html, "インゲン")
-	assertContains(t, html, "葉野菜")
-	// 保存値が option で選択復元される (goya=ゴーヤ)。
-	assertContains(t, html, `<option value="goya" selected>ゴーヤ</option>`)
+	// 選択肢 (9作物のうち代表) と日本語ラベル。GDD 対応作物は「(GDD対応)」接尾辞付き。
+	assertContains(t, html, "ゴーヤ(GDD対応)")
+	assertContains(t, html, "インゲン(GDD対応)")
+	assertContains(t, html, "サトウキビ") // 未対応は接尾辞なし
+	// 保存値が option で選択復元される (goya=ゴーヤ・接尾辞込みラベル)。
+	assertContains(t, html, `<option value="goya" selected>ゴーヤ(GDD対応)</option>`)
 	// 作物用 select も js-tom-select (検索可能) で、所在地と合わせて2つ。
 	if got := strings.Count(html, "js-tom-select"); got != 2 {
 		t.Errorf("js-tom-select の数 = %d, want 2 (所在地+作物)", got)

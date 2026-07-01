@@ -42,7 +42,9 @@
       </div>
 
       <section class="card card-narrow">
-        <form action="/devices" method="post">
+        <!-- x-data.showPlantingDate: GDD 収穫予測用(定植/播種日) の表示可否。初期値は選択中作物の GDD 対応で確定
+             (新規は未選択ゆえ false=非表示)。栽培作物変更時に @change で更新する。 -->
+        <form action="/devices" method="post" x-data="{ showPlantingDate: false }">
           <div class="form-group">
             <label>デバイス名 <span class="required-mark">＊</span></label>
             <input type="text" name="name" maxlength="255" required>
@@ -73,25 +75,25 @@
                選択肢9種は domain.Crop（goya/ingen/sugarcane/mango/pineapple/uri/rice/imo/leafy_vegetable）と同期。 -->
           <div class="form-group">
             <label>栽培作物</label>
-            <select name="crop" class="js-tom-select">
+            <select name="crop" class="js-tom-select" @change="showPlantingDate = ($event.target.selectedOptions[0]?.text || '').includes('(GDD対応)')">
               <option value="">選択しない（既定しきい値）</option>
-              <option value="goya">ゴーヤ</option>
-              <option value="ingen">インゲン</option>
+              <option value="goya">ゴーヤ(GDD対応)</option>
+              <option value="ingen">インゲン(GDD対応)</option>
               <option value="sugarcane">サトウキビ</option>
               <option value="mango">マンゴー</option>
               <option value="pineapple">パイナップル</option>
-              <option value="uri">ウリ</option>
-              <option value="rice">米</option>
-              <option value="imo">いも</option>
-              <option value="leafy_vegetable">葉野菜</option>
+              <option value="uri">ウリ(GDD対応)</option>
+              <option value="rice">米(GDD対応)</option>
+              <option value="imo">いも(GDD対応)</option>
+              <option value="leafy_vegetable">葉野菜(GDD対応)</option>
             </select>
             <span class="error-message"></span>
           </div>
 
           <!-- 定植/播種日（任意・空可・GDD 積算の起点）。作物 select の隣の素の date input（Tom Select 非対象）。
-               未来日は「定植日は未来日にできません」で再描画する（実装側検証）。 -->
-          <div class="form-group">
-            <label>定植/播種日</label>
+               未来日は「定植日は未来日にできません」で再描画する（実装側検証）。GDD 対応作物選択時のみ表示（x-show/x-cloak）。 -->
+          <div class="form-group" x-show="showPlantingDate" x-cloak>
+            <label>GDD収穫予測用(定植/播種日)</label>
             <input type="date" name="planting_date" value="">
             <span class="form-help">GDD（積算温度・収穫予測）の起点。未設定でも他の項目は利用できます。</span>
             <span class="error-message"></span>

@@ -233,10 +233,16 @@ func TestCrop_GDDModel(t *testing.T) {
 		wantNonEmpty bool // 具体的な Stages（非空）を期待するか
 	}{
 		{"rice 具体値（GDD 本命作物）", CropRice, true},
-		// 未確定作物は既定フォールバック（段階拡張で後追い可）。
+		// 施設・短期作・根菜の年1作物は GDD 具体モデルを持つ（暫定値・段階拡張で追加）。
+		{"goya 具体値（施設ウリ科）", CropGoya, true},
+		{"ingen 具体値（マメ科・冬作）", CropIngen, true},
+		{"uri 具体値（施設ウリ科）", CropUri, true},
+		{"imo 具体値（サツマイモ・根菜）", CropImo, true},
+		{"leafy_vegetable 具体値（葉野菜・冷涼一年生）", CropLeafyVegetable, true},
+		// 多年生・長期作・未確定作物は既定フォールバック（GDD 収穫予測が馴染まない/値未確定）。
 		{"sugarcane 未定義→既定", CropSugarcane, false},
-		{"goya 未定義→既定", CropGoya, false},
-		{"leafy_vegetable 未定義→既定", CropLeafyVegetable, false},
+		{"mango 未定義→既定（多年生果樹）", CropMango, false},
+		{"pineapple 未定義→既定（多年生）", CropPineapple, false},
 		// 未設定（空）/ 不正 → 既定フォールバック（要件 5.4）。
 		{"未設定(空)→既定", Crop(""), false},
 		{"不正値→既定", Crop("invalid"), false},
@@ -285,6 +291,61 @@ func TestCrop_GDDModel_Rice(t *testing.T) {
 	last := m.Stages[len(m.Stages)-1]
 	if last.GDD <= 0 {
 		t.Errorf("収穫目標 GDD（最終段）= %v, want >0", last.GDD)
+	}
+}
+
+// TestCrop_GDDModel_年1作物の具体値 は段階拡張で追加した年1作物（ゴーヤ・インゲン・ウリ・いも・葉野菜）の
+// 具体 GDD モデルを固定する（要件 5.2 の段階拡張）。数値は文献ベースの暫定値ゆえ大小の桁だけを検査し、
+// 不変条件（Tbase 正値・先頭段=0・最終段=収穫目標>0・昇順）を固定する。値の確定はユーザー/文献で行い本テストを更新する。
+func TestCrop_GDDModel_年1作物の具体値(t *testing.T) {
+	crops := []Crop{CropGoya, CropIngen, CropUri, CropImo, CropLeafyVegetable}
+	for _, c := range crops {
+		t.Run(string(c), func(t *testing.T) {
+			m := c.GDDModel()
+			if m.Tbase <= 0 {
+				t.Errorf("Tbase = %v, want >0", m.Tbase)
+			}
+			if len(m.Stages) < 2 {
+				t.Fatalf("Stages 数 = %d, want ≥2（複数段の生育モデル）", len(m.Stages))
+			}
+			// 先頭段は起点＝GDD 0（GrowthStageIndex が cum=0 で先頭段を指す前提）。
+			if m.Stages[0].GDD != 0 {
+				t.Errorf("先頭段 GDD = %v, want 0", m.Stages[0].GDD)
+			}
+			// 最終段＝収穫目標は正値。
+			last := m.Stages[len(m.Stages)-1]
+			if last.GDD <= 0 {
+				t.Errorf("収穫目標 GDD（最終段）= %v, want >0", last.GDD)
+			}
+		})
+	}
+}
+
+// TestCrop_HasGDDModel は GDD 具体モデルの有無判定を固定する（フォームの (GDD対応) 表示・対応作物一覧の判定源）。
+// GDDModel と一貫し、対応作物（米・ゴーヤ・インゲン・ウリ・いも）で true、他・未設定・不正で false。
+func TestCrop_HasGDDModel(t *testing.T) {
+	tests := []struct {
+		crop Crop
+		want bool
+	}{
+		{CropRice, true},
+		{CropGoya, true},
+		{CropIngen, true},
+		{CropUri, true},
+		{CropImo, true},
+		{CropLeafyVegetable, true},
+		{CropSugarcane, false},
+		{CropMango, false},
+		{CropPineapple, false},
+		{Crop(""), false},
+		{Crop("invalid"), false},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.crop), func(t *testing.T) {
+			if got := tt.crop.HasGDDModel(); got != tt.want {
+				t.Errorf("HasGDDModel() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

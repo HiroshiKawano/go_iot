@@ -9,8 +9,10 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/HiroshiKawano/go_iot/internal/chart"
@@ -47,10 +49,18 @@ func (h *DeviceHandler) buildGDDPanel(ctx context.Context, device repository.Dev
 		CropLabel: gddCropLabel(crop),
 	}
 
-	// 前提欠落: 具体的な GDD モデル（非空 Stages＝収穫目標あり）が無い、または定植日 NULL → 導線注記（要件 6.3）。
-	// 既定フォールバック作物（Stages 空）は本フェーズでは導線注記へ縮退する（最低1作物=米のみ具体描画・要件 5.2/5.4）。
-	if len(model.Stages) == 0 || !device.PlantingDate.Valid {
+	// 前提未設定: 作物が未設定（NULL/不正）または定植日 NULL → 汎用の設定導線注記（要件 6.3）。
+	// 「作物と定植日を設定すると…」＝まだ設定していない人向けの案内。
+	if !crop.Valid() || !device.PlantingDate.Valid {
 		view.Guidance = gddGuidanceNote
+		return view, nil
+	}
+
+	// 前提は設定済みだが、その作物に GDD 具体モデル（非空 Stages＝収穫目標あり）が無い → 未対応作物の専用注記。
+	// ここで汎用の「設定してください」を出すと、設定済みユーザーが『設定したのに出ない』と誤解する（本修正の要点）。
+	// 対応作物（米・ゴーヤ・インゲン・ウリ・いも・葉野菜 等）を明示し、未対応であることを正確に伝える（要件 5.2/5.4）。
+	if len(model.Stages) == 0 {
+		view.Guidance = gddUnsupportedCropNote(crop)
 		return view, nil
 	}
 
@@ -129,6 +139,28 @@ func gddCropLabel(c domain.Crop) string {
 		return c.Label()
 	}
 	return "既定"
+}
+
+// gddUnsupportedCropNote は「作物・定植日は設定済みだが、その作物の GDD 具体モデルが未対応」のときの注記。
+// 汎用の「設定してください」ではなく、当該作物が未対応であることと現在の対応作物を明示して、
+// 設定済みユーザーの誤解（『設定したのに出ない』）を避ける（要件 5.2/5.4・6.3）。
+func gddUnsupportedCropNote(c domain.Crop) string {
+	return fmt.Sprintf(
+		"「%s」の生育ステージ（GDD）モデルはまだ用意されていません。現在 GDD（積算温度・収穫予測）に対応している作物は %s です。",
+		c.Label(), strings.Join(gddSupportedCropLabels(), "・"),
+	)
+}
+
+// gddSupportedCropLabels は GDD 具体モデル（非空 Stages）を持つ作物の日本語ラベルを表示順で返す。
+// domain.GDDModel を単一の真実源にし、対応作物を増やせば注記も自動追随する（文言のハードコード回避）。
+func gddSupportedCropLabels() []string {
+	var out []string
+	for _, c := range domain.AllCrops() {
+		if c.HasGDDModel() {
+			out = append(out, c.Label())
+		}
+	}
+	return out
 }
 
 // dateOnlyJST は時点 t を JST 暦日の 0:00（JST）へ切り捨てて返す（定植日起点・経過日数換算の基準）。
