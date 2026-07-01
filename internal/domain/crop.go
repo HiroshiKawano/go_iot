@@ -157,8 +157,13 @@ var DefaultGDDModel = GDDModel{Tbase: 10, Stages: nil}
 
 // GDDModel は作物別の GDD モデルを返す（要件 5.1〜5.3）。
 // 未知・空・GDD 属性未定義の作物は DefaultGDDModel にフォールバックする（要件 5.4）。
-// Stages は常に GDD 昇順・最終段=収穫目標を満たす。VPDRange/DiseaseModel と同じ作物グルーピング作法で、
-// 値の確定時にこの1メソッドを更新する。本フェーズは米のみ具体値（他は段階拡張）。
+// Stages は常に GDD 昇順・先頭段=起点(0)・最終段=収穫目標を満たす。VPDRange/DiseaseModel と同じ作物
+// グルーピング作法で、値の確定時にこの1メソッドを更新する。
+//
+// 具体モデルを持つのは GDD 収穫予測が馴染む「定植/播種→収穫が1シーズンで完結する年1作物」に限る:
+// 米・ゴーヤ・インゲン・ウリ・いも（サツマイモ）・葉野菜。多年生果樹（マンゴー/パイナップル）・長期作
+// （サトウキビ）は、GDD 収穫予測が馴染まないため既定フォールバック（handler が対応作物を明示する注記へ
+// 縮退する）。段階拡張で追加可能。
 func (c Crop) GDDModel() GDDModel {
 	switch c {
 	case CropRice:
@@ -174,9 +179,83 @@ func (c Crop) GDDModel() GDDModel {
 				{Name: "収穫", GDD: 1400},
 			},
 		}
+	case CropGoya:
+		// ゴーヤ（施設ウリ科・沖縄の主要施設果菜）。Tbase=10℃・定植→収穫の暫定ステージ（℃·日）。
+		// 温暖期は日次 GDD≈18 ℃·日/日ゆえ収穫開始≈定植後55〜60日を目安に置く（文献ベースの暫定値）。
+		return GDDModel{
+			Tbase: 10,
+			Stages: []GrowthStage{
+				{Name: "定着", GDD: 0},
+				{Name: "開花", GDD: 400},
+				{Name: "着果", GDD: 650},
+				{Name: "収穫開始", GDD: 1000},
+				{Name: "収穫盛期", GDD: 1300},
+			},
+		}
+	case CropIngen:
+		// インゲン（マメ科・沖縄の冬作主要作物）。Tbase=10℃・播種→収穫の暫定ステージ（℃·日）。
+		// 短期作（播種後50〜60日で収穫）を反映した暫定値。数値の確定はユーザー/文献で行う。
+		return GDDModel{
+			Tbase: 10,
+			Stages: []GrowthStage{
+				{Name: "発芽", GDD: 0},
+				{Name: "開花", GDD: 350},
+				{Name: "着莢", GDD: 550},
+				{Name: "収穫", GDD: 850},
+			},
+		}
+	case CropUri:
+		// ウリ（施設ウリ科・キュウリ等）。Tbase=10℃・定植→収穫の暫定ステージ（℃·日）。
+		// ゴーヤに準ずる短期果菜として暫定値を置く。数値の確定はユーザー/文献で行う。
+		return GDDModel{
+			Tbase: 10,
+			Stages: []GrowthStage{
+				{Name: "定着", GDD: 0},
+				{Name: "開花", GDD: 400},
+				{Name: "着果", GDD: 650},
+				{Name: "収穫", GDD: 900},
+			},
+		}
+	case CropImo:
+		// いも（サツマイモ・紅芋＝沖縄の主要根菜）。挿苗→収穫が1シーズンで完結する年1作物。
+		// サツマイモは他作物より高温性で基準温度が高い（Tbase≈15℃が定説・低温期は肥大しない）ため
+		// 唯一 Tbase を 15℃ とする。挿苗後110〜120日で収穫を目安に置いた暫定ステージ（℃·日）。
+		// 数値・基準温度の確定はユーザー（沖縄実地知見=権威）/文献で行う。
+		return GDDModel{
+			Tbase: 15,
+			Stages: []GrowthStage{
+				{Name: "活着", GDD: 0},
+				{Name: "つる伸長", GDD: 400},
+				{Name: "塊根肥大", GDD: 800},
+				{Name: "収穫", GDD: 1500},
+			},
+		}
+	case CropLeafyVegetable:
+		// 葉野菜（レタス/コマツナ/ホウレンソウ等の軟弱野菜）。播種/定植→収穫が1シーズンで完結する短期一年生。
+		// 冷涼作物ゆえ基準温度が低く、Tbase≈5℃（レタスで3.5〜4.5℃）を代表値にする（他の年1作物 10℃・
+		// いも 15℃ とは別体系）。冷涼期に播種後およそ40〜50日で収穫を目安に置いた暫定ステージ（℃·日）。
+		// 注意（暫定値の限界）: 「葉野菜」は種の幅が広く（代表種の暫定値）、沖縄の高温期はとう立ち（抽苔）で
+		// 可食収穫前に生殖成長へ移り GDD 収穫予測が崩れる（冷涼期前提の目安）。確定はユーザー/文献で行う。
+		return GDDModel{
+			Tbase: 5,
+			Stages: []GrowthStage{
+				{Name: "発芽", GDD: 0},
+				{Name: "本葉展開", GDD: 150},
+				{Name: "生育盛期", GDD: 350},
+				{Name: "収穫", GDD: 600},
+			},
+		}
 	}
-	// サトウキビ/ゴーヤ等・未設定・不正は既定（Tbase のみ・Stages 空）にフォールバック。
+	// サトウキビ/マンゴー/パイナップル・未設定・不正は既定（Tbase のみ・Stages 空）に
+	// フォールバック（GDD 収穫予測が馴染まない/暫定値未確定。段階拡張で追加余地）。
 	return DefaultGDDModel
+}
+
+// HasGDDModel は作物が GDD 収穫予測の具体モデル（非空 Stages＝収穫目標あり）を持つかを返す。
+// 対応作物（米・ゴーヤ・インゲン・ウリ・いも）で true、未対応・未設定・不正で false。
+// フォームの作物選択肢「(GDD対応)」表示や、handler の対応作物一覧導出の単一判定源にする。
+func (c Crop) HasGDDModel() bool {
+	return len(c.GDDModel().Stages) > 0
 }
 
 // ParseCrop は文字列から Crop への変換を試み、不正値ならエラーを返す。
