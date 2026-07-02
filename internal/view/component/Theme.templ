@@ -1,0 +1,36 @@
+package component
+
+// ThemeInit はテーマ選択の FOUC (Flash of Unstyled Content) を防止する極小インラインスクリプト。
+// App/Guest 両レイアウトの <head> で <link rel="stylesheet"> より前に配置する。保存値が
+// 'dark'/'light' のときのみ html[data-theme] へ同期反映し、それ以外 (未選択・破損値・
+// localStorage 例外) では何もしない (OS の prefers-color-scheme 追従へフォールバック)。
+// CSS 読込前に確定させるため defer なしの同期実行にする。
+templ ThemeInit() {
+	<script>
+		try {
+			var t = localStorage.getItem('theme');
+			if (t === 'dark' || t === 'light') {
+				document.documentElement.dataset.theme = t;
+			}
+		} catch (e) {}
+	</script>
+}
+
+// ThemeToggle はライト/ダーク2状態の明示切替トグル。App(SiteHeader の .user-menu 先頭)・
+// Guest(.guest-theme-toggle ラッパ) で共有する。サーバへは一切通信せず (fetch/hx-* なし)、
+// localStorage への保存とページ内 data-theme 切替のみで完結する。アイコン切替は CSS 表示
+// トークン (--display-when-dark/light) が担い、Alpine は aria-pressed の同期と永続化のみを担当する。
+templ ThemeToggle() {
+	<button
+		type="button"
+		class="theme-toggle"
+		aria-pressed="false"
+		x-data="{ dark: document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches }"
+		:aria-pressed="String(dark)"
+		@click="dark = !dark; try { localStorage.setItem('theme', dark ? 'dark' : 'light') } catch (e) {}; document.documentElement.dataset.theme = dark ? 'dark' : 'light'; document.dispatchEvent(new CustomEvent('themechange'))"
+	>
+		<span class="icon-moon" aria-hidden="true">🌙</span>
+		<span class="icon-sun" aria-hidden="true">☀️</span>
+		<span class="u-visually-hidden">ダークモード切替</span>
+	</button>
+}

@@ -1,0 +1,91 @@
+# Implementation Plan
+
+- [x] 1. CSS テーマ基盤（正本 style.css＋モック・機械検査テストで TDD）
+- [x] 1.1 on-color トークンの新設とコントラスト不具合 2 件の修正
+  - CSS 機械検査テストを新設し（正本 style.css を読み込むテスト）、「彩色 background と color: var(--color-surface)/var(--color-text) の同居」禁止パターン検出を RED で先に書く
+  - `--color-on-accent`（#fff）・`--color-on-warning`（#212529）をテーマ不変トークンとして :root に追加
+  - `.error-toast` の文字色を on-accent へ、`.badge-caution` の文字色を on-warning へ置換し、`.btn-*`/`.badge-good`/`.badge-bad`/`.badge-trend-*`/ページネーション選択中の `#fff` 直書きを on-accent へ寄せる
+  - 観測可能な完了: 機械検査テストが GREEN（禁止パターン 0 件・on-color トークン存在・.error-toast/.badge-caution が on-color 参照）
+  - _Requirements: 4.1, 4.2, 4.3_
+- [x] 1.2 ダーク 2 導線のセマンティック再マップ
+  - ダーク生値をパレット変数（`--palette-dark-*`）として一度だけ定義し、`@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }` と `:root[data-theme="dark"]` の両導線から同一集合を再マップ（bg/surface/text/muted/border/shadow-sm/shadow-md。ライト値のリテラルは変更しない）
+  - ダーク再マップ内で `color-scheme: dark`、ライト側 :root に `color-scheme: light` と `accent-color: var(--color-primary)` を宣言
+  - 彩色トークン（primary/primary-dark/danger/warning）とデータ意味色 5 種は再マップ対象に含めない（design の実測判断・影はダークで濃影値へ）
+  - 機械検査テストに「両導線の再マップ変数集合一致」「color-scheme/accent-color 存在」「意味色トークンが再マップに不在」を追加し GREEN
+  - 観測可能な完了: OS ダーク設定（または data-theme=dark）で基調色がダーク値へ切り替わる CSS が正本に存在し、テスト GREEN
+  - _Requirements: 1.1, 2.4, 3.2, 3.3, 3.5, 6.1, 7.1_
+- [x] 1.3 生色の掃討（トークン化と SVG・影のダーク対応）
+  - `.alert-banner`（banner-bg/text）・`.chart-placeholder` 縞（placeholder-a/b）・`.ch-vline`/`.ch-hline`（chart-crosshair）を新設セマンティックトークンへ置換し、両ダーク導線に暗色値を追加（banner は bg #3a2f00/text #ffd43b・実測 9.29:1）
+  - `.form-group select` の矢印 SVG を mask-image＋`background-color: var(--color-muted)` 方式へ置換（両テーマ追従・ライト視覚パリティはスモークで確認）
+  - `.ch-dot` の縁を `var(--color-surface)` 参照へ。据置部位（`.nav-backdrop`/`.modal-overlay`/`.heat-scale-bar` グラデ）は変更しない
+  - 機械検査テストへ新トークンの存在・両導線含有・対象セレクタに生色が残存しないことを追加し GREEN
+  - 観測可能な完了: テスト GREEN（生色残存 0 件が機械検証される）
+  - _Requirements: 3.1, 3.5, 6.1_
+- [x] 1.4 Tom Select ドロップダウンとトグル部品のスタイル
+  - `.ts-dropdown` 本体・候補行・active/selected 行をトークン参照で上書き（components 層・CDN ファイル非接触・既存 `.ts-control` 上書きは維持）
+  - `.theme-toggle` 部品スタイル（透明背景・border/radius/color トークン参照）・`--display-when-dark/light` 表示トークン（ダーク導線で反転）・`.guest-theme-toggle`（右上 fixed）を追加
+  - 機械検査テストへ `.ts-dropdown`/`.theme-toggle`/`.guest-theme-toggle`/`--display-when-*` の存在を追加し GREEN
+  - 観測可能な完了: ダーク時にドロップダウンが白背景で残らないトークン上書きが正本に存在し、テスト GREEN
+  - _Requirements: 3.4, 8.3_
+- [x] 1.5 モック 10 枚へのトグル要素反映と CSS 同期
+  - 認証後 8 枚の `.user-menu` 内へ静的トグルボタン（class theme-toggle・aria-pressed="false"・アイコン span 2 個・視覚隠しラベル）を追加、login/register は `.guest-theme-toggle` ラッパで右上配置（器の先行反映・HTMX ガイド §31.2）
+  - 機械検査テストへ「全モック HTML に theme-toggle が存在」を追加し GREEN
+  - `make sync-css` を実行し配信 CSS が正本と一致
+  - 観測可能な完了: モックをブラウザ直開き（OS ダーク or DevTools エミュレート）でダーク表示とトグル要素を確認できる
+  - _Requirements: 2.1, 8.1, 8.2, 8.3_
+
+- [x] 2. テーマ初期化とトグル UI（templ コンポーネント・モック写経）
+- [x] 2.1 FOUC 防止の初期化コンポーネント（ThemeInit）
+  - レンダリングテストを先に書く: 出力 script に `localStorage.getItem('theme')`・'dark'/'light' の enum 判定・try/catch・`dataset.theme` 代入が含まれる（Render→Buffer→Contains 定石）
+  - 保存値が 'dark'/'light' のときのみ `html[data-theme]` を設定、それ以外・例外時は何もしない（OS 追従へフォールバック）極小同期スクリプトを component として実装
+  - 観測可能な完了: テスト GREEN（script 契約が文字列アサートで固定される）
+  - _Requirements: 1.3, 1.4, 1.5_
+- [x] 2.2 テーマ切替トグルコンポーネント（ThemeToggle）
+  - レンダリングテストを先に書く: `button type="button"`・class theme-toggle・`aria-pressed="false"`・`:aria-pressed` バインド・u-visually-hidden ラベル「ダークモード切替」・アイコン span 2 個・fetch/hx-* 属性を含まないこと
+  - Alpine x-data（初期値: data-theme 属性優先→matchMedia フォールバック）とクリック処理（localStorage 保存 try/catch→data-theme 更新→CustomEvent('themechange') 発火）を実装
+  - 観測可能な完了: テスト GREEN（マークアップ契約・サーバ非通信が固定される）
+  - _Requirements: 2.2, 2.3, 2.5, 2.6, 2.7_
+- [x] 2.3 App レイアウトへの統合
+  - レイアウトテストを先に書く: App 出力で ThemeInit の script が `<link rel="stylesheet">` より前に出現・`.user-menu` 内にトグルが存在
+  - App の head（`<link>` 前）へ ThemeInit、SiteHeader の `.user-menu` へ ThemeToggle を設置（モックの器を写経）
+  - 観測可能な完了: テスト GREEN・認証後全画面にトグルが描画される
+  - _Requirements: 1.3, 1.5, 2.1_
+- [x] 2.4 Guest レイアウトへの統合
+  - レイアウトテストを先に書く: Guest 出力で ThemeInit が `<link>` 前・`.guest-theme-toggle` ラッパ内にトグルが存在
+  - Guest の head へ ThemeInit、body 直下へ `.guest-theme-toggle` ラッパ＋ThemeToggle を設置
+  - 観測可能な完了: テスト GREEN・login/register にトグルが描画される
+  - _Requirements: 1.3, 1.5, 2.1_
+
+- [x] 3. ECharts クロームのテーマ patch
+- [x] 3.1 サーバ option のクローム中立ガード
+  - 代表 4 チャート（line／乖離率 2 軸／heatmap／calendar）の option JSON に axisLabel 色・legend/visualMap の textStyle 色・backgroundColor が出現しないことを構造アサート（テストガイダンス §56.1 定石）
+  - 観測可能な完了: ガードテスト GREEN（サーバ option 中立＝patch の前提が回帰検知される）
+  - _Requirements: 6.1_
+- [x] 3.2 クローム patch ヘルパと 2 タイミング適用・OS 変更リスナ
+  - レイアウトテストを先に書く: App 出力の EChartsInitializer に isDarkTheme/buildChromePatch/themechange リスナ/matchMedia change リスナの断片が含まれる
+  - buildChromePatch: option の xAxis/yAxis 本数（Array.isArray 吸収）に合わせ軸色を生成し、legend/visualMap/tooltip/dataZoom/calendar は存在時のみ patch（design のプロパティ表・ライトは ECharts 5.4.4 既定同値・formatter 等関数プロパティ非接触）
+  - 適用①: initContainer の setOption 直後に現在テーマの patch をマージ／適用②: themechange で全インスタンスへ setOption(patch)（dispose→init はしない）
+  - matchMedia change リスナ: data-theme 未設定時のみ themechange を発火。App.templ・static.go の ECharts バージョンコメントを 5.4.4 へ修正
+  - 観測可能な完了: テスト GREEN・ダーク中の期間切替でも新グラフが正着色される実装が App に存在
+  - _Requirements: 1.2, 5.1, 5.2, 5.3_
+
+- [x] 4. 検証
+- [x] 4.1 全テスト・カバレッジ・CSS 同期の最終確認
+  - 既存含む全テスト GREEN（無回帰）・新規 Go コードのカバレッジ 80% 以上
+  - `make sync-css` 後の配信 CSS が正本と diff ゼロ
+  - 観測可能な完了: `go test ./...` 全緑のログとカバレッジ数値・diff ゼロの確認記録
+  - _Requirements: 7.2, 8.2_
+- [x] 4.2 実機スモーク: 全画面 UI（両テーマ）
+  - フレッシュビルド・別ポート起動（テストガイダンス §5.6.AB 定石）で全 9 画面＋login/register を両テーマ目視（カード/フォーム/テーブル/バッジ/モーダル/ページネーション/バナー・本文 AA 目安）
+  - emulate で OS 追従（未選択）→トグル即時切替→リロード維持・FOUC なし→OS ダーク中のライト固定を確認
+  - Tom Select ドロップダウン・date ピッカー等ネイティブ UI・エラートースト/badge-caution のダーク判読を確認
+  - ライトテーマのパリティ（従来と視覚同等・トークン再構成の視覚差ゼロ）を確認
+  - 観測可能な完了: スモーク項目チェックリストの全通過記録
+  - _Requirements: 1.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 7.1, 8.1_
+- [x] 4.3 実機スモーク: グラフ・意味色
+  - device-show 11＋analysis-trend 1 の軸/凡例/visualMap/dataZoom/calendar をダークで判読確認
+  - ズーム＋凡例オフ→テーマ切替→状態保持、ダーク中の期間切替 swap→正着色、OS 設定ライブ変更→グラフ追従を確認（§61.4/§5.6.AA 定石）
+  - markArea 帯 6 種・正常帯の視認を据置で確認（不足時のみ両テーマで成立する単一不透明度へ微調整・テーマ別分岐は最終手段）
+  - 意味色の向き（暖=暑/乾・寒=湿）と系列色の両テーマ同一を目視確認（物理規約・テストで捕捉不可のため実機必須）
+  - 観測可能な完了: グラフスモーク項目の全通過記録（帯調整の要否判断を含む）
+  - _Requirements: 1.2, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2_
