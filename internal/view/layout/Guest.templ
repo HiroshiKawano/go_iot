@@ -1,5 +1,7 @@
 package layout
 
+import "github.com/HiroshiKawano/go_iot/internal/view/component"
+
 // Guest は未認証画面 (login / register) 用の共通レイアウト。
 // ヘッダー・サイドバーを持たず、中央寄せのカードに children を描画する。
 // HTMX は使わないため csrf meta は持たない (フォームは hidden input で送る)。
@@ -10,10 +12,14 @@ templ Guest(title string, cssURL string) {
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ title }</title>
+			@component.ThemeInit()
 			<link rel="stylesheet" href={ cssURL }/>
 			<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 		</head>
 		<body>
+			<div class="guest-theme-toggle">
+				@component.ThemeToggle()
+			</div>
 			<div class="guest-layout">
 				<div class="guest-card">
 					{ children... }

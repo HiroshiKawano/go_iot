@@ -31,7 +31,7 @@ func CSSURL() string {
 
 // JSURL は自サーバ配信する ECharts スクリプトのバージョンクエリ付き URL を返す。
 // App.templ の <head> に <script src> として 1 回だけ渡してキャッシュバスティングする
-// (外部 CDN 非依存・self-host)。実体は public/js/echarts.min.js (ECharts 5.4.3)。
+// (外部 CDN 非依存・self-host)。実体は public/js/echarts.min.js (ECharts 5.4.4)。
 func JSURL() string {
 	return "/static/js/echarts.min.js?v=" + Version
 }

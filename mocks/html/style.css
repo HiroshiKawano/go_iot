@@ -74,6 +74,27 @@
     --color-trend: #7048e8;               /* 統計分析ページ: ロールアップ平均線・Sen トレンド線の基準色（紫＝長期トレンド系・温度橙/湿度青/VPD緑/露点青/GDD赤と区別） */
     --color-heat: #d6336c;                 /* 高温ストレス（THI/熱帯夜/AH/ΔT）の基準色・暑熱カラースケールの最濃側（暖色＝暑い＝危険側・温度橙/GDD赤#e03131 と判別する hue・実機スモークで最終確定） */
 
+    /* --- on-color（彩色地の上に置く文字色。テーマ不変） --- */
+    --color-on-accent: #fff;      /* primary/danger 等の彩色地の上の文字（両テーマ同一） */
+    --color-on-warning: #212529;  /* warning（黄）地の上の文字。#fff は不可読なため濃色固定（8.28:1） */
+
+    /* --- 固定色部品のセマンティックトークン化（ライト既定値。ダーク値は下記再マップ参照） --- */
+    --color-banner-bg: #fff3cd;          /* .alert-banner 背景 */
+    --color-banner-text: #856404;        /* .alert-banner 文字 */
+    --color-placeholder-a: #eef2f5;      /* .chart-placeholder 縞 A */
+    --color-placeholder-b: #e4e9ed;      /* .chart-placeholder 縞 B */
+    --color-chart-crosshair: #495057;    /* .ch-vline/.ch-hline 十字線 */
+
+    /* --- トグルアイコン表示切替（.theme-toggle の月/日スパンが display に参照。
+       ダーク導線で反転し、モック直開き(JS無し)でも @media 導線でアイコンが追従する） --- */
+    --display-when-dark: none;
+    --display-when-light: inline;
+
+    /* select 矢印 SVG（stroke 色はライト既定 --color-muted 相当。ダーク値は下記再マップ参照。
+       mask-image を <select> 本体へ直接適用すると要素全体がマスクされ枠線/文字ごと消える
+       ため（実機検証で確認済み）、background-image をテーマ毎に丸ごと差し替える方式を採る） */
+    --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%236c757d' stroke-width='2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+
     /* --- スペーススケール（4px グリッド。旧 Lism --s* を実値化） --- */
     --space-1: 0.25rem;   /* 4px  （旧 --s5）  */
     --space-2: 0.5rem;    /* 8px  （旧 --s10） */
@@ -99,6 +120,26 @@
     /* --- レイアウト固定値（Lism にトークンなし） --- */
     --sidebar-width: 220px;
     --header-height: 56px;
+
+    /* --- ダークパレット（生値。ここで一度だけ定義し、両ダーク導線からは var() 参照する
+       単一ソース。ライト値（上記）は不変・このパレット自体はどちらのテーマでも常に
+       同じ値を指すため再マップされない） --- */
+    --palette-dark-bg: #121417;
+    --palette-dark-surface: #1c1f24;
+    --palette-dark-text: #e4e6eb;
+    --palette-dark-muted: #9aa0a6;
+    --palette-dark-border: #2e3238;
+    --palette-dark-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+    --palette-dark-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45);
+    --palette-dark-banner-bg: #3a2f00;
+    --palette-dark-banner-text: #ffd43b;
+    --palette-dark-placeholder-a: #22262c;
+    --palette-dark-placeholder-b: #1a1d22;
+    --palette-dark-chart-crosshair: #adb5bd;
+    --palette-dark-select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%239aa0a6' stroke-width='2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+
+    color-scheme: light;
+    accent-color: var(--color-primary);
   }
 
   body {
@@ -110,6 +151,50 @@
 
   a { color: var(--color-primary); text-decoration: none; }
   a:hover { text-decoration: underline; }
+
+  /* --- ダークテーマ再マップ（2導線・同一集合） ---
+     基調系トークン(bg/surface/text/muted/border/shadow-sm/shadow-md)のみを再マップし、
+     彩色トークン(primary/danger/warning等)とデータ意味色5種はテーマ不変のため対象外
+     （実測により彩色微明化案を棄却・据置が両テーマAAを満たす。research.md 参照）。
+     値は上記 --palette-dark-* を参照する単一ソース。 */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-bg: var(--palette-dark-bg);
+      --color-surface: var(--palette-dark-surface);
+      --color-text: var(--palette-dark-text);
+      --color-muted: var(--palette-dark-muted);
+      --color-border: var(--palette-dark-border);
+      --shadow-sm: var(--palette-dark-shadow-sm);
+      --shadow-md: var(--palette-dark-shadow-md);
+      --color-banner-bg: var(--palette-dark-banner-bg);
+      --color-banner-text: var(--palette-dark-banner-text);
+      --color-placeholder-a: var(--palette-dark-placeholder-a);
+      --color-placeholder-b: var(--palette-dark-placeholder-b);
+      --color-chart-crosshair: var(--palette-dark-chart-crosshair);
+      --select-arrow: var(--palette-dark-select-arrow);
+      --display-when-dark: inline;
+      --display-when-light: none;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --color-bg: var(--palette-dark-bg);
+    --color-surface: var(--palette-dark-surface);
+    --color-text: var(--palette-dark-text);
+    --color-muted: var(--palette-dark-muted);
+    --color-border: var(--palette-dark-border);
+    --shadow-sm: var(--palette-dark-shadow-sm);
+    --shadow-md: var(--palette-dark-shadow-md);
+    --color-banner-bg: var(--palette-dark-banner-bg);
+    --color-banner-text: var(--palette-dark-banner-text);
+    --color-placeholder-a: var(--palette-dark-placeholder-a);
+    --color-placeholder-b: var(--palette-dark-placeholder-b);
+    --color-chart-crosshair: var(--palette-dark-chart-crosshair);
+    --select-arrow: var(--palette-dark-select-arrow);
+    --display-when-dark: inline;
+    --display-when-light: none;
+    color-scheme: dark;
+  }
 }
 
 /* ============================ components ============================ */
@@ -276,7 +361,7 @@
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%236c757d' stroke-width='2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-image: var(--select-arrow);
   background-repeat: no-repeat;
   background-position: right var(--space-3) center;
   padding-right: calc(var(--space-3) * 2 + 12px);
@@ -315,7 +400,7 @@
   max-width: 90%;
   padding: var(--space-3) var(--space-4);
   background: var(--color-danger);
-  color: var(--color-surface);
+  color: var(--color-on-accent);
   font-size: var(--fs-sm);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
@@ -346,9 +431,9 @@
   font-weight: 500;
   transition: background 0.15s;
 }
-.btn-primary { background: var(--color-primary); color: #fff; }
-.btn-secondary { background: var(--color-muted); color: #fff; }
-.btn-danger { background: var(--color-danger); color: #fff; }
+.btn-primary { background: var(--color-primary); color: var(--color-on-accent); }
+.btn-secondary { background: var(--color-muted); color: var(--color-on-accent); }
+.btn-danger { background: var(--color-danger); color: var(--color-on-accent); }
 /* <a class="btn"> が base の a:hover 下線を継がないよう、ホバー下線解除を一括指定 */
 .btn:hover { text-decoration: none; }
 .btn-primary:hover { background: var(--color-primary-dark); }
@@ -408,7 +493,7 @@
 .pagination .current,
 .period-btn.active {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-accent);
   border-color: var(--color-primary);
 }
 .pagination .disabled {
@@ -419,7 +504,7 @@
 
 /* --- アラート通知バナー --- */
 .alert-banner {
-  background: #fff3cd;
+  background: var(--color-banner-bg);
   border-left: 4px solid var(--color-warning);
   padding: var(--space-4);
   border-radius: var(--radius);
@@ -427,12 +512,12 @@
 }
 .alert-banner h2 {
   font-size: var(--fs-base);
-  color: #856404;
+  color: var(--color-banner-text);
   margin-bottom: var(--space-2);
 }
 .alert-banner li {
   padding: var(--space-1) 0;
-  color: #856404;
+  color: var(--color-banner-text);
 }
 
 /* --- ダッシュボード: デバイスカード --- */
@@ -496,10 +581,10 @@
   background:
     repeating-linear-gradient(
       45deg,
-      #eef2f5,
-      #eef2f5 10px,
-      #e4e9ed 10px,
-      #e4e9ed 20px
+      var(--color-placeholder-a),
+      var(--color-placeholder-a) 10px,
+      var(--color-placeholder-b) 10px,
+      var(--color-placeholder-b) 20px
     );
   height: 300px;
   display: flex;
@@ -540,12 +625,12 @@
 }
 .ch-vline,
 .ch-hline {
-  stroke: #495057;
+  stroke: var(--color-chart-crosshair);
   stroke-width: 1;
   stroke-dasharray: 4 3;
 }
 .ch-dot {
-  stroke: #fff;
+  stroke: var(--color-surface);
   stroke-width: 1;
 }
 /* 値ツールチップ: 計測点の右側に小箱で表示 (文字色/枠線色は系列色=温度橙/湿度青)。 */
@@ -665,17 +750,17 @@
   border: 1px solid var(--color-border);
 }
 .badge + .badge { margin-left: var(--space-1); }
-.badge-good { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
-.badge-caution { background: var(--color-warning); color: var(--color-text); border-color: var(--color-warning); }
-.badge-bad { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
+.badge-good { background: var(--color-primary); color: var(--color-on-accent); border-color: var(--color-primary); }
+.badge-caution { background: var(--color-warning); color: var(--color-on-warning); border-color: var(--color-warning); }
+.badge-bad { background: var(--color-danger); color: var(--color-on-accent); border-color: var(--color-danger); }
 
 /* --- トレンド判定バッジ信号色（統計分析ページ・既存トークン流用＝新規色を増やさない） --- */
 /* Mann-Kendall の判定方向を信号色で示す。物理規約に合わせ「有意な上昇=暖色／有意な下降=寒色／非有意=グレー」。
    品質バッジ(.badge-good/caution/bad)とは別ドメイン(トレンド方向)のため別名 variant にする。
    TrendBadgeView.Direction（up/down/flat）と 1:1 対応する。 */
-.badge-trend-up { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }     /* 有意な上昇＝暖色（温度上昇＝暖まる側） */
-.badge-trend-down { background: var(--color-dewpoint); color: #fff; border-color: var(--color-dewpoint); } /* 有意な下降＝寒色（露点と同じ寒色トークンを流用） */
-.badge-trend-flat { background: var(--color-muted); color: #fff; border-color: var(--color-muted); }      /* 非有意＝グレー（断定しない＝中立） */
+.badge-trend-up { background: var(--color-danger); color: var(--color-on-accent); border-color: var(--color-danger); }     /* 有意な上昇＝暖色（温度上昇＝暖まる側） */
+.badge-trend-down { background: var(--color-dewpoint); color: var(--color-on-accent); border-color: var(--color-dewpoint); } /* 有意な下降＝寒色（露点と同じ寒色トークンを流用） */
+.badge-trend-flat { background: var(--color-muted); color: var(--color-on-accent); border-color: var(--color-muted); }      /* 非有意＝グレー（断定しない＝中立） */
 
 /* --- アラートルール管理 --- */
 /* .rule-form のflex配置・form-group伸縮は「インラインフォーム共通」で定義済み。ここは固有値のみ */
@@ -684,7 +769,11 @@
 .rule-list-actions { display: flex; gap: var(--space-2); }
 
 /* --- Tom Select: ネイティブ .form-group select と見た目を揃える (TS03 / TS07) --- */
-/* デバイス選択など DB 由来 select に適用。生成される .ts-control を素の入力欄と同寸法にする */
+/* デバイス選択など DB 由来 select に適用。生成される .ts-control を素の入力欄と同寸法にする。
+   CDN tom-select.css は本CSSより後に読み込まれるため (App.templ)、background/color/border-color は
+   .ts-dropdown (TS02) と同様に後勝ちでCDN既定(白背景・濃色文字固定)が勝ってしまう。ライトでは偶然
+   同系統の見た目になり気付きにくいが、ダークでは白いコントロールが残るため実機確認で判明・
+   !important で明示上書きする。 */
 .form-group .ts-wrapper.single .ts-control {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -692,18 +781,39 @@
   font-size: 1rem;
   line-height: 1.5;
   min-height: 0;
-  background: var(--color-surface);
+  background: var(--color-surface) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
   box-shadow: none;
 }
-.form-group .ts-wrapper.single .ts-control input { font-size: 1rem; }
+.form-group .ts-wrapper.single .ts-control input { font-size: 1rem; color: var(--color-text) !important; }
 .form-group .ts-wrapper.focus .ts-control {
   outline: 2px solid var(--color-primary);
   outline-offset: -1px;
-  border-color: var(--color-border);
+  border-color: var(--color-border) !important;
   box-shadow: none;
 }
-/* dropdownParent:'body' で body 直下に出るドロップダウンをヘッダー(z-index:10)より前面に (TS02) */
-.ts-dropdown { z-index: 200 !important; }
+/* dropdownParent:'body' で body 直下に出るドロップダウンをヘッダー(z-index:10)より前面に (TS02)。
+   CDN tom-select.css は本CSSより後に読み込まれるため (App.templ)、同一詳細度のセレクタは
+   後勝ちでCDN既定(白背景固定)が勝ってしまう。ダーク時に白いドロップダウンを残さないよう、
+   z-index と同様に配色もトークン参照 + !important で上書きする。 */
+.ts-dropdown {
+  z-index: 200 !important;
+  background: var(--color-surface) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+.ts-dropdown .option {
+  color: var(--color-text) !important;
+}
+.ts-dropdown .option:hover,
+.ts-dropdown .option.active {
+  background: var(--color-bg) !important;
+}
+.ts-dropdown .option.selected {
+  background: var(--color-primary) !important;
+  color: var(--color-on-accent) !important;
+}
 
 /* --- モーダル (R14) --- */
 .modal-overlay {
@@ -721,6 +831,30 @@
   border-radius: var(--radius);
   max-width: var(--container-xs);
   width: 90%;
+}
+
+/* --- テーマ切替トグル（新規部品・モック先行反映） --- */
+/* アイコンは月/日の2 span を常に両方描画し、--display-when-* トークンで表示側だけ切替える
+   (Alpine 非依存。モック直開き(JSなし)でも @media 導線でテーマに追従する)。 */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.theme-toggle .icon-moon { display: var(--display-when-light); }
+.theme-toggle .icon-sun { display: var(--display-when-dark); }
+
+/* Guest (login/register) 用ラッパ: ヘッダーが無いため右上 fixed 配置 (App側ヘッダー右上と視覚位置を統一) */
+.guest-theme-toggle {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
 }
 
 /* --- レスポンシブ (ビューポート起因の切替のみ。grid 系は auto-fill/auto-fit で対応済み) --- */

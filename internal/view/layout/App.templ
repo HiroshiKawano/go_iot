@@ -34,6 +34,7 @@ templ App(data AppLayoutData) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<meta name="csrf-token" content={ data.CSRFToken }/>
 			<title>{ data.Title }</title>
+			@component.ThemeInit()
 			<link rel="stylesheet" href={ data.CSSURL }/>
 			<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet"/>
 			<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
@@ -130,6 +131,99 @@ templ App(data AppLayoutData) {
 				// 兄弟の option script (id は "<コンテナ id>-option") から JSON.parse する (§10-E)。
 				// device-show 以外の認証画面は [data-echarts] 不在で全 no-op。JS/ECharts 未ロード時も no-op (R8.2)。
 				(function() {
+					// EChartsThemePatch: クロームの色 (軸ラベル/凡例/visualMap/tooltip/dataZoom/calendar) を
+					// 現在テーマへ着色する。サーバ option はクローム色を持たない中立実装 (echarts_neutral_test.go
+					// でガード済み・要件 6.1) のため、ここで両テーマ明示値を setOption マージする。
+					// ライト値は ECharts 5.4.4 (self-host バンドル・実測 getOption() 既定値) と同値を明示し、
+					// setOption マージでは値の「解除」ができない往復切替 (ダーク→ライト) を成立させる (要件 7.1)。
+					var CHROME = {
+						light: {
+							axisLabel: '#6E7079', axisLine: '#6E7079', splitLine: '#E0E6F1',
+							legendText: '#333333', visualMapText: '#333333',
+							tooltipBg: '#ffffff', tooltipBorder: '#cccccc', tooltipText: '#666666',
+							dzText: '#6E7079', dzBorder: '#d2dbee', dzFiller: 'rgba(135,175,274,0.2)',
+							dzHandle: '#fff', dzDataBg: '#d2dbee', dzSelectedBg: '#8fb0f7',
+							calLabel: '#000', calBorder: '#ccc', calSplit: '#000', calCellBg: '#fff'
+						},
+						dark: {
+							axisLabel: '#a5abb3', axisLine: '#4b5158', splitLine: '#2e3238',
+							legendText: '#e4e6eb', visualMapText: '#e4e6eb',
+							tooltipBg: '#1c1f24', tooltipBorder: '#2e3238', tooltipText: '#e4e6eb',
+							dzText: '#a5abb3', dzBorder: '#2e3238', dzFiller: 'rgba(112,72,232,0.15)',
+							dzHandle: '#4b5158', dzDataBg: '#4b5158', dzSelectedBg: '#7048e8',
+							calLabel: '#a5abb3', calBorder: '#2e3238', calSplit: '#2e3238', calCellBg: '#1c1f24'
+						}
+					};
+					// isDarkTheme: テーマ解決のクライアント唯一の実装。data-theme があればそれ、
+					// 無ければ OS 設定 (prefers-color-scheme) に追従する (ThemeToggle の初期値解決と同一規約)。
+					function isDarkTheme() {
+						var theme = document.documentElement.dataset.theme;
+						if (theme) return theme === 'dark';
+						return matchMedia('(prefers-color-scheme: dark)').matches;
+					}
+					// wrapLike: original が配列なら patchValue を同数分複製した配列を、単一オブジェクトなら
+					// patchValue をそのまま返す。option の実形状 (parse 直後は単一/複数混在、getOption() は
+					// 常に配列) の両方を吸収する (design.md Implementation Notes 参照)。
+					function wrapLike(original, patchValue) {
+						return Array.isArray(original) ? original.map(function() { return patchValue; }) : patchValue;
+					}
+					// buildChromePatch: option の実形状に合わせて色プロパティのみの patch を生成する。
+					// legend/visualMap/tooltip/dataZoom/calendar は option に存在するときのみ patch へ含め、
+					// formatter 等の関数プロパティには一切触れない (既存 tooltip.formatter を温存)。
+					function buildChromePatch(option, dark) {
+						var c = dark ? CHROME.dark : CHROME.light;
+						var patch = {};
+						['xAxis', 'yAxis'].forEach(function(key) {
+							if (!option[key]) return;
+							patch[key] = wrapLike(option[key], {
+								axisLabel: { color: c.axisLabel },
+								axisLine: { lineStyle: { color: c.axisLine } },
+								splitLine: { lineStyle: { color: c.splitLine } }
+							});
+						});
+						if (option.legend) {
+							patch.legend = wrapLike(option.legend, { textStyle: { color: c.legendText } });
+						}
+						if (option.visualMap) {
+							patch.visualMap = wrapLike(option.visualMap, { textStyle: { color: c.visualMapText } });
+						}
+						if (option.tooltip) {
+							patch.tooltip = wrapLike(option.tooltip, {
+								backgroundColor: c.tooltipBg,
+								borderColor: c.tooltipBorder,
+								textStyle: { color: c.tooltipText }
+							});
+						}
+						if (option.dataZoom) {
+							// dataZoom は inside/slider が併存する (trend-chart)。着色対象は可視の slider のみで、
+							// inside (非表示のピンチズーム) は空 patch (no-op) で配列位置だけ温存する。
+							var dzList = Array.isArray(option.dataZoom) ? option.dataZoom : [option.dataZoom];
+							var dzPatchList = dzList.map(function(dz) {
+								if (!dz || dz.type !== 'slider') return {};
+								return {
+									textStyle: { color: c.dzText },
+									borderColor: c.dzBorder,
+									fillerColor: c.dzFiller,
+									handleStyle: { color: c.dzHandle },
+									dataBackground: { lineStyle: { color: c.dzDataBg }, areaStyle: { color: c.dzDataBg } },
+									selectedDataBackground: { lineStyle: { color: c.dzSelectedBg }, areaStyle: { color: c.dzSelectedBg } }
+								};
+							});
+							patch.dataZoom = Array.isArray(option.dataZoom) ? dzPatchList : dzPatchList[0];
+						}
+						if (option.calendar) {
+							// itemStyle.color (日セルの塗り) は design.md のプロパティ表に無いが、既定 '#fff'
+							// のままだとダーク時に白いグリッドが残ってしまうため (実機確認で判明)、
+							// borderColor と併せてセル自体も明示的に着色する。
+							patch.calendar = wrapLike(option.calendar, {
+								dayLabel: { color: c.calLabel },
+								monthLabel: { color: c.calLabel },
+								itemStyle: { color: c.calCellBg, borderColor: c.calBorder },
+								splitLine: { lineStyle: { color: c.calSplit } }
+							});
+						}
+						return patch;
+					}
 					// 1 コンテナを初期化: option を parse → 既存破棄 → init → endLabel/sampling 付与 → setOption。
 					// option script 不在 (空データ) や壊れた JSON は null を返して skip (防御的)。
 					function initContainer(el) {
@@ -179,6 +273,9 @@ templ App(data AppLayoutData) {
 							};
 						}
 						inst.setOption(option);
+						// 適用①: 同一 tick 内で描画前にクロームをテーマ着色する (ダーク中の HTMX swap
+						// 再生成でも新グラフが正着色される・要件 5.3)。
+						inst.setOption(buildChromePatch(option, isDarkTheme()));
 						return inst;
 					}
 					// scope 配下の [data-echarts] を初期化し、connect 可能なインスタンスを連動させる (R3.3)。
@@ -208,6 +305,23 @@ templ App(data AppLayoutData) {
 					document.addEventListener('DOMContentLoaded', function() { initScope(document); });
 					document.addEventListener('htmx:beforeSwap', function(e) { disposeScope(e.detail.target); });
 					document.addEventListener('htmx:afterSwap', function(e) { initScope(e.detail.target); });
+					// 適用②: テーマ切替時、既存インスタンスへ setOption マージでクロームを再着色する。
+					// dispose→init はしない (dataZoom ズーム位置・凡例トグル状態が保持される・要件 5.2)。
+					document.addEventListener('themechange', function() {
+						if (typeof echarts === 'undefined') return;
+						document.querySelectorAll('[data-echarts]').forEach(function(el) {
+							var inst = echarts.getInstanceByDom(el);
+							if (inst) inst.setOption(buildChromePatch(inst.getOption(), isDarkTheme()));
+						});
+					});
+					// OS 設定のライブ変更を検知し、data-theme 未設定 (OS 追従中) のときのみ themechange を
+					// 発火する (手動選択中は無視・要件 1.2)。CSS 側は @media で自動追従するため、
+					// このリスナは ECharts クロームの追従のみを担う。
+					matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+						if (!document.documentElement.dataset.theme) {
+							document.dispatchEvent(new CustomEvent('themechange'));
+						}
+					});
 				})();
 			</script>
 		</body>

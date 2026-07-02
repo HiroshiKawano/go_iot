@@ -10,6 +10,7 @@ templ SiteHeader(userName string, csrfToken string) {
 			<a href="/dashboard" class="logo">🌱 農業IoT</a>
 		</div>
 		<div class="user-menu">
+			@ThemeToggle()
 			<span class="user-name">{ userName }</span>
 			<form action="/logout" method="post" class="logout-form">
 				<input type="hidden" name="gorilla.csrf.Token" value={ csrfToken }/>
